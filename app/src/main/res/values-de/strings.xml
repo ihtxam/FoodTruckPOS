@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Food Truck Kasse</string>
+    <string name="pos_title">Kasse</string>
+    <string name="cash">BAR</string>
+    <string name="card">KARTE</string>
+    <string name="cart">Warenkorb</string>
+    <string name="total">Total</string>
+    <string name="settings">Einstellungen</string>
+    <string name="reports">Berichte</string>
+    <string name="dashboard">Dashboard</string>
+    <string name="login">Anmelden</string>
+</resources>

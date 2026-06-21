@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="pos_cash">#2E7D32</color>
+    <color name="pos_card">#1565C0</color>
+    <color name="pos_accent">#FF6F00</color>
+</resources>
