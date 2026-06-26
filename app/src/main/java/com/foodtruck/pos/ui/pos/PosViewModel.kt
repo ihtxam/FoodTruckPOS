@@ -1,6 +1,7 @@
 package com.foodtruck.pos.ui.pos
 
 import android.app.Activity
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.foodtruck.pos.data.local.entity.BusinessSettingsEntity
@@ -9,19 +10,38 @@ import com.foodtruck.pos.data.local.entity.ProductEntity
 import com.foodtruck.pos.data.local.entity.TransactionEntity
 import com.foodtruck.pos.data.preferences.SessionManager
 import com.foodtruck.pos.data.repository.CartManager
+import com.foodtruck.pos.data.repository.MenuRepository
 import com.foodtruck.pos.data.repository.ProductRepository
 import com.foodtruck.pos.data.repository.SettingsRepository
+import com.foodtruck.pos.data.repository.HeldOrderRepository
+import com.foodtruck.pos.data.repository.TableOrderRepository
 import com.foodtruck.pos.data.repository.TransactionRepository
 import com.foodtruck.pos.domain.model.CartItem
 import com.foodtruck.pos.domain.model.CartSummary
+import com.foodtruck.pos.domain.model.FulfillmentType
+import com.foodtruck.pos.domain.model.DiscountPreset
+import com.foodtruck.pos.domain.model.KitchenMessagePreset
 import com.foodtruck.pos.domain.model.PaymentMethod
+import com.foodtruck.pos.domain.model.AddonGroupModel
+import com.foodtruck.pos.domain.model.ModifierGroupModel
+import com.foodtruck.pos.domain.model.OptionChoice
+import com.foodtruck.pos.domain.model.OptionGroupPicker
+import com.foodtruck.pos.domain.model.ProductCustomizeState
+import com.foodtruck.pos.domain.model.SelectedModifier
+import com.foodtruck.pos.domain.model.SelectedAddon
 import com.foodtruck.pos.domain.model.ProductVariantModel
 import com.foodtruck.pos.domain.model.ProductWithVariants
+import com.foodtruck.pos.domain.model.ServiceType
+import com.foodtruck.pos.domain.model.TableWithOrderInfo
+import com.foodtruck.pos.domain.model.applyCashRounding
+import com.foodtruck.pos.domain.model.resolveVatRate
 import com.foodtruck.pos.payment.CashPaymentService
 import com.foodtruck.pos.payment.PaymentOrchestrator
 import com.foodtruck.pos.payment.PaymentResult
 import com.foodtruck.pos.printer.BluetoothPrinterService
+import com.foodtruck.pos.printer.KitchenPrintMeta
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -29,7 +49,13 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.util.UUID
 import javax.inject.Inject
 
@@ -40,23 +66,63 @@ data class PosUiState(
     val cart: CartSummary = CartSummary(emptyList()),
     val settings: BusinessSettingsEntity = BusinessSettingsEntity(),
     val currencySymbol: String = "CHF",
+    val serviceType: ServiceType = ServiceType.TAKEAWAY,
+    val tables: List<TableWithOrderInfo> = emptyList(),
+    val activeTableName: String? = null,
+    val kitchenSentToPrinter: Boolean = false,
     val isProcessingPayment: Boolean = false,
     val showOpenPriceDialog: Boolean = false,
     val showVariantDialog: Boolean = false,
+    val productCustomize: ProductCustomizeState? = null,
+    val optionGroupPicker: OptionGroupPicker? = null,
     val showDiscountDialog: Boolean = false,
+    val showCheckoutScreen: Boolean = false,
+    val showOrderComplete: Boolean = false,
     val showPaymentSummary: Boolean = false,
     val showReceiptOptions: Boolean = false,
+    val showTablePicker: Boolean = false,
+    val showKitchenMessageDialog: Boolean = false,
+    val showMiscPriceDialog: Boolean = false,
     val pendingPaymentMethod: PaymentMethod? = null,
     val selectedProduct: ProductWithVariants? = null,
     val lastTransaction: TransactionEntity? = null,
     val errorMessage: String? = null,
-    val tapToPayMessage: String? = null
-)
+    val errorTitle: String? = null,
+    val successMessage: String? = null,
+    val snackbarMessage: String? = null,
+    val showClearCartDialog: Boolean = false,
+    val showPickupDialog: Boolean = false,
+    val showDeliveryDialog: Boolean = false,
+    val suggestedOrderNumber: String = "",
+    val tapToPayMessage: String? = null,
+    val selectedCartItemId: String? = null,
+    val lastAddedItemId: String? = null,
+    val lastClickedProductId: Long? = null,
+    val keypadBuffer: String = "",
+    val checkoutState: CheckoutState = CheckoutState(),
+    val completedTransaction: TransactionEntity? = null,
+    val discountPresets: List<DiscountPreset> = emptyList(),
+    val showSplitBillScreen: Boolean = false,
+    val splitSelectedItemIds: Set<String> = emptySet(),
+    val showSplitDialog: Boolean = false,
+    val equalSplitPaidCount: Int = 0
+) {
+    val kitchenMessagePresets: List<KitchenMessagePreset> = listOf(
+        KitchenMessagePreset("Bring next dish", "Bring next dish"),
+        KitchenMessagePreset("Fire mains", "Fire mains now"),
+        KitchenMessagePreset("Ready for dessert", "Ready for dessert"),
+        KitchenMessagePreset("More bread", "More bread please")
+    )
+}
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class PosViewModel @Inject constructor(
     private val productRepository: ProductRepository,
+    private val menuRepository: MenuRepository,
     private val cartManager: CartManager,
+    private val tableOrderRepository: TableOrderRepository,
+    private val heldOrderRepository: HeldOrderRepository,
     private val transactionRepository: TransactionRepository,
     private val settingsRepository: SettingsRepository,
     private val sessionManager: SessionManager,
@@ -67,6 +133,13 @@ class PosViewModel @Inject constructor(
 
     private val _selectedCategoryId = MutableStateFlow<Long?>(null)
     private val _uiExtras = MutableStateFlow(PosDialogState())
+    private val _tables = MutableStateFlow<List<TableWithOrderInfo>>(emptyList())
+    private val _discountPresets = MutableStateFlow<List<DiscountPreset>>(emptyList())
+    private var cachedSettings = BusinessSettingsEntity()
+    private val tableOrderMutex = Mutex()
+    private var persistTableJob: Job? = null
+
+    private val _productCustomize = MutableStateFlow<ProductCustomizeState?>(null)
 
     private val productsFlow = _selectedCategoryId.flatMapLatest { categoryId ->
         productRepository.observeProducts(categoryId)
@@ -76,161 +149,1287 @@ class PosViewModel @Inject constructor(
         combine(
             productRepository.observeCategories(),
             _selectedCategoryId,
-            productsFlow
-        ) { categories, categoryId, products ->
-            Triple(categories, categoryId, products)
+            productsFlow,
+            cartManager.cart,
+            settingsRepository.observeSettings()
+        ) { categories, categoryId, products, cart, settings ->
+            DataBundle(categories, categoryId, products, cart, settings)
         },
-        cartManager.cart,
-        settingsRepository.observeSettings(),
-        _uiExtras
-    ) { triple, cart, settings, extras ->
-        val (categories, categoryId, products) = triple
+        _uiExtras,
+        _productCustomize,
+        _tables,
+        _discountPresets
+    ) { bundle, extras, productCustomize, tables, discountPresets ->
+        cachedSettings = bundle.settings
         PosUiState(
-            categories = categories,
-            products = products,
-            selectedCategoryId = categoryId,
-            cart = cart,
-            settings = settings,
-            currencySymbol = settings.currencySymbol,
+            categories = bundle.categories,
+            products = bundle.products,
+            selectedCategoryId = bundle.categoryId,
+            cart = bundle.cart,
+            settings = bundle.settings,
+            currencySymbol = bundle.settings.currencySymbol,
+            serviceType = bundle.cart.serviceType,
+            tables = tables,
+            activeTableName = bundle.cart.tableName,
+            kitchenSentToPrinter = extras.kitchenSentToPrinter,
             isProcessingPayment = extras.isProcessingPayment,
             showOpenPriceDialog = extras.showOpenPriceDialog,
             showVariantDialog = extras.showVariantDialog,
+            productCustomize = productCustomize,
+            optionGroupPicker = extras.optionGroupPicker,
             showDiscountDialog = extras.showDiscountDialog,
+            showCheckoutScreen = extras.showCheckoutScreen,
+            showOrderComplete = extras.showOrderComplete,
             showPaymentSummary = extras.showPaymentSummary,
             showReceiptOptions = extras.showReceiptOptions,
+            showTablePicker = extras.showTablePicker,
+            showKitchenMessageDialog = extras.showKitchenMessageDialog,
+            showMiscPriceDialog = extras.showMiscPriceDialog,
             pendingPaymentMethod = extras.pendingPaymentMethod,
             selectedProduct = extras.selectedProduct,
             lastTransaction = extras.lastTransaction,
             errorMessage = extras.errorMessage,
-            tapToPayMessage = extras.tapToPayMessage
+            errorTitle = extras.errorTitle,
+            successMessage = extras.successMessage,
+            snackbarMessage = extras.snackbarMessage,
+            showClearCartDialog = extras.showClearCartDialog,
+            showPickupDialog = extras.showPickupDialog,
+            showDeliveryDialog = extras.showDeliveryDialog,
+            suggestedOrderNumber = extras.suggestedOrderNumber,
+            tapToPayMessage = extras.tapToPayMessage,
+            selectedCartItemId = extras.selectedCartItemId,
+            lastAddedItemId = extras.lastAddedItemId,
+            lastClickedProductId = extras.lastClickedProductId,
+            keypadBuffer = extras.keypadBuffer,
+            checkoutState = extras.checkoutState,
+            completedTransaction = extras.completedTransaction,
+            discountPresets = discountPresets,
+            showSplitBillScreen = extras.showSplitBillScreen,
+            splitSelectedItemIds = extras.splitSelectedItemIds,
+            showSplitDialog = extras.showSplitDialog,
+            equalSplitPaidCount = extras.equalSplitPaidCount
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), PosUiState())
+
+    init {
+        viewModelScope.launch {
+            settingsRepository.observeDiscountPresets().collect { presets ->
+                _discountPresets.value = presets
+            }
+        }
+        viewModelScope.launch {
+            productRepository.observeCategories().collect { categories ->
+                if (_selectedCategoryId.value == null && categories.isNotEmpty()) {
+                    _selectedCategoryId.value = categories.first().id
+                }
+            }
+        }
+        refreshTables()
+    }
+
+    fun refreshTables() {
+        viewModelScope.launch {
+            _tables.value = tableOrderRepository.getTablesWithStatus()
+        }
+    }
 
     fun selectCategory(categoryId: Long?) {
         _selectedCategoryId.value = categoryId
     }
 
+    fun setServiceType(serviceType: ServiceType) {
+        applyServiceTypeRates(serviceType)
+        viewModelScope.launch { persistTableOrderIfNeeded() }
+    }
+
+    private fun applyServiceTypeRates(serviceType: ServiceType) {
+        cartManager.setServiceType(serviceType) { item ->
+            resolveTaxRate(item.productId, item.taxRate, serviceType)
+        }
+    }
+
+    fun showTablePicker() {
+        refreshTables()
+        updateExtras { it.copy(showTablePicker = true) }
+    }
+
+    fun dismissTablePicker() = updateExtras { it.copy(showTablePicker = false) }
+
+    fun openTable(tableId: Long) {
+        viewModelScope.launch {
+            persistTableOrderIfNeeded()
+            val table = tableOrderRepository.getTable(tableId) ?: return@launch
+            val userId = sessionManager.currentUserId.first() ?: 0L
+            val userName = sessionManager.currentUserName.first() ?: "Cashier"
+            val (order, items) = tableOrderRepository.openTable(table, ServiceType.DINE_IN, userId, userName)
+            cartManager.loadTableOrder(
+                tableId = table.id,
+                tableName = table.name,
+                orderId = order.id,
+                serviceType = ServiceType.DINE_IN,
+                items = items,
+                discountPercent = order.discountPercent,
+                discountAmount = order.discountAmount
+            )
+            val sentFlags = tableOrderRepository.getOrderItemEntities(order.id)
+                .associate { it.id to (it.sentToKitchenAt != null) }
+            cartManager.refreshSentFlags(sentFlags)
+            applyServiceTypeRates(ServiceType.DINE_IN)
+            updateExtras {
+                it.copy(
+                    showTablePicker = false,
+                    kitchenSentToPrinter = order.lastSentAt != null
+                )
+            }
+            refreshTables()
+        }
+    }
+
+    fun switchToWalkIn() {
+        viewModelScope.launch {
+            persistTableOrderIfNeeded()
+            cartManager.clear()
+            refreshTables()
+            updateExtras { it.copy(showTablePicker = false, kitchenSentToPrinter = false) }
+        }
+    }
+
+    fun closeTable() {
+        viewModelScope.launch {
+            persistTableOrderIfNeeded()
+            cartManager.clear()
+            refreshTables()
+            updateExtras { it.copy(kitchenSentToPrinter = false) }
+        }
+    }
+
+    fun setActiveCourse(course: Int) {
+        cartManager.setActiveCourse(course)
+    }
+
+    fun addCourse() {
+        cartManager.addCourse()
+    }
+
+    fun increaseSplitCount() = cartManager.increaseSplitCount()
+    fun decreaseSplitCount() = cartManager.decreaseSplitCount()
+    fun setSplitByItems(enabled: Boolean) = cartManager.setSplitByItems(enabled)
+    fun setActiveSplitCheck(check: Int) = cartManager.setActiveSplitCheck(check)
+    fun assignItemSplitCheck(itemId: String, check: Int) = cartManager.assignItemSplitCheck(itemId, check)
+
+    fun applyItemDiscountPercent(itemId: String, percent: Double) {
+        cartManager.applyItemDiscountPercent(itemId, percent)
+        persistTableOrderAsync()
+    }
+
+    fun applyPresetToSelectedItem(preset: DiscountPreset) {
+        val itemId = _uiExtras.value.selectedCartItemId ?: return
+        applyItemDiscountPercent(itemId, preset.percent)
+    }
+
+    fun applyPresetToCart(preset: DiscountPreset) {
+        cartManager.applyDiscount(preset.percent, 0.0)
+        persistTableOrderAsync()
+    }
+
+    fun addMiscItemFromDialog(price: Double, name: String = "Divers") {
+        val serviceType = cartManager.snapshot().serviceType
+        val taxRate = resolveTaxRate(0L, cachedSettings.takeawayVatRate, serviceType)
+        val itemId = UUID.randomUUID().toString()
+        cartManager.addItem(
+            CartItem(
+                id = itemId,
+                productId = 0L,
+                productName = name,
+                unitPrice = price,
+                quantity = 1,
+                taxRate = taxRate
+            )
+        )
+        updateExtras { it.copy(showMiscPriceDialog = false, keypadBuffer = "", lastAddedItemId = itemId) }
+        persistTableOrderAsync()
+    }
+
+    fun dismissMiscPriceDialog() = updateExtras { it.copy(showMiscPriceDialog = false) }
+
+    fun clearWalkInOrder() {
+        cartManager.clear()
+        updateExtras { it.copy(selectedCartItemId = null, keypadBuffer = "") }
+    }
+
     fun onProductClick(productId: Long) {
+        updateExtras { it.copy(lastClickedProductId = productId) }
         viewModelScope.launch {
             val product = productRepository.getProductWithVariants(productId) ?: return@launch
             when {
-                product.isOpenPrice -> updateExtras { it.copy(showOpenPriceDialog = true, selectedProduct = product) }
-                product.variants.isNotEmpty() -> updateExtras { it.copy(showVariantDialog = true, selectedProduct = product) }
-                else -> addProductToCart(product, null, product.price)
+                product.isOpenPrice -> updateExtras {
+                    it.copy(showOpenPriceDialog = true, selectedProduct = product)
+                }
+                else -> openProductCustomize(product, null)
             }
         }
     }
 
     fun addOpenPriceProduct(price: Double) {
         val product = _uiExtras.value.selectedProduct ?: return
-        addProductToCart(product, null, price)
         dismissDialogs()
+        viewModelScope.launch { openProductCustomize(product, price) }
     }
 
-    fun addVariantProduct(variant: ProductVariantModel) {
-        val product = _uiExtras.value.selectedProduct ?: return
-        addProductToCart(product, variant.name, variant.price, variant.sku)
-        dismissDialogs()
+    private suspend fun openProductCustomize(product: ProductWithVariants, openPrice: Double?) {
+        val modifierGroups = menuRepository.getModifierGroupsForProduct(product.id)
+        val addonGroups = menuRepository.getAddonGroupsForProduct(product.id)
+        val needsCustomize = product.variants.isNotEmpty() ||
+            modifierGroups.isNotEmpty() ||
+            addonGroups.isNotEmpty()
+        if (!needsCustomize) {
+            val price = openPrice ?: product.price
+            addProductToCart(product, null, price, product.sku, emptyList(), emptyList(), null, 1)
+            return
+        }
+        _productCustomize.value = ProductCustomizeState(
+            product = product,
+            modifierGroups = modifierGroups,
+            addonGroups = addonGroups,
+            openPrice = openPrice
+        )
+    }
+
+    fun dismissProductCustomize() {
+        _productCustomize.value = null
+    }
+
+    fun addCustomizedProduct(result: CustomizedProductResult) {
+        val state = _productCustomize.value ?: return
+        if (state.editingItemId != null) {
+            updateCartItemFromCustomize(state.editingItemId, state.product, result)
+        } else {
+            addProductToCart(
+                product = state.product,
+                variantName = result.variantName,
+                basePrice = result.unitPrice,
+                sku = result.sku,
+                modifiers = result.modifiers,
+                addons = result.addons,
+                userNotes = result.notes,
+                quantity = result.quantity
+            )
+        }
+        _productCustomize.value = null
+    }
+
+    fun editCartItem(itemId: String) {
+        viewModelScope.launch {
+            val item = cartManager.snapshot().items.find { it.id == itemId } ?: return@launch
+            if (item.sentToKitchen) return@launch
+            val product = productRepository.getProductWithVariants(item.productId) ?: return@launch
+            val modifierGroups = menuRepository.getModifierGroupsForProduct(product.id)
+            val addonGroups = menuRepository.getAddonGroupsForProduct(product.id)
+            _productCustomize.value = ProductCustomizeState(
+                product = product,
+                modifierGroups = modifierGroups,
+                addonGroups = addonGroups,
+                openPrice = if (product.isOpenPrice) item.unitPrice else null,
+                editingItemId = itemId,
+                initialQuantity = item.quantity,
+                initialVariantName = item.variantName,
+                initialModifiers = item.modifiers,
+                initialAddons = item.addons
+            )
+        }
+    }
+
+    private fun updateCartItemFromCustomize(
+        itemId: String,
+        product: ProductWithVariants,
+        result: CustomizedProductResult
+    ) {
+        val existing = cartManager.snapshot().items.find { it.id == itemId } ?: return
+        if (existing.sentToKitchen) return
+        val serviceType = cartManager.snapshot().serviceType
+        val updated = existing.copy(
+            variantName = result.variantName,
+            unitPrice = result.unitPrice,
+            quantity = result.quantity,
+            sku = result.sku,
+            modifiers = result.modifiers,
+            addons = result.addons,
+            notes = result.notes,
+            taxRate = resolveTaxRate(product.id, product.taxRate, serviceType)
+        )
+        cartManager.replaceItem(itemId, updated.copy(notes = updated.optionNotes()))
+        playItemClickBeep()
+        persistTableOrderAsync()
     }
 
     private fun addProductToCart(
         product: ProductWithVariants,
         variantName: String?,
-        price: Double,
-        sku: String? = product.sku
+        basePrice: Double,
+        sku: String? = product.sku,
+        modifiers: List<SelectedModifier> = emptyList(),
+        addons: List<SelectedAddon> = emptyList(),
+        userNotes: String? = null,
+        quantity: Int = 1
     ) {
-        cartManager.addItem(
-            CartItem(
-                id = UUID.randomUUID().toString(),
-                productId = product.id,
-                productName = product.name,
-                variantName = variantName,
-                unitPrice = price,
-                quantity = 1,
-                taxRate = product.taxRate,
-                sku = sku
-            )
-        )
+        val unitPrice = basePrice
+        val serviceType = cartManager.snapshot().serviceType
+        val itemId = UUID.randomUUID().toString()
+        val item = CartItem(
+            id = itemId,
+            productId = product.id,
+            productName = product.name,
+            variantName = variantName,
+            unitPrice = unitPrice,
+            quantity = quantity,
+            taxRate = resolveTaxRate(product.id, product.taxRate, serviceType),
+            sku = sku,
+            categoryId = product.categoryId,
+            modifiers = modifiers,
+            addons = addons,
+            notes = userNotes
+        ).let { it.copy(notes = it.optionNotes()) }
+        cartManager.addItem(item)
+        playItemClickBeep()
+        updateExtras { it.copy(lastAddedItemId = itemId, lastClickedProductId = product.id) }
+        persistTableOrderAsync()
     }
 
-    fun updateQuantity(itemId: String, quantity: Int) = cartManager.updateQuantity(itemId, quantity)
-    fun removeItem(itemId: String) = cartManager.removeItem(itemId)
+    fun updateQuantity(itemId: String, quantity: Int) {
+        val item = cartManager.snapshot().items.find { it.id == itemId } ?: return
+        if (item.sentToKitchen) return
+        cartManager.updateQuantity(itemId, quantity)
+        persistTableOrderAsync()
+    }
+
+    fun incrementItemQuantity(itemId: String) {
+        val item = cartManager.snapshot().items.find { it.id == itemId } ?: return
+        if (item.sentToKitchen) return
+        updateQuantity(itemId, item.quantity + 1)
+    }
+
+    fun decrementItemQuantity(itemId: String) {
+        val item = cartManager.snapshot().items.find { it.id == itemId } ?: return
+        if (item.sentToKitchen) return
+        updateQuantity(itemId, item.quantity - 1)
+    }
+
+    fun removeItem(itemId: String) {
+        cartManager.removeItem(itemId)
+        if (_uiExtras.value.selectedCartItemId == itemId) {
+            updateExtras { it.copy(selectedCartItemId = null) }
+        }
+        persistTableOrderAsync()
+    }
+
+    fun selectCartItem(itemId: String?) {
+        updateExtras { it.copy(selectedCartItemId = itemId) }
+    }
+
+    fun onKeypadInput(key: String) {
+        updateExtras { extras ->
+            val buffer = extras.keypadBuffer
+            val next = when (key) {
+                "00" -> if (buffer.isEmpty()) "0" else buffer + "00"
+                "." -> when {
+                    buffer.contains(".") -> buffer
+                    buffer.isEmpty() -> "0."
+                    else -> buffer + "."
+                }
+                else -> if (buffer == "0") key else buffer + key
+            }
+            extras.copy(keypadBuffer = next.take(12))
+        }
+    }
+
+    fun onKeypadBackspace() {
+        updateExtras { extras ->
+            extras.copy(keypadBuffer = extras.keypadBuffer.dropLast(1))
+        }
+    }
+
+    fun onKeypadClear() {
+        val extras = _uiExtras.value
+        when {
+            extras.keypadBuffer.isNotEmpty() -> updateExtras { it.copy(keypadBuffer = "") }
+            extras.selectedCartItemId != null -> {
+                removeItem(extras.selectedCartItemId)
+            }
+            extras.lastAddedItemId != null && cartManager.snapshot().items.any { it.id == extras.lastAddedItemId } -> {
+                removeItem(extras.lastAddedItemId)
+                updateExtras { it.copy(lastAddedItemId = null) }
+            }
+            else -> Unit
+        }
+    }
+
+    fun onKeypadClearAll() {
+        cartManager.clear()
+        updateExtras { it.copy(keypadBuffer = "", selectedCartItemId = null, lastAddedItemId = null) }
+        persistTableOrderAsync()
+    }
+
+    fun onKeypadEnter() {
+        val buffer = _uiExtras.value.keypadBuffer
+        val price = buffer.toDoubleOrNull() ?: return
+        val selectedId = _uiExtras.value.selectedCartItemId
+        val serviceType = cartManager.snapshot().serviceType
+        val taxRate = resolveTaxRate(0L, cachedSettings.takeawayVatRate, serviceType)
+        if (selectedId != null) {
+            cartManager.overrideItemPrice(selectedId, price)
+        } else {
+            val itemId = UUID.randomUUID().toString()
+            cartManager.addItem(
+                CartItem(
+                    id = itemId,
+                    productId = 0L,
+                    productName = "Divers",
+                    unitPrice = price,
+                    quantity = 1,
+                    taxRate = taxRate
+                )
+            )
+            updateExtras { it.copy(lastAddedItemId = itemId) }
+        }
+        updateExtras { it.copy(keypadBuffer = "", selectedCartItemId = null) }
+        persistTableOrderAsync()
+    }
+
+    fun addMiscItemQuick() {
+        updateExtras { it.copy(selectedCartItemId = null, keypadBuffer = "", showMiscPriceDialog = true) }
+    }
 
     fun showDiscountDialog() = updateExtras { it.copy(showDiscountDialog = true) }
 
     fun applyDiscount(percent: Double, amount: Double) {
         cartManager.applyDiscount(percent, amount)
         updateExtras { it.copy(showDiscountDialog = false) }
+        persistTableOrderAsync()
     }
 
-    fun initiateCashPayment() {
-        if (cartManager.snapshot().isEmpty) return
-        updateExtras {
-            it.copy(showPaymentSummary = true, pendingPaymentMethod = PaymentMethod.CASH, errorMessage = null)
-        }
-    }
-
-    fun initiateCardPayment() {
-        if (cartManager.snapshot().isEmpty) return
-        updateExtras {
-            it.copy(showPaymentSummary = true, pendingPaymentMethod = PaymentMethod.CARD, errorMessage = null)
-        }
-    }
-
-    fun confirmPayment(activity: Activity?) {
-        val method = _uiExtras.value.pendingPaymentMethod ?: return
+    fun sendToKitchen(courseNumber: Int? = null) {
         val cart = cartManager.snapshot()
-        if (cart.isEmpty) return
-
+        if (cart.tableId == null) {
+            showError("Kitchen", "Open a table first")
+            return
+        }
+        if (cart.isEmpty) {
+            showError("Kitchen", "Add items before sending to kitchen")
+            return
+        }
         viewModelScope.launch {
-            updateExtras { it.copy(isProcessingPayment = true, errorMessage = null) }
-            val settings = settingsRepository.getSettings()
+            tableOrderMutex.withLock {
+                val orderId = flushTableOrderSync() ?: run {
+                    showError("Kitchen", "Open a table first")
+                    return@withLock
+                }
+                val syncedCart = cartManager.snapshot()
+                val dbItems = tableOrderRepository.getOrderItemEntities(orderId)
+                // Send every item not yet sent to the kitchen (union of cart + DB views).
+                val cartUnsentIds = (cart.items + syncedCart.items)
+                    .filter { !it.sentToKitchen && (courseNumber == null || it.courseNumber == courseNumber) }
+                    .map { it.id }
+                    .toSet()
+                val dbUnsentIds = dbItems
+                    .filter { it.sentToKitchenAt == null && (courseNumber == null || it.courseNumber == courseNumber) }
+                    .map { it.id }
+                    .toSet()
+                val targetIds = cartUnsentIds + dbUnsentIds
+                Log.i(
+                    "KITCHEN_SEND",
+                    "order=$orderId cartItems=${cart.items.size} cartUnsent=${cartUnsentIds.size} " +
+                        "dbItems=${dbItems.size} dbUnsent=${dbUnsentIds.size} target=${targetIds.size} " +
+                        "flags=${syncedCart.items.joinToString { "${it.productName}:${it.sentToKitchen}" }}"
+                )
+                if (targetIds.isEmpty()) {
+                    showError(
+                        "Kitchen",
+                        if (courseNumber != null) "No new items in course $courseNumber" else "No new items to send"
+                    )
+                    return@withLock
+                }
+                tableOrderRepository.clearSentFlags(orderId, targetIds)
+                val unsent = tableOrderRepository.getOrderItemEntities(orderId)
+                    .filter { it.id in targetIds }
+                if (unsent.isEmpty()) {
+                    showError("Kitchen", "No new items to send")
+                    return@withLock
+                }
+                val settings = settingsRepository.getSettings()
+                val categories = productRepository.getAllCategories()
+                val products = productRepository.getAllProducts()
+                val previewRound = (tableOrderRepository.getOrder(orderId)?.kitchenRound ?: 0) + 1
+                val meta = buildKitchenMeta(syncedCart)
+                printerService.routeKitchen(
+                    settings = settings,
+                    tableName = syncedCart.tableName.orEmpty(),
+                    serviceType = syncedCart.serviceType,
+                    round = previewRound,
+                    items = unsent,
+                    isFollowUp = false,
+                    message = null,
+                    categories = categories,
+                    products = products,
+                    meta = meta
+                ).onSuccess {
+                    tableOrderRepository.markItemsSentToKitchen(orderId, unsent)
+                    val sentFlags = tableOrderRepository.getOrderItemEntities(orderId)
+                        .associate { it.id to (it.sentToKitchenAt != null) }
+                    cartManager.refreshSentFlags(sentFlags)
+                    updateExtras {
+                        it.copy(
+                            kitchenSentToPrinter = true,
+                            snackbarMessage = "Sent ${unsent.size} item(s) to kitchen",
+                            selectedCartItemId = null,
+                            keypadBuffer = ""
+                        )
+                    }
+                    refreshTables()
+                }.onFailure { e ->
+                    showError("Kitchen", e.message ?: "Kitchen print failed")
+                }
+            }
+        }
+    }
+
+    fun sendAllCoursesToKitchen() = sendToKitchen(courseNumber = null)
+
+    fun sendActiveCourseToKitchen() {
+        val cart = cartManager.snapshot()
+        val active = cart.activeCourse
+        val pendingCourses = cart.items
+            .filter { !it.sentToKitchen }
+            .map { it.courseNumber }
+            .distinct()
+            .sorted()
+        if (pendingCourses.isEmpty()) {
+            sendToKitchen(courseNumber = null)
+            return
+        }
+        if (pendingCourses.none { it == active }) {
+            showError(
+                "Kitchen",
+                "No new items in course $active. Unsent items are on course(s): ${pendingCourses.joinToString()}"
+            )
+            return
+        }
+        sendToKitchen(courseNumber = active)
+    }
+
+    fun holdOrder(sendToKitchen: Boolean) {
+        val cart = cartManager.snapshot()
+        if (cart.isEmpty) {
+            showError("Hold", "Add items before holding the order")
+            return
+        }
+        viewModelScope.launch {
             val userId = sessionManager.currentUserId.first() ?: 0L
             val userName = sessionManager.currentUserName.first() ?: "Cashier"
 
+            // 1. Optionally print to kitchen (must not block the hold itself)
+            if (sendToKitchen) {
+                runCatching {
+                    val snapshot = cartManager.snapshot()
+                    if (snapshot.tableId != null) {
+                        tableOrderMutex.withLock {
+                            val orderId = flushTableOrderSync()
+                            if (orderId != null) {
+                                printPendingKitchenItems(orderId, snapshot.tableName.orEmpty(), snapshot.serviceType)
+                            }
+                        }
+                    } else {
+                        val unsent = snapshot.items.filter { !it.sentToKitchen }
+                        if (unsent.isNotEmpty()) {
+                            printWalkInKitchenTicket(snapshot.copy(items = unsent))
+                            cartManager.refreshSentFlags(
+                                snapshot.items.associate { item ->
+                                    item.id to (item.sentToKitchen || unsent.any { it.id == item.id })
+                                }
+                            )
+                        }
+                    }
+                }.onFailure { e -> Log.e("HOLD_ORDER", "Kitchen print during hold failed", e) }
+            }
+
+            // 2. Ensure table order is persisted + marked HELD (best effort)
+            runCatching {
+                if (cartManager.snapshot().tableId != null) {
+                    tableOrderMutex.withLock {
+                        flushTableOrderSync()
+                        cartManager.snapshot().tableOrderId?.let { tableOrderRepository.holdOrder(it) }
+                    }
+                }
+            }.onFailure { e -> Log.e("HOLD_ORDER", "Persisting table order during hold failed", e) }
+
+            // 3. Create the held order record (this is what shows in Ongoing Orders) - critical
+            val result = runCatching {
+                val heldSnapshot = cartManager.snapshot()
+                val held = heldOrderRepository.createHeldOrder(
+                    cart = heldSnapshot,
+                    sendToKitchen = sendToKitchen,
+                    userId = userId,
+                    userName = userName
+                )
+                Log.i("HOLD_ORDER", "Created held order ${held.id} status=${held.status} items=${heldSnapshot.items.size} tableOrderId=${heldSnapshot.tableOrderId}")
+                held
+            }
+
+            result.onSuccess {
+                cartManager.clear()
+                updateExtras {
+                    it.copy(
+                        selectedCartItemId = null,
+                        keypadBuffer = "",
+                        snackbarMessage = if (sendToKitchen) "Order held and sent to kitchen" else "Order held"
+                    )
+                }
+                refreshTables()
+            }.onFailure { e ->
+                Log.e("HOLD_ORDER", "Creating held order failed", e)
+                showError("Hold", e.message ?: "Could not hold order")
+            }
+        }
+    }
+
+    private suspend fun printWalkInKitchenTicket(cart: CartSummary) {
+        val settings = settingsRepository.getSettings()
+        val categories = productRepository.getAllCategories()
+        val products = productRepository.getAllProducts()
+        val items = cart.items.map { item ->
+            com.foodtruck.pos.data.local.entity.TableOrderItemEntity(
+                id = item.id,
+                orderId = "walk-in",
+                productId = item.productId,
+                productName = item.productName,
+                variantName = item.variantName,
+                sku = item.sku,
+                unitPrice = item.unitPrice,
+                quantity = item.quantity,
+                taxRate = item.taxRate,
+                notes = item.notes ?: item.optionNotes(),
+                courseNumber = item.courseNumber
+            )
+        }
+        printerService.routeKitchen(
+            settings = settings,
+            tableName = when (cart.fulfillmentType) {
+                FulfillmentType.PICKUP -> "Takeaway"
+                FulfillmentType.DELIVERY -> "Delivery"
+                else -> cart.tableName ?: "Walk-in"
+            },
+            serviceType = cart.serviceType,
+            round = 1,
+            items = items,
+            isFollowUp = false,
+            message = null,
+            categories = categories,
+            products = products,
+            meta = buildKitchenMeta(cart)
+        )
+    }
+
+    private suspend fun printPendingKitchenForCurrentTable() {
+        val cart = cartManager.snapshot()
+        if (cart.tableId == null) {
+            // Walk-in / direct order (no table): print the order to the kitchen on sale.
+            // Only print items not already sent so split-bill payments don't re-fire the kitchen.
+            val unsent = cart.items.filter { !it.sentToKitchen }
+            if (unsent.isEmpty()) return
+            runCatching { printWalkInKitchenTicket(cart.copy(items = unsent)) }
+                .onSuccess {
+                    cartManager.refreshSentFlags(
+                        cart.items.associate { item ->
+                            item.id to (item.sentToKitchen || unsent.any { it.id == item.id })
+                        }
+                    )
+                }
+                .onFailure { e -> Log.e("KITCHEN_SEND", "Walk-in kitchen print on sale failed", e) }
+            return
+        }
+        tableOrderMutex.withLock {
+            val orderId = flushTableOrderSync() ?: return@withLock
+            printPendingKitchenItems(orderId, cart.tableName.orEmpty(), cart.serviceType)
+        }
+    }
+
+    private suspend fun printPendingKitchenItems(
+        orderId: String,
+        tableName: String,
+        serviceType: ServiceType
+    ) {
+        val syncedCart = cartManager.snapshot()
+        val intendedIds = syncedCart.items.filter { !it.sentToKitchen }.map { it.id }.toSet()
+        if (intendedIds.isEmpty()) return
+        tableOrderRepository.clearSentFlags(orderId, intendedIds)
+        val unsent = tableOrderRepository.getOrderItemEntities(orderId)
+            .filter { it.id in intendedIds }
+        if (unsent.isEmpty()) return
+        val settings = settingsRepository.getSettings()
+        val categories = productRepository.getAllCategories()
+        val products = productRepository.getAllProducts()
+        val previewRound = (tableOrderRepository.getOrder(orderId)?.kitchenRound ?: 0) + 1
+        printerService.routeKitchen(
+            settings = settings,
+            tableName = tableName,
+            serviceType = serviceType,
+            round = previewRound,
+            items = unsent,
+            isFollowUp = false,
+            message = null,
+            categories = categories,
+            products = products,
+            meta = buildKitchenMeta(syncedCart)
+        ).onSuccess {
+            tableOrderRepository.markItemsSentToKitchen(orderId, unsent)
+            val sentFlags = tableOrderRepository.getOrderItemEntities(orderId)
+                .associate { it.id to (it.sentToKitchenAt != null) }
+            cartManager.refreshSentFlags(sentFlags)
+        }
+    }
+
+    fun showSplitDialog() = openSplitBillScreen()
+
+    fun openSplitBillScreen() {
+        val cart = cartManager.snapshot()
+        if (cart.isEmpty) return
+        if (cartManager.snapshot().splitCount <= 1) {
+            cartManager.increaseSplitCount()
+        }
+        cartManager.setSplitByItems(true)
+        updateExtras {
+            it.copy(
+                showSplitBillScreen = true,
+                showSplitDialog = false,
+                showCheckoutScreen = false,
+                splitSelectedItemIds = emptySet()
+            )
+        }
+    }
+
+    fun dismissSplitBillScreen() = updateExtras {
+        it.copy(showSplitBillScreen = false, splitSelectedItemIds = emptySet(), returnToSplitAfterCheckout = false)
+    }
+
+    fun finishSplitBill() {
+        val cart = cartManager.snapshot()
+        if (cart.items.isEmpty()) {
+            cartManager.resetSplit()
+            updateExtras {
+                it.copy(
+                    showSplitBillScreen = false,
+                    splitSelectedItemIds = emptySet(),
+                    returnToSplitAfterCheckout = false,
+                    masterOrderId = null,
+                    equalSplitPaidCount = 0
+                )
+            }
+            return
+        }
+        val firstCheck = (1..cart.splitCount).firstOrNull { check ->
+            cart.items.any { it.splitCheck == check }
+        } ?: 1
+        cartManager.setActiveSplitCheck(firstCheck)
+        updateExtras {
+            it.copy(
+                showSplitBillScreen = false,
+                splitSelectedItemIds = emptySet(),
+                returnToSplitAfterCheckout = false,
+                masterOrderId = null,
+                equalSplitPaidCount = 0
+            )
+        }
+        openCheckout(method = PaymentMethod.CASH, fromSplit = false)
+    }
+
+    fun toggleSplitItemSelection(itemId: String) {
+        updateExtras { extras ->
+            val next = extras.splitSelectedItemIds.toMutableSet()
+            if (itemId in next) next.remove(itemId) else next.add(itemId)
+            extras.copy(splitSelectedItemIds = next)
+        }
+    }
+
+    fun moveSelectedToNewBill() {
+        val selected = _uiExtras.value.splitSelectedItemIds
+        if (selected.isEmpty()) return
+        val cart = cartManager.snapshot()
+        val usedChecks = cart.items.map { it.splitCheck }.toSet()
+        var targetCheck = (usedChecks.maxOrNull() ?: 1) + 1
+        while (targetCheck in usedChecks && targetCheck <= 8) targetCheck++
+        while (cartManager.snapshot().splitCount < targetCheck) cartManager.increaseSplitCount()
+        cartManager.assignItemsToCheck(selected, targetCheck)
+        updateExtras { it.copy(splitSelectedItemIds = emptySet()) }
+        persistTableOrderAsync()
+    }
+
+    fun splitEqually(count: Int) {
+        cartManager.setSplitByItems(false)
+        val target = count.coerceIn(2, 8)
+        while (cartManager.snapshot().splitCount < target) cartManager.increaseSplitCount()
+        while (cartManager.snapshot().splitCount > target) cartManager.decreaseSplitCount()
+        cartManager.setActiveSplitCheck(1)
+        updateExtras { it.copy(equalSplitPaidCount = 0, showSplitBillScreen = false) }
+        openCheckout(method = PaymentMethod.CASH, fromSplit = false)
+    }
+
+    fun checkoutSplitCheck(checkNumber: Int, method: PaymentMethod = PaymentMethod.CASH) {
+        cartManager.setActiveSplitCheck(checkNumber)
+        openCheckout(method, fromSplit = true)
+    }
+
+    fun navigateSplitBill(delta: Int) {
+        val cart = cartManager.snapshot()
+        if (cart.splitCount <= 1) return
+        val next = (cart.activeSplitCheck + delta).coerceIn(1, cart.splitCount)
+        if (next == cart.activeSplitCheck) return
+        cartManager.setActiveSplitCheck(next)
+        updateExtras {
+            it.copy(checkoutState = CheckoutState(roundingStep = checkoutRoundingDefault()))
+        }
+    }
+
+    fun checkoutDisplayCart(cart: CartSummary): CartSummary {
+        if (cart.splitByItems && cart.splitCount > 1) {
+            return cart.copy(items = cart.items.filter { it.splitCheck == cart.activeSplitCheck })
+        }
+        return cart
+    }
+
+    fun dismissSplitDialog() = dismissSplitBillScreen()
+
+    fun applySplitCount(count: Int) {
+        splitEqually(count)
+        dismissSplitBillScreen()
+    }
+
+    fun enableSplitByItems() {
+        if (cartManager.snapshot().splitCount <= 1) cartManager.increaseSplitCount()
+        cartManager.setSplitByItems(true)
+        updateExtras { it.copy(showSplitBillScreen = true, showSplitDialog = false) }
+    }
+
+    fun showKitchenMessageDialog() {
+        val cart = cartManager.snapshot()
+        if (cart.tableOrderId == null) {
+            showError("Kitchen", "Open a table first")
+            return
+        }
+        updateExtras { it.copy(showKitchenMessageDialog = true) }
+    }
+
+    fun dismissKitchenMessageDialog() = updateExtras { it.copy(showKitchenMessageDialog = false) }
+
+    fun sendKitchenMessage(message: String) {
+        val cart = cartManager.snapshot()
+        val orderId = cart.tableOrderId ?: return
+        val tableId = cart.tableId ?: return
+        val tableName = cart.tableName.orEmpty()
+        viewModelScope.launch {
+            tableOrderRepository.addKitchenMessage(orderId, tableId, tableName, message)
+            val settings = settingsRepository.getSettings()
+            printerService.routeKitchen(
+                settings = settings,
+                tableName = tableName,
+                serviceType = cart.serviceType,
+                round = 0,
+                items = emptyList(),
+                isFollowUp = true,
+                message = message,
+                meta = buildKitchenMeta(cart)
+            ).onSuccess {
+                updateExtras {
+                    it.copy(showKitchenMessageDialog = false)
+                }
+            }.onFailure { e ->
+                updateExtras { it.copy(errorMessage = e.message ?: "Kitchen message failed") }
+            }
+        }
+    }
+
+    fun openCheckout(method: PaymentMethod = PaymentMethod.CASH, fromSplit: Boolean = false) {
+        val full = cartManager.snapshot()
+        val payable = cartManager.paymentSnapshot()
+        if (payable.isEmpty && !(full.splitCount > 1 && !full.splitByItems)) return
+        updateExtras {
+            it.copy(
+                showCheckoutScreen = true,
+                showSplitBillScreen = false,
+                returnToSplitAfterCheckout = false,
+                checkoutState = CheckoutState(
+                    method = method,
+                    roundingStep = checkoutRoundingDefault()
+                ),
+                errorMessage = null,
+                errorTitle = null
+            )
+        }
+    }
+
+    fun dismissCheckout() {
+        updateExtras {
+            it.copy(
+                showCheckoutScreen = false,
+                pendingPaymentMethod = null,
+                showSplitBillScreen = false,
+                returnToSplitAfterCheckout = false
+            )
+        }
+    }
+
+    fun updateCheckoutMethod(method: PaymentMethod) {
+        updateExtras { it.copy(checkoutState = it.checkoutState.copy(method = method)) }
+    }
+
+    fun updateCheckoutTipAmount(amount: Double) {
+        updateExtras { it.copy(checkoutState = it.checkoutState.copy(tipAmount = amount)) }
+    }
+
+    fun updateCheckoutTipPercent(percent: Double) {
+        updateExtras { it.copy(checkoutState = it.checkoutState.copy(tipPercent = percent)) }
+    }
+
+    fun updateCheckoutDiscountPercent(percent: Double) {
+        updateExtras { it.copy(checkoutState = it.checkoutState.copy(discountPercent = percent)) }
+    }
+
+    fun updateCheckoutRoundingStep(step: Double) {
+        updateExtras { it.copy(checkoutState = it.checkoutState.copy(roundingStep = step)) }
+    }
+
+    fun updateCheckoutPrintReceipt(print: Boolean) {
+        updateExtras { it.copy(checkoutState = it.checkoutState.copy(printReceipt = print)) }
+    }
+
+    fun toggleCheckoutTipPanel() {
+        updateExtras {
+            it.copy(checkoutState = it.checkoutState.copy(showTipPanel = !it.checkoutState.showTipPanel))
+        }
+    }
+
+    fun toggleCheckoutDiscountPanel() {
+        updateExtras {
+            it.copy(checkoutState = it.checkoutState.copy(showDiscountPanel = !it.checkoutState.showDiscountPanel))
+        }
+    }
+
+    fun openCashDrawer() {
+        viewModelScope.launch {
+            val settings = settingsRepository.getSettings()
+            withContext(Dispatchers.IO) {
+                printerService.routeOpenCashDrawer(settings)
+            }.onFailure { e -> showError("Drawer", e.message ?: "Cash drawer failed") }
+        }
+    }
+
+    fun printProvisionalReceipt() {
+        viewModelScope.launch {
+            val cart = cartManager.snapshot()
+            if (cart.isEmpty) {
+                showError("Print", "Add items before printing")
+                return@launch
+            }
+            val settings = settingsRepository.getSettings()
+            val total = applyCashRounding(cart.displayTotal, settings.roundingStep)
+            val lines = cart.items.map { "${it.quantity}x ${it.productName}" to it.lineSubtotal }
+            withContext(Dispatchers.IO) {
+                printerService.printCartPreview(
+                    settings = settings,
+                    lines = lines,
+                    total = total,
+                    title = "PROVISIONAL RECEIPT"
+                )
+            }.onFailure { e -> showError("Print", e.message ?: "Print failed") }
+        }
+    }
+
+    fun printCheckoutPreview() {
+        viewModelScope.launch {
+            val settings = settingsRepository.getSettings()
+            val cart = cartManager.paymentSnapshot()
+            if (cart.isEmpty) {
+                showError("Print", "Nothing to print")
+                return@launch
+            }
+            val checkout = _uiExtras.value.checkoutState
+            val subtotal = cart.subtotal - cart.itemDiscountTotal
+            val discount = if (checkout.discountPercent > 0) {
+                subtotal * (checkout.discountPercent / 100.0)
+            } else cart.discountValue
+            val rawTotal = (subtotal + cart.taxTotal - discount + checkout.tipAmount).coerceAtLeast(0.0)
+            val total = applyCashRounding(rawTotal, checkout.roundingStep.takeIf { it > 0 } ?: settings.roundingStep)
+            val staffName = sessionManager.currentUserName.first() ?: "Staff"
+            val context = com.foodtruck.pos.printer.ReceiptPrintContext(
+                orderNumber = cart.orderNumber,
+                serviceType = cart.serviceType,
+                fulfillmentType = cart.fulfillmentType,
+                tableName = cart.tableName,
+                paymentMethod = checkout.method,
+                amountPaid = checkout.tenderAmount.takeIf { it > 0 } ?: total,
+                staffName = staffName
+            )
+            withContext(Dispatchers.IO) {
+                printerService.routeCartReceipt(
+                    settings = settings,
+                    cart = cart,
+                    context = context,
+                    discountAmount = discount,
+                    tipAmount = checkout.tipAmount,
+                    total = total
+                )
+            }.onFailure { e -> showError("Print", e.message ?: "Print failed") }
+        }
+    }
+
+    fun dismissOrderComplete() {
+        val extras = _uiExtras.value
+        val cart = cartManager.snapshot()
+        updateExtras { it.copy(showOrderComplete = false, completedTransaction = null) }
+        when {
+            cart.splitCount > 1 && !cart.splitByItems -> {
+                val paid = extras.equalSplitPaidCount
+                if (paid < cart.splitCount) {
+                    cartManager.setActiveSplitCheck(paid + 1)
+                    openCheckout(PaymentMethod.CASH, fromSplit = false)
+                }
+            }
+            cart.splitByItems && cart.items.isNotEmpty() -> {
+                val nextCheck = (1..cart.splitCount).firstOrNull { check ->
+                    cart.items.any { it.splitCheck == check }
+                }
+                if (nextCheck != null) {
+                    cartManager.setActiveSplitCheck(nextCheck)
+                    openCheckout(PaymentMethod.CASH, fromSplit = false)
+                }
+            }
+        }
+    }
+
+    fun printCompletedReceipt() {
+        viewModelScope.launch {
+            val tx = _uiExtras.value.completedTransaction ?: return@launch
+            val full = transactionRepository.getTransaction(tx.id) ?: return@launch
+            val settings = settingsRepository.getSettings()
+            withContext(Dispatchers.IO) {
+                printerService.routeReceipt(settings, full.first, full.second)
+            }.onFailure { e -> showError("Print", e.message ?: "Print failed") }
+        }
+    }
+
+    fun initiateCashPayment() = openCheckout(PaymentMethod.CASH)
+
+    fun initiateCardPayment() = openCheckout(PaymentMethod.CARD)
+
+    fun xpressSale() {
+        val payable = cartManager.paymentSnapshot()
+        if (payable.isEmpty) return
+        viewModelScope.launch {
+            updateExtras { it.copy(isProcessingPayment = true) }
+            persistTableOrderIfNeeded()
+            printPendingKitchenForCurrentTable()
+            val settings = settingsRepository.getSettings()
+            val userId = sessionManager.currentUserId.first() ?: 0L
+            val userName = sessionManager.currentUserName.first() ?: "Cashier"
+            val paidIds = payable.items.map { it.id }.toSet()
+            val rawTotal = payable.total
+            val roundedTotal = applyCashRounding(rawTotal, settings.roundingStep)
+            val roundingAmount = roundedTotal - rawTotal
+            val transaction = transactionRepository.completeSale(
+                cart = payable,
+                paymentMethod = PaymentMethod.CASH,
+                userId = userId,
+                userName = userName,
+                roundingAmount = roundingAmount
+            )
+            cartManager.removeItemsAfterPayment(paidIds)
+            if (cartManager.snapshot().items.isEmpty()) {
+                cartManager.snapshot().tableOrderId?.let { tableOrderRepository.closeOrder(it) }
+                cartManager.clear()
+            }
+            refreshTables()
+            val full = transactionRepository.getTransaction(transaction.id)
+            if (full != null) {
+                withContext(Dispatchers.IO) {
+                    printerService.routeReceipt(settings, full.first, full.second)
+                }
+            }
+            updateExtras {
+                it.copy(
+                    isProcessingPayment = false,
+                    selectedCartItemId = null,
+                    keypadBuffer = "",
+                    kitchenSentToPrinter = false
+                )
+            }
+        }
+    }
+
+    fun completeCheckoutWithQuickCash(tenderAmount: Double, activity: Activity?) {
+        updateExtras {
+            it.copy(
+                checkoutState = it.checkoutState.copy(
+                    method = PaymentMethod.CASH,
+                    tenderAmount = tenderAmount
+                )
+            )
+        }
+        completeCheckout(activity)
+    }
+
+    fun completeCheckout(activity: Activity?) {
+        val checkout = _uiExtras.value.checkoutState
+        val method = checkout.method
+        val fullCart = cartManager.snapshot()
+        val payable = cartManager.paymentSnapshot()
+        if (payable.isEmpty && !(fullCart.splitCount > 1 && !fullCart.splitByItems)) return
+
+        viewModelScope.launch {
+            updateExtras { it.copy(isProcessingPayment = true, errorMessage = null) }
+            persistTableOrderIfNeeded()
+            printPendingKitchenForCurrentTable()
+            val settings = settingsRepository.getSettings()
+            val userId = sessionManager.currentUserId.first() ?: 0L
+            val userName = sessionManager.currentUserName.first() ?: "Cashier"
+            val paidIds = payable.items.map { it.id }.toSet()
+
+            val subtotal = payable.subtotal - payable.itemDiscountTotal
+            val checkoutDiscount = if (checkout.discountPercent > 0) {
+                subtotal * (checkout.discountPercent / 100.0)
+            } else 0.0
+            val preTipTotal = (subtotal + payable.taxTotal - payable.discountValue - checkoutDiscount).coerceAtLeast(0.0)
+            val roundingStep = checkout.roundingStep.takeIf { it > 0 } ?: settings.roundingStep
+            val rawTotal = when {
+                fullCart.splitCount > 1 && !fullCart.splitByItems ->
+                    (fullCart.total / fullCart.splitCount) + checkout.tipAmount
+                else -> preTipTotal + checkout.tipAmount
+            }
+            val roundedTotal = applyCashRounding(rawTotal, roundingStep)
+            val roundingAmount = roundedTotal - rawTotal
+
+            val masterId = _uiExtras.value.masterOrderId ?: UUID.randomUUID().toString().also { id ->
+                updateExtras { it.copy(masterOrderId = id) }
+            }
+
             val paymentResult = when (method) {
                 PaymentMethod.CASH -> cashPaymentService.processPayment()
+                PaymentMethod.ADYEN_TERMINAL -> {
+                    if (!settings.adyenTerminalEnabled) {
+                        PaymentResult.Failure("Enable Adyen terminal in Settings")
+                    } else {
+                        paymentOrchestrator.processCardPayment(activity, roundedTotal, settings.defaultCurrency, settings)
+                    }
+                }
                 PaymentMethod.CARD -> {
-                    updateExtras { it.copy(tapToPayMessage = "Processing card payment") }
-                    paymentOrchestrator.processCardPayment(activity, cart.total, settings.defaultCurrency, settings)
+                    paymentOrchestrator.processCardPayment(activity, roundedTotal, settings.defaultCurrency, settings)
                 }
                 else -> PaymentResult.Failure("Unsupported payment method")
             }
 
             when (paymentResult) {
                 is PaymentResult.Success -> {
-                    val resolvedMethod = if (method == PaymentMethod.CASH) PaymentMethod.CASH else paymentResult.method
+                    val resolvedMethod = when (method) {
+                        PaymentMethod.CASH -> PaymentMethod.CASH
+                        PaymentMethod.ADYEN_TERMINAL -> PaymentMethod.ADYEN_TERMINAL
+                        else -> paymentResult.method
+                    }
+                    val tender = checkout.tenderAmount.takeIf { it > 0 && resolvedMethod == PaymentMethod.CASH }
+                    val changeDue = tender?.let { (it - roundedTotal).coerceAtLeast(0.0) }
+                    val saleCart = if (fullCart.splitCount > 1 && !fullCart.splitByItems) fullCart else payable
                     val transaction = transactionRepository.completeSale(
-                        cart = cart,
+                        cart = saleCart,
                         paymentMethod = resolvedMethod,
                         userId = userId,
                         userName = userName,
-                        cardReference = paymentResult.reference
+                        cardReference = paymentResult.reference,
+                        tipAmount = checkout.tipAmount,
+                        roundingAmount = roundingAmount,
+                        checkoutDiscountPercent = checkout.discountPercent,
+                        overrideTotal = if (fullCart.splitCount > 1 && !fullCart.splitByItems) roundedTotal else null,
+                        masterOrderId = masterId,
+                        splitCheckNumber = if (fullCart.splitByItems) fullCart.activeSplitCheck else null,
+                        amountTendered = tender,
+                        changeDue = changeDue
                     )
-                    cartManager.clear()
+                    if (fullCart.splitByItems) {
+                        cartManager.removeItemsAfterPayment(paidIds)
+                    } else if (fullCart.splitCount > 1) {
+                        val paid = _uiExtras.value.equalSplitPaidCount + 1
+                        updateExtras { it.copy(equalSplitPaidCount = paid) }
+                        if (paid >= fullCart.splitCount) {
+                            cartManager.clear()
+                            cartManager.resetSplit()
+                            updateExtras { it.copy(masterOrderId = null, equalSplitPaidCount = 0) }
+                        }
+                    } else {
+                        cartManager.removeItemsAfterPayment(paidIds)
+                    }
+                    val remaining = cartManager.snapshot()
+                    refreshTables()
+                    if (checkout.printReceipt) {
+                        val full = transactionRepository.getTransaction(transaction.id)
+                        if (full != null) {
+                            withContext(Dispatchers.IO) {
+                                printerService.routeReceipt(settings, full.first, full.second)
+                            }
+                        }
+                    }
+                    if (remaining.items.isNotEmpty() && fullCart.splitByItems) {
+                        val nextCheck = (1..remaining.splitCount).firstOrNull { check ->
+                            remaining.items.any { it.splitCheck == check }
+                        }
+                        if (nextCheck != null) {
+                            cartManager.setActiveSplitCheck(nextCheck)
+                            updateExtras {
+                                it.copy(
+                                    isProcessingPayment = false,
+                                    showCheckoutScreen = true,
+                                    showOrderComplete = false,
+                                    showSplitBillScreen = false,
+                                    returnToSplitAfterCheckout = false,
+                                    checkoutState = CheckoutState(roundingStep = checkoutRoundingDefault()),
+                                    selectedCartItemId = null,
+                                    lastAddedItemId = null,
+                                    keypadBuffer = "",
+                                    kitchenSentToPrinter = false
+                                )
+                            }
+                            return@launch
+                        }
+                    }
+                    if (remaining.items.isEmpty()) {
+                        remaining.tableOrderId?.let { tableOrderRepository.closeOrder(it) }
+                        cartManager.clear()
+                        cartManager.resetSplit()
+                        updateExtras { it.copy(masterOrderId = null, equalSplitPaidCount = 0) }
+                    }
                     updateExtras {
                         it.copy(
                             isProcessingPayment = false,
-                            showPaymentSummary = false,
-                            showReceiptOptions = true,
-                            lastTransaction = transaction,
-                            pendingPaymentMethod = null,
-                            tapToPayMessage = null
+                            showCheckoutScreen = false,
+                            showOrderComplete = true,
+                            completedTransaction = transaction,
+                            checkoutState = CheckoutState(),
+                            selectedCartItemId = null,
+                            lastAddedItemId = null,
+                            keypadBuffer = "",
+                            kitchenSentToPrinter = false,
+                            showSplitBillScreen = false
                         )
                     }
                 }
                 is PaymentResult.Failure -> updateExtras {
-                    it.copy(isProcessingPayment = false, errorMessage = paymentResult.message, tapToPayMessage = null)
+                    it.copy(isProcessingPayment = false, errorMessage = paymentResult.message)
                 }
                 PaymentResult.Cancelled -> updateExtras {
-                    it.copy(isProcessingPayment = false, tapToPayMessage = null)
+                    it.copy(isProcessingPayment = false)
                 }
             }
         }
     }
 
+    fun confirmPayment(activity: Activity?) = completeCheckout(activity)
+
     fun dismissPaymentSummary() {
-        updateExtras { it.copy(showPaymentSummary = false, pendingPaymentMethod = null, errorMessage = null) }
+        updateExtras { it.copy(showPaymentSummary = false, showCheckoutScreen = false, pendingPaymentMethod = null, errorMessage = null) }
     }
 
     fun printLastReceipt() {
@@ -238,7 +1437,7 @@ class PosViewModel @Inject constructor(
             val tx = _uiExtras.value.lastTransaction ?: return@launch
             val full = transactionRepository.getTransaction(tx.id) ?: return@launch
             val settings = settingsRepository.getSettings()
-            printerService.printReceipt(settings, full.first, full.second)
+            printerService.routeReceipt(settings, full.first, full.second)
                 .onFailure { e -> updateExtras { it.copy(errorMessage = e.message) } }
             dismissReceiptOptions()
         }
@@ -249,33 +1448,230 @@ class PosViewModel @Inject constructor(
     }
 
     fun dismissDialogs() {
+        _productCustomize.value = null
         updateExtras {
             it.copy(
                 showOpenPriceDialog = false,
                 showVariantDialog = false,
+                optionGroupPicker = null,
                 showDiscountDialog = false,
                 selectedProduct = null
             )
         }
     }
 
-    fun clearError() = updateExtras { it.copy(errorMessage = null) }
+    fun clearError() = updateExtras { it.copy(errorMessage = null, errorTitle = null) }
+    fun clearProductHighlight() = updateExtras { it.copy(lastClickedProductId = null) }
 
-    private fun updateExtras(block: (PosDialogState) -> PosDialogState) {
-        _uiExtras.value = block(_uiExtras.value)
+    fun clearSuccess() = updateExtras { it.copy(successMessage = null) }
+    fun clearSnackbar() = updateExtras { it.copy(snackbarMessage = null) }
+
+    fun showNewOrderDialog() {
+        if (cartManager.snapshot().isEmpty) return
+        updateExtras { it.copy(showClearCartDialog = true) }
+    }
+
+    fun dismissClearCartDialog() = updateExtras { it.copy(showClearCartDialog = false) }
+
+    fun confirmClearCart() {
+        cartManager.clear()
+        updateExtras { it.copy(showClearCartDialog = false, snackbarMessage = "Cart cleared") }
+        refreshTables()
+    }
+
+    fun showPickupOrderDialog() {
+        updateExtras {
+            it.copy(
+                showPickupDialog = true,
+                suggestedOrderNumber = suggestOrderNumber()
+            )
+        }
+    }
+
+    fun dismissPickupDialog() = updateExtras { it.copy(showPickupDialog = false) }
+
+    fun confirmPickup(orderNumber: String, pickupTimeMs: Long?) {
+        cartManager.setPickupOrder(orderNumber.trim(), pickupTimeMs)
+        updateExtras {
+            it.copy(
+                showPickupDialog = false,
+                snackbarMessage = "Pickup order ${orderNumber.trim()}"
+            )
+        }
+    }
+
+    fun showDeliveryOrderDialog() {
+        updateExtras {
+            it.copy(
+                showDeliveryDialog = true,
+                suggestedOrderNumber = suggestOrderNumber()
+            )
+        }
+    }
+
+    fun dismissDeliveryDialog() = updateExtras { it.copy(showDeliveryDialog = false) }
+
+    fun confirmDelivery(
+        orderNumber: String,
+        name: String,
+        address: String,
+        zip: String,
+        phone: String
+    ) {
+        cartManager.setDeliveryOrder(
+            name = name.trim(),
+            address = address.trim(),
+            zip = zip.trim(),
+            phone = phone.trim(),
+            orderNumber = orderNumber.trim()
+        )
+        updateExtras {
+            it.copy(
+                showDeliveryDialog = false,
+                snackbarMessage = "Delivery order ${orderNumber.trim()}"
+            )
+        }
+    }
+
+    private fun suggestOrderNumber(): String =
+        "P-${System.currentTimeMillis().toString().takeLast(6)}"
+
+    private fun checkoutRoundingDefault(): Double =
+        cachedSettings.roundingStep.takeIf { it > 0.0 } ?: 0.05
+
+    private suspend fun buildKitchenMeta(cart: CartSummary): KitchenPrintMeta {
+        val userName = sessionManager.currentUserName.first() ?: "Cashier"
+        val orderNum = cart.orderNumber
+            ?: cart.tableOrderId?.let { "T-${it.takeLast(6).uppercase()}" }
+        return KitchenPrintMeta(
+            orderNumber = orderNum,
+            fulfillmentType = cart.fulfillmentType,
+            pickupTimeMs = cart.pickupTimeMs,
+            cashierName = userName
+        )
+    }
+
+    private fun showError(title: String, message: String) {
+        updateExtras { it.copy(errorTitle = title, errorMessage = message) }
+    }
+
+    private fun playItemClickBeep() {
+        runCatching {
+            android.media.ToneGenerator(android.media.AudioManager.STREAM_MUSIC, 35)
+                .startTone(android.media.ToneGenerator.TONE_PROP_BEEP, 60)
+        }
+    }
+
+    private suspend fun reloadCartFromTable(cart: CartSummary) {
+        val orderId = cart.tableOrderId ?: return
+        val order = tableOrderRepository.getOrder(orderId) ?: return
+        val items = tableOrderRepository.getOrderItems(orderId)
+        cartManager.loadTableOrder(
+            tableId = cart.tableId ?: return,
+            tableName = cart.tableName.orEmpty(),
+            orderId = orderId,
+            serviceType = cart.serviceType,
+            items = items,
+            discountPercent = order.discountPercent,
+            discountAmount = order.discountAmount,
+            courseCount = cart.courseCount,
+            activeCourse = cart.activeCourse
+        )
+    }
+
+    private fun resolveTaxRate(productId: Long, productTaxRate: Double, serviceType: ServiceType): Double {
+        if (productTaxRate == 0.0) return 0.0
+        return resolveVatRate(productTaxRate, serviceType, cachedSettings)
+    }
+
+    fun prepareForOngoingOrders(onReady: () -> Unit) {
+        viewModelScope.launch {
+            tableOrderMutex.withLock { flushTableOrderSync() }
+            onReady()
+        }
+    }
+
+    private suspend fun flushTableOrderSync(): String? {
+        persistTableJob?.cancel()
+        persistTableJob = null
+        return syncTableOrderToDb()
+    }
+
+    private suspend fun syncTableOrderToDb(): String? {
+        val cart = cartManager.snapshot()
+        if (cart.tableId == null) return null
+        val userId = sessionManager.currentUserId.first() ?: 0L
+        val userName = sessionManager.currentUserName.first() ?: "Cashier"
+        val orderId = tableOrderRepository.syncCartToTable(cart, userId, userName)
+        cartManager.setTableOrderId(orderId)
+        val sentFlags = tableOrderRepository.getOrderItemEntities(orderId)
+            .associate { it.id to (it.sentToKitchenAt != null) }
+        cartManager.refreshSentFlags(sentFlags)
+        refreshTables()
+        return orderId
+    }
+
+    private suspend fun persistTableOrderIfNeeded() {
+        tableOrderMutex.withLock { syncTableOrderToDb() }
+    }
+
+    private fun persistTableOrderAsync() {
+        persistTableJob?.cancel()
+        persistTableJob = viewModelScope.launch {
+            delay(250)
+            persistTableOrderIfNeeded()
+        }
     }
 
     private data class PosDialogState(
         val isProcessingPayment: Boolean = false,
         val showOpenPriceDialog: Boolean = false,
         val showVariantDialog: Boolean = false,
+        val optionGroupPicker: OptionGroupPicker? = null,
         val showDiscountDialog: Boolean = false,
+        val showCheckoutScreen: Boolean = false,
+        val showOrderComplete: Boolean = false,
         val showPaymentSummary: Boolean = false,
         val showReceiptOptions: Boolean = false,
+        val showTablePicker: Boolean = false,
+        val showKitchenMessageDialog: Boolean = false,
+        val showMiscPriceDialog: Boolean = false,
+        val showSplitDialog: Boolean = false,
+        val showSplitBillScreen: Boolean = false,
+        val splitSelectedItemIds: Set<String> = emptySet(),
+        val masterOrderId: String? = null,
+        val equalSplitPaidCount: Int = 0,
+        val returnToSplitAfterCheckout: Boolean = false,
+        val kitchenSentToPrinter: Boolean = false,
         val pendingPaymentMethod: PaymentMethod? = null,
         val selectedProduct: ProductWithVariants? = null,
         val lastTransaction: TransactionEntity? = null,
         val errorMessage: String? = null,
-        val tapToPayMessage: String? = null
+        val errorTitle: String? = null,
+        val successMessage: String? = null,
+        val snackbarMessage: String? = null,
+        val showClearCartDialog: Boolean = false,
+        val showPickupDialog: Boolean = false,
+        val showDeliveryDialog: Boolean = false,
+        val suggestedOrderNumber: String = "",
+        val tapToPayMessage: String? = null,
+        val selectedCartItemId: String? = null,
+        val lastAddedItemId: String? = null,
+        val lastClickedProductId: Long? = null,
+        val keypadBuffer: String = "",
+        val checkoutState: CheckoutState = CheckoutState(),
+        val completedTransaction: TransactionEntity? = null
+    )
+
+    private fun updateExtras(block: (PosDialogState) -> PosDialogState) {
+        _uiExtras.value = block(_uiExtras.value)
+    }
+
+    private data class DataBundle(
+        val categories: List<CategoryEntity>,
+        val categoryId: Long?,
+        val products: List<ProductEntity>,
+        val cart: CartSummary,
+        val settings: BusinessSettingsEntity
     )
 }

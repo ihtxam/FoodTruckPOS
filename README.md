@@ -1,22 +1,22 @@
 # Food Truck POS
 
-A native Android Point of Sale app built for food trucks and small businesses. Optimized for fast touchscreen checkout — similar simplicity to SumUp mPOS.
+A native Android Point of Sale app built for food trucks and small businesses. Optimized for fast touchscreen checkout ï¿½ similar simplicity to SumUp mPOS.
 
 ## Features
 
-- **One-screen checkout** — categories, product grid, cart, and CASH/CARD buttons always visible
-- **Offline-first** — Room SQLite database, works without internet
-- **Sync-ready** — pending transactions queue for backend sync when online
-- **Product variants** — Coffee (S/M/L), Pizza (Regular/Large/Family)
-- **Open price products** — custom services, donations, misc items
-- **Cart** — quantity, discounts (% or fixed), tax calculation
-- **Payments** — cash flow, card via Tap-to-Pay or Adyen Terminal API (integration stubs)
-- **Receipts** — QR digital receipt, Bluetooth ESC/POS thermal printing
-- **Role-based access** — Admin, Manager, Cashier
-- **Auth** — PIN, email/password, biometric
-- **Settings** — business info, currency (CHF/EUR/USD/GBP/AED/CAD), runtime language switch
-- **Reports** — daily sales, top products, cashier performance
-- **Dashboard** — today's revenue, transaction count, cash vs card
+- **One-screen checkout** ï¿½ categories, product grid, cart, and CASH/CARD buttons always visible
+- **Offline-first** ï¿½ Room SQLite database, works without internet
+- **Sync-ready** ï¿½ pending transactions queue for backend sync when online
+- **Product variants** ï¿½ Coffee (S/M/L), Pizza (Regular/Large/Family)
+- **Open price products** ï¿½ custom services, donations, misc items
+- **Cart** ï¿½ quantity, discounts (% or fixed), tax calculation
+- **Payments** ï¿½ cash flow, card via Tap-to-Pay or Adyen Terminal API (integration stubs)
+- **Receipts** ï¿½ QR digital receipt, Bluetooth ESC/POS thermal printing
+- **Role-based access** ï¿½ Admin, Manager, Cashier
+- **Auth** ï¿½ PIN, email/password, biometric
+- **Settings** ï¿½ business info, currency (CHF/EUR/USD/GBP/AED/CAD), runtime language switch
+- **Reports** ï¿½ daily sales, top products, cashier performance
+- **Dashboard** ï¿½ today's revenue, transaction count, cash vs card
 
 ## Tech Stack
 
@@ -42,16 +42,20 @@ A native Android Point of Sale app built for food trucks and small businesses. O
 
 ### Open & Run
 
-1. Open `FoodTruckPOS` in Android Studio
-2. Let Gradle sync
-3. Run on a tablet (recommended) or phone in landscape
+1. In Android Studio, choose **File ? Open** and select the **`FoodTruckPOS`** folder (not the parent `Downloads` folder).
+2. When prompted, trust the project and wait for **Gradle Sync** to finish.
+3. Go to **Settings ? Build, Execution, Deployment ? Build Tools ? Gradle** and set **Gradle JDK** to **Embedded JDK (17)**. Do **not** use JDK 24+ or OpenJDK 26.
+4. Click **File ? Sync Project with Gradle Files**.
+5. Select the **`app`** run configuration in the toolbar and run on a device/emulator.
+
+> **"No module" error?** This usually means Gradle sync did not complete. Ensure `gradlew.bat` exists in the project root, then re-sync. Do not open the parent `Downloads` directory as the project root.
 
 ### Demo Login
 
 | Role | PIN | Email |
 |------|-----|-------|
 | Admin | `1234` | `admin@foodtruck.local` / `admin123` |
-| Cashier | `0000` | — |
+| Cashier | `0000` | ï¿½ |
 
 ## Project Structure
 
@@ -73,13 +77,13 @@ app/src/main/java/com/foodtruck/pos/
 
 ## Production Integrations (Next Steps)
 
-These are scaffolded with simulation — replace with real SDKs:
+These are scaffolded with simulation ï¿½ replace with real SDKs:
 
-1. **Tap-to-Pay** — `TapToPayService.kt` ? Stripe Terminal, Adyen Tap-to-Pay, or SumUp SDK
-2. **Adyen Terminal** — `AdyenTerminalService.kt` ? [Terminal API](https://docs.adyen.com/point-of-sale/design-your-integration/choose-your-architecture/terminal-api/)
-3. **Backend sync** — `SyncService.kt` ? Retrofit REST API
-4. **Digital receipts** — host receipt page at `receiptBaseUrl` in settings
-5. **Bluetooth printers** — pair printer in Settings ? Test Print
+1. **Tap-to-Pay** ï¿½ `TapToPayService.kt` ? Stripe Terminal, Adyen Tap-to-Pay, or SumUp SDK
+2. **Adyen Terminal** ï¿½ `AdyenTerminalService.kt` ? [Terminal API](https://docs.adyen.com/point-of-sale/design-your-integration/choose-your-architecture/terminal-api/)
+3. **Backend sync** ï¿½ `SyncService.kt` ? Retrofit REST API
+4. **Digital receipts** ï¿½ host receipt page at `receiptBaseUrl` in settings
+5. **Bluetooth printers** ï¿½ pair printer in Settings ? Test Print
 
 ## Performance Targets
 
@@ -89,4 +93,4 @@ These are scaffolded with simulation — replace with real SDKs:
 
 ## License
 
-Private — for your food truck business.
+Private ï¿½ for your food truck business.

@@ -2,86 +2,197 @@ package com.foodtruck.pos.data.local
 
 import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
-import com.foodtruck.pos.data.local.entity.BusinessSettingsEntity
-import com.foodtruck.pos.data.local.entity.CategoryEntity
-import com.foodtruck.pos.data.local.entity.ProductEntity
-import com.foodtruck.pos.data.local.entity.ProductVariantEntity
-import com.foodtruck.pos.data.local.entity.UserEntity
-import com.foodtruck.pos.domain.model.UserRole
 import java.security.MessageDigest
 
 class DatabaseCallback : RoomDatabase.Callback() {
     override fun onCreate(db: SupportSQLiteDatabase) {
         super.onCreate(db)
-        seedDatabase(db)
+        seedAll(db)
     }
 
-    private fun seedDatabase(db: SupportSQLiteDatabase) {
-        db.execSQL(
-            """
-            INSERT INTO users (name, email, pinHash, passwordHash, role, isActive, biometricEnabled, createdAt)
-            VALUES ('Admin', 'admin@foodtruck.local', '${hash("1234")}', '${hash("admin123")}', 'ADMIN', 1, 0, ${System.currentTimeMillis()})
-            """.trimIndent()
-        )
-        db.execSQL(
-            """
-            INSERT INTO users (name, email, pinHash, passwordHash, role, isActive, biometricEnabled, createdAt)
-            VALUES ('Cashier', NULL, '${hash("0000")}', NULL, 'CASHIER', 1, 0, ${System.currentTimeMillis()})
-            """.trimIndent()
-        )
-
-        db.execSQL("INSERT INTO business_settings (id, businessName, defaultCurrency, currencySymbol) VALUES (1, 'Food Truck', 'CHF', 'CHF')")
-
-        val categories = listOf("Drinks", "Food", "Desserts", "Merchandise", "Services")
-        categories.forEachIndexed { index, name ->
-            db.execSQL("INSERT INTO categories (name, sortOrder, isActive) VALUES ('$name', $index, 1)")
+    override fun onOpen(db: SupportSQLiteDatabase) {
+        super.onOpen(db)
+        if (count(db, "categories") == 0L || count(db, "products") == 0L) {
+            seedCatalog(db)
         }
+        if (count(db, "users") == 0L) {
+            seedUsers(db)
+        }
+        if (count(db, "business_settings") == 0L) {
+            seedSettings(db)
+        }
+        if (count(db, "restaurant_tables") == 0L) {
+            seedTables(db)
+        }
+        if (count(db, "discount_presets") == 0L) {
+            seedDiscountPresets(db)
+        }
+        if (count(db, "cancel_reasons") == 0L) {
+            seedCancelReasons(db)
+        }
+    }
 
-        insertProduct(db, 1, "Coca Cola", 4.50, 2.5, 1)
-        insertProduct(db, 1, "Sparkling Water", 3.50, 2.5, 2)
-        insertProduct(db, 2, "Pizza Margherita", 14.90, 2.5, 3)
-        insertProduct(db, 2, "Burger Classic", 12.50, 2.5, 4)
-        insertProduct(db, 3, "Chocolate Brownie", 5.50, 2.5, 5)
-        insertProduct(db, 5, "Custom Service", 0.0, 2.5, 6, openPrice = true)
-        insertProduct(db, 5, "Donation", 0.0, 0.0, 7, openPrice = true)
+    private fun count(db: SupportSQLiteDatabase, table: String): Long {
+        db.query("SELECT COUNT(*) FROM $table").use { cursor ->
+            return if (cursor.moveToFirst()) cursor.getLong(0) else 0L
+        }
+    }
 
+    private fun seedAll(db: SupportSQLiteDatabase) {
+        seedUsers(db)
+        seedSettings(db)
+        seedTables(db)
+        seedCatalog(db)
+        seedDiscountPresets(db)
+        seedCancelReasons(db)
+    }
+
+    private fun seedUsers(db: SupportSQLiteDatabase) {
+        val now = System.currentTimeMillis()
         db.execSQL(
             """
-            INSERT INTO products (name, sku, categoryId, taxRate, price, isActive, isOpenPrice, sortOrder, createdAt, updatedAt)
-            VALUES ('Coffee', 'COFFEE', 1, 2.5, 4.00, 1, 0, 8, ${System.currentTimeMillis()}, ${System.currentTimeMillis()})
+            INSERT OR IGNORE INTO users (id, name, email, pinHash, passwordHash, role, isActive, biometricEnabled, createdAt)
+            VALUES (1, 'Admin', 'admin@foodtruck.local', '${hash("1234")}', '${hash("admin123")}', 'ADMIN', 1, 0, $now)
             """.trimIndent()
         )
-        val coffeeId = db.query("SELECT last_insert_rowid()").use {
-            it.moveToFirst()
-            it.getLong(0)
+        db.execSQL(
+            """
+            INSERT OR IGNORE INTO users (id, name, email, pinHash, passwordHash, role, isActive, biometricEnabled, createdAt)
+            VALUES (2, 'Cashier', NULL, '${hash("0000")}', NULL, 'CASHIER', 1, 0, $now)
+            """.trimIndent()
+        )
+    }
+
+    private fun seedSettings(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            INSERT OR IGNORE INTO business_settings (
+                id, businessName, vatNumber, address, phone, email, website,
+                defaultCurrency, currencySymbol, defaultLanguage,
+                tapToPayEnabled, adyenTerminalEnabled, adyenTerminalId, adyenApiKey, adyenMerchantAccount,
+                dineInVatRate, takeawayVatRate, defaultServiceType,
+                receiptBaseUrl, receiptHeader, receiptFooter, kitchenTicketHeader, kitchenTicketFooter
+            ) VALUES (
+                1, '${q("Demo Restaurant")}', 'CHE-123.456.789', '${q("Main Street 1")}', '+41 44 000 00 00', 'demo@restaurant.local', '',
+                'CHF', 'CHF', 'en',
+                0, 0, '', '', '',
+                8.1, 2.6, 'TAKEAWAY',
+                'https://receipts.foodtruckpos.app',
+                '${q("Demo Restaurant")}', '${q("Merci / Thank you!")}', '', ''
+            )
+            """.trimIndent()
+        )
+    }
+
+    private fun seedTables(db: SupportSQLiteDatabase) {
+        (1..20).forEach { number ->
+            db.execSQL(
+                "INSERT OR IGNORE INTO restaurant_tables (id, name, sortOrder, isActive) VALUES ($number, '${q("Table $number")}', $number, 1)"
+            )
         }
-        listOf("Small" to 3.50, "Medium" to 4.00, "Large" to 4.50).forEachIndexed { index, (name, price) ->
+    }
+
+    private fun seedDiscountPresets(db: SupportSQLiteDatabase) {
+        listOf(
+            Triple(1, "VIP", 10.0),
+            Triple(2, "Student", 15.0),
+            Triple(3, "Staff", 20.0)
+        ).forEach { (id, name, percent) ->
             db.execSQL(
                 """
-                INSERT INTO product_variants (productId, name, price, sortOrder, isActive)
-                VALUES ($coffeeId, '$name', $price, $index, 1)
+                INSERT OR IGNORE INTO discount_presets (id, name, percent, isActive, sortOrder)
+                VALUES ($id, '${q(name)}', $percent, 1, $id)
+                """.trimIndent()
+            )
+        }
+    }
+
+    private fun seedCancelReasons(db: SupportSQLiteDatabase) {
+        listOf(
+            "Could not process order",
+            "Kitchen too busy",
+            "Client cancellation",
+            "Out of stock",
+            "Wrong order entered",
+            "Other"
+        ).forEachIndexed { index, reason ->
+            db.execSQL(
+                """
+                INSERT OR IGNORE INTO cancel_reasons (id, label, sortOrder, isActive)
+                VALUES (${index + 1}, '${q(reason)}', ${index + 1}, 1)
+                """.trimIndent()
+            )
+        }
+    }
+
+    private fun seedCatalog(db: SupportSQLiteDatabase) {
+        val now = System.currentTimeMillis()
+        val categories = listOf(
+            Triple("Soup", "#4ECDC4", "KITCHEN"),
+            Triple("Starters", "#E8923A", "KITCHEN"),
+            Triple("Salads", "#5B9BD5", "KITCHEN"),
+            Triple("Vegetables", "#6B8E6B", "KITCHEN"),
+            Triple("Fish", "#2E86AB", "KITCHEN"),
+            Triple("Meat", "#C0392B", "KITCHEN"),
+            Triple("Snacks", "#F39C12", "KITCHEN"),
+            Triple("Dish of the day", "#9B59B6", "KITCHEN"),
+            Triple("Desserts", "#C75B9E", "KITCHEN"),
+            Triple("Drinks", "#3498DB", "POS")
+        )
+        categories.forEachIndexed { index, (name, color, target) ->
+            val id = index + 1L
+            db.execSQL(
+                """
+                INSERT OR IGNORE INTO categories (id, name, sortOrder, isActive, colorHex, printTarget)
+                VALUES ($id, '${q(name)}', $index, 1, '${q(color)}', '$target')
                 """.trimIndent()
             )
         }
 
-        db.execSQL(
-            """
-            INSERT INTO products (name, sku, categoryId, taxRate, price, isActive, isOpenPrice, sortOrder, createdAt, updatedAt)
-            VALUES ('Pizza Special', 'PIZZA-V', 2, 2.5, 16.90, 1, 0, 9, ${System.currentTimeMillis()}, ${System.currentTimeMillis()})
-            """.trimIndent()
+        val products = listOf(
+            Triple(1L, "Chicken broth", 5.50),
+            Triple(1L, "Tomato soup", 4.50),
+            Triple(1L, "Vegetable soup", 4.50),
+            Triple(2L, "Carpaccio", 12.90),
+            Triple(2L, "Bruschetta", 8.50),
+            Triple(2L, "Antipasti", 9.50),
+            Triple(3L, "Mixed salad", 8.50),
+            Triple(3L, "Salad small", 4.50),
+            Triple(3L, "Salad large", 7.50),
+            Triple(3L, "Caesar's salad", 9.90),
+            Triple(4L, "Seasonal vegetables", 6.50),
+            Triple(4L, "Grilled vegetables", 7.50),
+            Triple(5L, "Salmon fillet", 18.90),
+            Triple(5L, "Fish & chips", 14.50),
+            Triple(5L, "Fish of the day", 17.50),
+            Triple(6L, "Burger Classic", 12.50),
+            Triple(6L, "Steak", 24.90),
+            Triple(6L, "Schnitzel", 16.50),
+            Triple(6L, "Vegetable lasagne", 14.90),
+            Triple(7L, "French fries", 4.50),
+            Triple(7L, "Onion rings", 5.00),
+            Triple(7L, "Nachos", 6.50),
+            Triple(8L, "Chef special", 15.90),
+            Triple(9L, "Tiramisu", 6.50),
+            Triple(9L, "Chocolate brownie", 5.50),
+            Triple(9L, "Ice cream", 4.50),
+            Triple(10L, "Coke small", 3.50),
+            Triple(10L, "Coke large", 4.50),
+            Triple(10L, "Lemonade small", 3.50),
+            Triple(10L, "Soda small", 3.00),
+            Triple(10L, "Espresso", 2.00),
+            Triple(10L, "Cappuccino", 3.50),
+            Triple(10L, "Bitter small", 4.00),
+            Triple(10L, "Bitter large", 5.50),
+            Triple(10L, "Gin Tonic", 8.50),
+            Triple(10L, "Lager small", 4.50),
+            Triple(10L, "Sparkling water", 3.50)
         )
-        val pizzaId = db.query("SELECT last_insert_rowid()").use {
-            it.moveToFirst()
-            it.getLong(0)
+        products.forEachIndexed { index, (categoryId, name, price) ->
+            insertProduct(db, categoryId, name, price, 2.6, index + 1, now)
         }
-        listOf("Regular" to 16.90, "Large" to 19.90, "Family" to 24.90).forEachIndexed { index, (name, price) ->
-            db.execSQL(
-                """
-                INSERT INTO product_variants (productId, name, price, sortOrder, isActive)
-                VALUES ($pizzaId, '$name', $price, $index, 1)
-                """.trimIndent()
-            )
-        }
+        insertProduct(db, 8L, "Divers", 0.0, 2.6, 100, now, openPrice = true)
+        insertProduct(db, 9L, "Donation", 0.0, 0.0, 101, now, openPrice = true)
     }
 
     private fun insertProduct(
@@ -91,15 +202,18 @@ class DatabaseCallback : RoomDatabase.Callback() {
         price: Double,
         taxRate: Double,
         sortOrder: Int,
+        timestamp: Long,
         openPrice: Boolean = false
     ) {
         db.execSQL(
             """
-            INSERT INTO products (name, categoryId, taxRate, price, isActive, isOpenPrice, sortOrder, createdAt, updatedAt)
-            VALUES ('$name', $categoryId, $taxRate, $price, 1, ${if (openPrice) 1 else 0}, $sortOrder, ${System.currentTimeMillis()}, ${System.currentTimeMillis()})
+            INSERT INTO products (name, categoryId, taxRate, price, isActive, isOpenPrice, sortOrder, createdAt, updatedAt, printTarget)
+            VALUES ('${q(name)}', $categoryId, $taxRate, $price, 1, ${if (openPrice) 1 else 0}, $sortOrder, $timestamp, $timestamp, NULL)
             """.trimIndent()
         )
     }
+
+    private fun q(value: String): String = value.replace("'", "''")
 
     private fun hash(value: String): String {
         val digest = MessageDigest.getInstance("SHA-256")

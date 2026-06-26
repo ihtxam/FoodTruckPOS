@@ -29,7 +29,7 @@ private val DarkColors = darkColorScheme(
 
 @Composable
 fun FoodTruckPosTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    darkTheme: Boolean = false,
     content: @Composable () -> Unit
 ) {
     MaterialTheme(

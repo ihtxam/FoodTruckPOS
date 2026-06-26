@@ -6,6 +6,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
+import androidx.room.Upsert
 import com.foodtruck.pos.data.local.entity.BusinessSettingsEntity
 import com.foodtruck.pos.data.local.entity.CategoryEntity
 import com.foodtruck.pos.data.local.entity.ProductEntity
@@ -13,8 +14,17 @@ import com.foodtruck.pos.data.local.entity.ProductVariantEntity
 import com.foodtruck.pos.data.local.entity.TransactionEntity
 import com.foodtruck.pos.data.local.entity.TransactionItemEntity
 import com.foodtruck.pos.data.local.entity.UserEntity
+import com.foodtruck.pos.data.local.entity.DiscountPresetEntity
+import com.foodtruck.pos.data.local.entity.PrinterConfigEntity
+import com.foodtruck.pos.data.local.entity.KitchenMessageEntity
+import com.foodtruck.pos.data.local.entity.RestaurantTableEntity
+import com.foodtruck.pos.data.local.entity.TableOrderEntity
+import com.foodtruck.pos.data.local.entity.TableOrderItemEntity
 import com.foodtruck.pos.domain.model.PaymentMethod
+import com.foodtruck.pos.domain.model.PaymentStatus
+import com.foodtruck.pos.domain.model.ServiceType
 import com.foodtruck.pos.domain.model.SyncStatus
+import com.foodtruck.pos.domain.model.TableOrderStatus
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -46,6 +56,12 @@ interface CategoryDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(category: CategoryEntity): Long
 
+    @Update
+    suspend fun update(category: CategoryEntity)
+
+    @Query("UPDATE categories SET isActive = 0 WHERE id = :id")
+    suspend fun deactivate(id: Long)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(categories: List<CategoryEntity>)
 }
@@ -74,6 +90,12 @@ interface ProductDao {
     @Update
     suspend fun update(product: ProductEntity)
 
+    @Query("SELECT * FROM products WHERE isActive = 1 ORDER BY sortOrder, name")
+    fun observeAllActive(): Flow<List<ProductEntity>>
+
+    @Query("UPDATE products SET isActive = 0 WHERE id = :id")
+    suspend fun deactivate(id: Long)
+
     @Query("SELECT COUNT(*) FROM products")
     suspend fun count(): Int
 }
@@ -91,6 +113,9 @@ interface ProductVariantDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(variants: List<ProductVariantEntity>)
+
+    @Query("UPDATE product_variants SET isActive = 0 WHERE productId = :productId")
+    suspend fun deactivateByProduct(productId: Long)
 }
 
 @Dao
@@ -110,6 +135,15 @@ interface TransactionDao {
     @Query("SELECT * FROM transactions WHERE id = :id LIMIT 1")
     suspend fun getById(id: String): TransactionEntity?
 
+    @Query(
+        """
+        SELECT * FROM transactions
+        WHERE masterOrderId = :masterOrderId
+        ORDER BY COALESCE(splitCheckNumber, 0) ASC, createdAt ASC
+        """
+    )
+    suspend fun getByMasterOrderId(masterOrderId: String): List<TransactionEntity>
+
     @Query("SELECT * FROM transaction_items WHERE transactionId = :transactionId")
     suspend fun getItems(transactionId: String): List<TransactionItemEntity>
 
@@ -122,6 +156,15 @@ interface TransactionDao {
         """
     )
     suspend fun getTransactionsForDay(startOfDay: Long, endOfDay: Long): List<TransactionEntity>
+
+    @Query(
+        """
+        SELECT * FROM transactions
+        WHERE createdAt >= :startMs AND createdAt <= :endMs
+        ORDER BY createdAt DESC
+        """
+    )
+    suspend fun getAllInRange(startMs: Long, endMs: Long): List<TransactionEntity>
 
     @Query("SELECT * FROM transactions WHERE syncStatus = :status ORDER BY createdAt ASC LIMIT :limit")
     suspend fun getBySyncStatus(status: SyncStatus, limit: Int = 100): List<TransactionEntity>
@@ -154,6 +197,46 @@ interface TransactionDao {
         """
     )
     suspend fun getUserPerformance(startOfDay: Long, endOfDay: Long): List<UserPerformanceRow>
+
+    @Query(
+        """
+        SELECT * FROM transactions
+        WHERE createdAt >= :startMs AND createdAt < :endMs
+        AND (:paymentMethod IS NULL OR paymentMethod = :paymentMethod)
+        AND (:serviceType IS NULL OR serviceType = :serviceType)
+        ORDER BY createdAt DESC
+        """
+    )
+    suspend fun searchTransactions(
+        startMs: Long,
+        endMs: Long,
+        paymentMethod: PaymentMethod?,
+        serviceType: ServiceType?
+    ): List<TransactionEntity>
+
+    @Query(
+        """
+        UPDATE transactions
+        SET paymentStatus = :status, cancelReason = :reason, cancelledAt = :cancelledAt
+        WHERE id = :id
+        """
+    )
+    suspend fun cancelTransaction(id: String, status: PaymentStatus, reason: String, cancelledAt: Long)
+
+    @Query(
+        """
+        UPDATE transactions
+        SET paymentStatus = :status, refundAmount = :refundAmount
+        WHERE id = :id
+        """
+    )
+    suspend fun refundTransaction(id: String, status: PaymentStatus, refundAmount: Double)
+
+    @Query("DELETE FROM transaction_items")
+    suspend fun deleteAllItems()
+
+    @Query("DELETE FROM transactions")
+    suspend fun deleteAllTransactions()
 }
 
 data class ProductSalesRow(
@@ -178,4 +261,230 @@ interface BusinessSettingsDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(settings: BusinessSettingsEntity)
+}
+
+@Dao
+interface RestaurantTableDao {
+    @Query("SELECT * FROM restaurant_tables WHERE isActive = 1 ORDER BY sortOrder, name")
+    fun observeActive(): Flow<List<RestaurantTableEntity>>
+
+    @Query("SELECT * FROM restaurant_tables WHERE isActive = 1 ORDER BY sortOrder, name")
+    suspend fun getAllActive(): List<RestaurantTableEntity>
+
+    @Query("SELECT * FROM restaurant_tables WHERE id = :id LIMIT 1")
+    suspend fun getById(id: Long): RestaurantTableEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(table: RestaurantTableEntity): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(tables: List<RestaurantTableEntity>)
+}
+
+@Dao
+interface TableOrderDao {
+    @Query(
+        """
+        SELECT * FROM table_orders
+        WHERE tableId = :tableId AND status IN ('OPEN', 'SENT', 'HELD')
+        ORDER BY createdAt DESC
+        LIMIT 1
+        """
+    )
+    suspend fun getOpenOrderForTable(tableId: Long): TableOrderEntity?
+
+    @Query("SELECT * FROM table_orders WHERE id = :id LIMIT 1")
+    suspend fun getById(id: String): TableOrderEntity?
+
+    @Query(
+        """
+        SELECT * FROM table_orders
+        WHERE status IN ('OPEN', 'SENT')
+        ORDER BY updatedAt DESC
+        """
+    )
+    fun observeOpenOrders(): Flow<List<TableOrderEntity>>
+
+    @Upsert
+    suspend fun upsert(order: TableOrderEntity)
+
+    @Query("UPDATE table_orders SET status = :status, updatedAt = :updatedAt WHERE id = :id")
+    suspend fun updateStatus(id: String, status: TableOrderStatus, updatedAt: Long = System.currentTimeMillis())
+
+    @Query("DELETE FROM table_orders")
+    suspend fun deleteAll()
+
+    @Query(
+        """
+        SELECT * FROM table_orders
+        WHERE status IN ('OPEN', 'SENT', 'HELD')
+        ORDER BY updatedAt DESC
+        """
+    )
+    suspend fun getActiveOrders(): List<TableOrderEntity>
+
+    @Query(
+        """
+        UPDATE table_orders
+        SET status = 'SENT', lastSentAt = :sentAt, kitchenRound = :round, updatedAt = :sentAt
+        WHERE id = :orderId
+        """
+    )
+    suspend fun markSent(orderId: String, sentAt: Long, round: Int)
+}
+
+@Dao
+interface TableOrderItemDao {
+    @Query("SELECT * FROM table_order_items WHERE orderId = :orderId ORDER BY productName")
+    suspend fun getByOrder(orderId: String): List<TableOrderItemEntity>
+
+    @Query("SELECT * FROM table_order_items WHERE orderId = :orderId AND sentToKitchenAt IS NULL")
+    suspend fun getUnsentByOrder(orderId: String): List<TableOrderItemEntity>
+
+    @Query(
+        """
+        SELECT * FROM table_order_items
+        WHERE orderId = :orderId AND sentToKitchenAt IS NULL AND courseNumber = :courseNumber
+        """
+    )
+    suspend fun getUnsentByOrderAndCourse(orderId: String, courseNumber: Int): List<TableOrderItemEntity>
+
+    @Query("DELETE FROM table_order_items WHERE orderId = :orderId")
+    suspend fun deleteByOrder(orderId: String)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(items: List<TableOrderItemEntity>)
+
+    @androidx.room.Transaction
+    suspend fun replaceItemsForOrder(orderId: String, items: List<TableOrderItemEntity>) {
+        deleteByOrder(orderId)
+        if (items.isNotEmpty()) {
+            insertAll(items)
+        }
+    }
+
+    @Query(
+        """
+        UPDATE table_order_items
+        SET sentToKitchenAt = :sentAt, kitchenRound = :round
+        WHERE id IN (:itemIds)
+        """
+    )
+    suspend fun markSent(itemIds: List<String>, sentAt: Long, round: Int)
+
+    @Query(
+        """
+        UPDATE table_order_items
+        SET sentToKitchenAt = NULL, kitchenRound = 0
+        WHERE id IN (:itemIds)
+        """
+    )
+    suspend fun clearSentFlags(itemIds: List<String>)
+
+    @Query("SELECT COUNT(*) FROM table_order_items WHERE orderId = :orderId")
+    suspend fun countByOrder(orderId: String): Int
+
+    @Query("DELETE FROM table_order_items")
+    suspend fun deleteAll()
+}
+
+@Dao
+interface DiscountPresetDao {
+    @Query("SELECT * FROM discount_presets WHERE isActive = 1 ORDER BY sortOrder, name")
+    fun observeActive(): Flow<List<DiscountPresetEntity>>
+
+    @Query("SELECT * FROM discount_presets WHERE isActive = 1 ORDER BY sortOrder, name")
+    suspend fun getActive(): List<DiscountPresetEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(preset: DiscountPresetEntity): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(presets: List<DiscountPresetEntity>)
+
+    @Query("UPDATE discount_presets SET isActive = 0 WHERE id = :id")
+    suspend fun deactivate(id: Long)
+}
+
+@Dao
+interface PrinterConfigDao {
+    @Query("SELECT * FROM printer_configs ORDER BY sortOrder, name")
+    fun observeAll(): Flow<List<PrinterConfigEntity>>
+
+    @Query("SELECT * FROM printer_configs ORDER BY sortOrder, name")
+    suspend fun getAll(): List<PrinterConfigEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(printer: PrinterConfigEntity)
+
+    @Query("DELETE FROM printer_configs WHERE id = :id")
+    suspend fun delete(id: String)
+}
+
+@Dao
+interface KitchenMessageDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(message: KitchenMessageEntity): Long
+
+    @Query("SELECT * FROM kitchen_messages WHERE orderId = :orderId ORDER BY sentAt DESC")
+    suspend fun getByOrder(orderId: String): List<KitchenMessageEntity>
+
+    @Query("DELETE FROM kitchen_messages")
+    suspend fun deleteAll()
+}
+
+@Dao
+interface CancelReasonDao {
+    @Query("SELECT * FROM cancel_reasons WHERE isActive = 1 ORDER BY sortOrder, label")
+    suspend fun getActive(): List<com.foodtruck.pos.data.local.entity.CancelReasonEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(reasons: List<com.foodtruck.pos.data.local.entity.CancelReasonEntity>)
+}
+
+@Dao
+interface HeldOrderDao {
+    @Query(
+        """
+        SELECT * FROM held_orders
+        WHERE status IN ('HELD', 'SENT_TO_KITCHEN')
+        ORDER BY updatedAt DESC
+        """
+    )
+    suspend fun getActive(): List<com.foodtruck.pos.data.local.entity.HeldOrderEntity>
+
+    @Query("SELECT * FROM held_orders WHERE id = :id LIMIT 1")
+    suspend fun getById(id: String): com.foodtruck.pos.data.local.entity.HeldOrderEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(order: com.foodtruck.pos.data.local.entity.HeldOrderEntity)
+
+    @Query("DELETE FROM held_orders WHERE id = :id")
+    suspend fun delete(id: String)
+
+    @Query(
+        """
+        SELECT COUNT(*) FROM held_orders
+        WHERE status IN ('HELD', 'SENT_TO_KITCHEN')
+        """
+    )
+    suspend fun countActive(): Int
+
+    @Query("DELETE FROM held_orders")
+    suspend fun deleteAll()
+}
+
+@Dao
+interface HeldOrderItemDao {
+    @Query("SELECT * FROM held_order_items WHERE heldOrderId = :heldOrderId")
+    suspend fun getByOrder(heldOrderId: String): List<com.foodtruck.pos.data.local.entity.HeldOrderItemEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(items: List<com.foodtruck.pos.data.local.entity.HeldOrderItemEntity>)
+
+    @Query("DELETE FROM held_order_items WHERE heldOrderId = :heldOrderId")
+    suspend fun deleteByOrder(heldOrderId: String)
+
+    @Query("DELETE FROM held_order_items")
+    suspend fun deleteAll()
 }

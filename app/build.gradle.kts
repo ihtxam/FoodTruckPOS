@@ -17,6 +17,10 @@ android {
         versionCode = 1
         versionName = "1.0.0"
 
+        buildConfigField("String", "LICENSE_API_BASE_URL", "\"https://api.foodtruckpos.app/\"")
+        buildConfigField("int", "TRIAL_DAYS", "15")
+        buildConfigField("int", "LICENSE_RENEWAL_WARNING_DAYS", "30")
+
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         ksp {
@@ -72,9 +76,10 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.navigation:navigation-compose:2.8.5")
+    implementation("sh.calvin.reorderable:reorderable:2.4.3")
 
-    implementation("com.google.dagger:hilt-android:2.52")
-    ksp("com.google.dagger:hilt-android-compiler:2.52")
+    implementation("com.google.dagger:hilt-android:2.59.2")
+    ksp("com.google.dagger:hilt-android-compiler:2.59.2")
     implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
 
     implementation("androidx.room:room-runtime:2.6.1")

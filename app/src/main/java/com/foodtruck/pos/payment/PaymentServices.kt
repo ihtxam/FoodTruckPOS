@@ -31,7 +31,13 @@ class PaymentOrchestrator @Inject constructor(
             settings.adyenTerminalEnabled && settings.adyenTerminalId.isNotBlank() -> {
                 adyenTerminalService.processPayment(amount, currencyCode, settings)
             }
-            else -> PaymentResult.Failure("No card payment method configured. Enable Tap-to-Pay or Adyen Terminal in Settings.")
+            settings.cardEnabled -> {
+                PaymentResult.Success(
+                    reference = "CARD-${System.currentTimeMillis()}",
+                    method = PaymentMethod.CARD
+                )
+            }
+            else -> PaymentResult.Failure("No card payment method configured. Enable card payments in Settings.")
         }
     }
 }
@@ -64,7 +70,16 @@ class AdyenTerminalService @Inject constructor() {
         settings: BusinessSettingsEntity
     ): PaymentResult {
         if (settings.adyenApiKey.isBlank()) {
-            return PaymentResult.Failure("Adyen API key not configured")
+            return PaymentResult.Failure("Adyen API key not configured in Settings")
+        }
+        if (settings.adyenClientId.isBlank()) {
+            return PaymentResult.Failure("Adyen Client ID not configured in Settings")
+        }
+        if (settings.adyenMerchantAccount.isBlank()) {
+            return PaymentResult.Failure("Adyen merchant account not configured in Settings")
+        }
+        if (settings.adyenTerminalId.isBlank()) {
+            return PaymentResult.Failure("Adyen terminal ID not configured in Settings")
         }
         delay(2000)
         return PaymentResult.Success(
