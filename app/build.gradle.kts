@@ -18,6 +18,7 @@ android {
         versionName = "1.0.0"
 
         buildConfigField("String", "LICENSE_API_BASE_URL", "\"https://api.foodtruckpos.app/\"")
+        buildConfigField("String", "SYNC_API_KEY", "\"\"")
         buildConfigField("int", "TRIAL_DAYS", "15")
         buildConfigField("int", "LICENSE_RENEWAL_WARNING_DAYS", "30")
 

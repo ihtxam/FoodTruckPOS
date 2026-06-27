@@ -39,7 +39,7 @@ class MainActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             runCatching { licenseRepository.ensureInitialized() }
-            runCatching { syncService.syncPendingTransactions() }
+            runCatching { syncService.syncAll(force = false) }
         }
 
         setContent {

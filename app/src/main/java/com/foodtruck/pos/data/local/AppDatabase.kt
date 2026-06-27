@@ -72,7 +72,7 @@ import com.foodtruck.pos.data.local.entity.UserEntity
         HeldOrderEntity::class,
         HeldOrderItemEntity::class
     ],
-    version = 16,
+    version = 17,
     exportSchema = true
 )
 @TypeConverters(Converters::class)

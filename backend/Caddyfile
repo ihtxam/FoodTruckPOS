@@ -1,0 +1,9 @@
+{
+  api.example.com {
+    reverse_proxy api:3000
+}
+
+# Replace api.example.com with your real domain, e.g.:
+# api.yourdomain.com {
+#   reverse_proxy api:3000
+# }

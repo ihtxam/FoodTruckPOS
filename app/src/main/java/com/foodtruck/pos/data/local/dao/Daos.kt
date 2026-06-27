@@ -64,6 +64,9 @@ interface CategoryDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(categories: List<CategoryEntity>)
+
+    @Query("SELECT * FROM categories WHERE remoteId = :remoteId LIMIT 1")
+    suspend fun getByRemoteId(remoteId: String): CategoryEntity?
 }
 
 @Dao
@@ -83,6 +86,9 @@ interface ProductDao {
 
     @Query("SELECT * FROM products WHERE barcode = :barcode AND isActive = 1 LIMIT 1")
     suspend fun getByBarcode(barcode: String): ProductEntity?
+
+    @Query("SELECT * FROM products WHERE remoteId = :remoteId LIMIT 1")
+    suspend fun getByRemoteId(remoteId: String): ProductEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(product: ProductEntity): Long
@@ -455,6 +461,9 @@ interface HeldOrderDao {
 
     @Query("SELECT * FROM held_orders WHERE id = :id LIMIT 1")
     suspend fun getById(id: String): com.foodtruck.pos.data.local.entity.HeldOrderEntity?
+
+    @Query("SELECT * FROM held_orders WHERE orderNumber = :orderNumber LIMIT 1")
+    suspend fun getByOrderNumber(orderNumber: String): com.foodtruck.pos.data.local.entity.HeldOrderEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(order: com.foodtruck.pos.data.local.entity.HeldOrderEntity)

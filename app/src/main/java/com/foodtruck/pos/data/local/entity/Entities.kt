@@ -27,14 +27,17 @@ data class UserEntity(
     val createdAt: Long = System.currentTimeMillis()
 )
 
-@Entity(tableName = "categories")
+@Entity(tableName = "categories", indices = [Index("remoteId")])
 data class CategoryEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val remoteId: String? = null,
     val name: String,
     val sortOrder: Int = 0,
     val colorHex: String = "#5B9BD5",
     val isActive: Boolean = true,
-    val printTarget: PrintTarget = PrintTarget.KITCHEN
+    val onlineVisible: Boolean = true,
+    val printTarget: PrintTarget = PrintTarget.KITCHEN,
+    val updatedAt: Long = System.currentTimeMillis()
 )
 
 @Entity(
@@ -47,10 +50,11 @@ data class CategoryEntity(
             onDelete = ForeignKey.SET_NULL
         )
     ],
-    indices = [Index("categoryId"), Index("barcode"), Index("sku")]
+    indices = [Index("categoryId"), Index("barcode"), Index("sku"), Index("remoteId")]
 )
 data class ProductEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val remoteId: String? = null,
     val name: String,
     val sku: String? = null,
     val barcode: String? = null,
@@ -60,6 +64,7 @@ data class ProductEntity(
     val costPrice: Double? = null,
     val imageUri: String? = null,
     val isActive: Boolean = true,
+    val onlineVisible: Boolean = true,
     val isOpenPrice: Boolean = false,
     val printTarget: PrintTarget? = null,
     val sortOrder: Int = 0,
