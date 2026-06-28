@@ -4,7 +4,8 @@ data class ActivateLicenseRequest(
     val deviceId: String,
     val activationCode: String,
     val appVersion: String,
-    val deviceModel: String? = null
+    val deviceModel: String? = null,
+    val tenantSlug: String? = null
 )
 
 data class ActivateLicenseResponse(
@@ -16,7 +17,8 @@ data class ActivateLicenseResponse(
 
 data class ValidateLicenseRequest(
     val deviceId: String,
-    val appVersion: String
+    val appVersion: String,
+    val tenantSlug: String? = null
 )
 
 data class ValidateLicenseResponse(

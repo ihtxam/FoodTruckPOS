@@ -60,7 +60,7 @@ router.post('/', async (req, res) => {
 /** POS pulls new online orders */
 router.get('/incoming', requireApiKey, async (req, res) => {
   try {
-    const tenantId = await getDefaultTenantId();
+    const tenantId = req.tenantId ?? (await getDefaultTenantId());
     const since = Number(req.query.since || 0);
     const sinceDate = since > 0 ? new Date(since) : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
@@ -87,7 +87,7 @@ router.get('/incoming', requireApiKey, async (req, res) => {
 
 router.post('/:id/ack', requireApiKey, async (req, res) => {
   try {
-    const tenantId = await getDefaultTenantId();
+    const tenantId = req.tenantId ?? (await getDefaultTenantId());
     const { id } = req.params;
     await query(
       `UPDATE online_orders

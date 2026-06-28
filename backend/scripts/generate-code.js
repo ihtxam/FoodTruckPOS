@@ -1,7 +1,7 @@
 import dotenv from 'dotenv';
 import { pool } from '../src/db.js';
 import { generateActivationCode } from '../src/services/licenseService.js';
-import { getDefaultTenantId } from '../src/services/tenantService.js';
+import { getDefaultTenantId, getTenantBySlug } from '../src/services/tenantService.js';
 
 dotenv.config();
 
@@ -12,7 +12,18 @@ function readArg(name, fallback = null) {
 }
 
 async function main() {
-  const tenantId = await getDefaultTenantId();
+  const tenantSlug = readArg('tenantSlug');
+  let tenantId;
+  if (tenantSlug) {
+    const tenant = await getTenantBySlug(tenantSlug);
+    if (!tenant) {
+      throw new Error(`Tenant '${tenantSlug}' not found`);
+    }
+    tenantId = tenant.id;
+  } else {
+    tenantId = await getDefaultTenantId();
+  }
+
   const validDays = Number(readArg('days', '365'));
   const label = readArg('label', 'Annual license');
   const deviceId = readArg('deviceId', null);
@@ -25,6 +36,7 @@ async function main() {
   });
 
   console.log('Activation code:', code);
+  if (tenantSlug) console.log('Tenant slug:', tenantSlug);
   if (deviceId) console.log('Bound to device:', deviceId);
   console.log('Valid for days:', validDays);
   await pool.end();

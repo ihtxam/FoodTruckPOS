@@ -5,8 +5,12 @@ CREATE TABLE IF NOT EXISTS tenants (
   slug TEXT NOT NULL UNIQUE,
   name TEXT NOT NULL,
   currency_symbol TEXT NOT NULL DEFAULT 'CHF',
+  api_key TEXT UNIQUE,
+  shop_enabled BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE INDEX IF NOT EXISTS idx_tenants_api_key ON tenants(api_key) WHERE api_key IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS devices (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -91,3 +95,8 @@ CREATE INDEX IF NOT EXISTS idx_devices_device_id ON devices(device_id);
 CREATE INDEX IF NOT EXISTS idx_categories_tenant_updated ON categories(tenant_id, updated_at);
 CREATE INDEX IF NOT EXISTS idx_products_tenant_updated ON products(tenant_id, updated_at);
 CREATE INDEX IF NOT EXISTS idx_online_orders_tenant_status ON online_orders(tenant_id, status, created_at);
+
+-- Safe upgrades for existing databases
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS api_key TEXT;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS shop_enabled BOOLEAN NOT NULL DEFAULT TRUE;
+CREATE UNIQUE INDEX IF NOT EXISTS tenants_api_key_unique ON tenants(api_key) WHERE api_key IS NOT NULL;

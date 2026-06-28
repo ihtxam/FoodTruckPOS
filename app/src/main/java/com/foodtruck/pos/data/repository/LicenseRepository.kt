@@ -54,7 +54,8 @@ class LicenseRepository @Inject constructor(
                     deviceId = deviceId,
                     activationCode = trimmed,
                     appVersion = BuildConfig.VERSION_NAME,
-                    deviceModel = "${Build.MANUFACTURER} ${Build.MODEL}"
+                    deviceModel = "${Build.MANUFACTURER} ${Build.MODEL}",
+                    tenantSlug = BuildConfig.TENANT_SLUG.takeIf { it.isNotBlank() }
                 )
             )
             licenseManager.saveActivation(

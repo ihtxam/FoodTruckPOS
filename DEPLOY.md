@@ -1,106 +1,123 @@
-# FoodTruck POS — what you need to do
+# Chaslay POS — deploy checklist
 
-This is your checklist while the code side is prepared. You can do these steps over the next few days.
+Server IP: **116.202.26.15**
 
-## 1. Hetzner VPS (one-time)
+| Domain | Purpose |
+|--------|---------|
+| `api.chaslay.com` | POS license, menu sync, order API |
+| `shop.chaslay.com/{clientName}` | Customer online shop per merchant |
+| `admin.chaslay.com` | Merchant back office (placeholder for now) |
 
-- [ ] Create a VPS (CX22 or CPX21 is enough to start)
-- [ ] Note the **public IP address**
-- [ ] SSH in: `ssh root@YOUR_VPS_IP`
-- [ ] Install Docker (see `backend/README.md`)
+---
 
-## 2. Domain & DNS
+## 1. DNS (you)
 
-- [ ] Buy/use a domain (e.g. `yourbrand.com`)
-- [ ] Add DNS **A record**: `api.yourbrand.com` ? VPS IP
-- [ ] Optional later: `order.yourbrand.com` for online shop
+Point these **A records** to `116.202.26.15`:
 
-## 3. Deploy the backend
+- `api.chaslay.com`
+- `shop.chaslay.com`
+- `admin.chaslay.com`
+
+---
+
+## 2. Deploy / update backend on Hetzner
 
 ```bash
-git clone https://github.com/ihtxam/FoodTruckPOS.git
-cd FoodTruckPOS/backend
-cp .env.example .env
-nano .env          # set strong passwords (see below)
-nano Caddyfile     # replace api.example.com with api.yourbrand.com
+ssh root@116.202.26.15
+cd FoodTruckPOS   # or git clone https://github.com/ihtxam/FoodTruckPOS.git
+git pull
+cd backend
+cp .env.example .env   # skip if .env already exists
+nano .env              # set secrets (see below)
 docker compose up -d --build
 docker compose exec api npm run migrate
 docker compose exec api npm run seed
 ```
 
-**Set in `.env` (important):**
+**`.env` secrets:**
 
-| Variable | What to set |
-|----------|-------------|
+| Variable | Notes |
+|----------|--------|
 | `POSTGRES_PASSWORD` | Long random password |
-| `API_KEY` | Long random string (same value goes in Android app) |
-| `LICENSE_SECRET` | Long random string (min 32 chars) |
+| `API_KEY` | Global fallback key; also assigned to `demo` tenant on seed |
+| `LICENSE_SECRET` | Min 32 chars |
 
-Test: open `https://api.yourbrand.com/health` — should return `{"ok":true,...}`
+`Caddyfile` is already set for `api.chaslay.com`, `shop.chaslay.com`, `admin.chaslay.com`.
 
-## 4. Android app configuration
+**Health check:** https://api.chaslay.com/health
 
-After backend is live, tell me (or edit yourself) in `app/build.gradle.kts`:
+---
 
-```kotlin
-buildConfigField("String", "LICENSE_API_BASE_URL", "\"https://api.yourbrand.com/\"")
-buildConfigField("String", "SYNC_API_KEY", "\"YOUR_API_KEY_FROM_ENV\"")
-```
+## 3. Create a merchant (client)
 
-Then rebuild/install the APK.
-
-## 5. License codes for merchants
-
-When a device shows **Device ID** on the activation screen:
+Each merchant gets a URL slug and their own POS API key:
 
 ```bash
-docker compose exec api npm run generate-code -- --deviceId=PASTE-UUID --days=365 --label="Shop Name"
+docker compose exec api npm run create-tenant -- --slug=acme-burger --name="Acme Burger"
+```
+
+This prints:
+
+- **POS API key** ? put in Android `SYNC_API_KEY`
+- **Shop URL** ? `https://shop.chaslay.com/acme-burger`
+
+Demo tenant (after seed): https://shop.chaslay.com/demo
+
+---
+
+## 4. Android app config
+
+In `app/build.gradle.kts` (per merchant build):
+
+```kotlin
+buildConfigField("String", "LICENSE_API_BASE_URL", "\"https://api.chaslay.com/\"")
+buildConfigField("String", "TENANT_SLUG", "\"acme-burger\"")
+buildConfigField("String", "SYNC_API_KEY", "\"PASTE_TENANT_API_KEY_FROM_CREATE-TENANT\"")
+```
+
+- `TENANT_SLUG` must match the merchant slug (license + sync scope).
+- `SYNC_API_KEY` is the **per-tenant** key from `create-tenant`, not necessarily the global `API_KEY`.
+
+Rebuild and install the APK.
+
+---
+
+## 5. License activation code
+
+When the POS shows a **Device ID**:
+
+```bash
+docker compose exec api npm run generate-code -- --tenantSlug=acme-burger --deviceId=PASTE-UUID --days=365 --label="Acme Burger"
 ```
 
 Send the printed code to the merchant.
 
-## 6. Menu on server (for sync & online shop)
+---
 
-For now, demo menu is seeded automatically. Later you can:
+## 6. How online shops work
 
-- Edit menu in **Admin** (web panel — coming next), or
-- Edit in POS and push to server (coming next)
+- Public menu: `GET /v1/shop/{clientName}/menu`
+- Place order: `POST /v1/shop/{clientName}/orders`
+- Storefront page: `https://shop.chaslay.com/{clientName}`
 
-POS will **pull menu in the background** when online (does not block selling).
-
-## 7. Online shop (next phase)
-
-Not required on day one. When ready:
-
-- Deploy a simple shop page on `order.yourbrand.com`
-- It uses `GET /v1/orders/menu` and `POST /v1/orders`
-- Orders appear in POS **Ongoing Orders**
-
-## 8. Optional later
-
-- [ ] Stripe for online payment
-- [ ] Hetzner weekly snapshots + DB backup
-- [ ] Waiter app / Kiosk app (same API)
+Orders appear in POS **Ongoing Orders** when the tablet is online and `SYNC_API_KEY` is set.
 
 ---
 
-## What is already done in code
+## Troubleshooting
 
-| Item | Status |
-|------|--------|
-| Node API on Hetzner (Docker) | ? in `backend/` |
-| License activate/validate | ? matches Android app |
-| Menu sync API | ? |
-| Online orders API | ? |
-| POS background sync (menu + online orders) | ? |
-| POS stays offline-first | ? sync runs in background only |
+| Problem | Fix |
+|---------|-----|
+| Activation fails | Check HTTPS, `LICENSE_API_BASE_URL`, and `TENANT_SLUG` matches merchant |
+| Sync does nothing | Set tenant `SYNC_API_KEY` in app (from `create-tenant`) |
+| Shop 404 | Run `create-tenant` or `seed`; slug must be lowercase `a-z`, `0-9`, hyphens |
+| SSL not ready | Wait for DNS propagation; Caddy issues certs automatically |
 
 ---
 
-## If something fails
+## Optional later
 
-1. **Activation fails** ? check domain, HTTPS, and `LICENSE_API_BASE_URL`
-2. **Sync does nothing** ? set `SYNC_API_KEY` in app + `.env` (must match)
-3. **No online orders in POS** ? confirm order created via API and POS has internet
-
-Sleep well — when you're back, send your **domain name** and we can plug it into the app and walk through the first deploy together.
+- Stripe for online payment
+- Full admin UI at `admin.chaslay.com`
+- POS menu push to server
+- Waiter / kiosk apps

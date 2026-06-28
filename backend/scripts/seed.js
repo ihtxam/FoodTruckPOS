@@ -1,18 +1,21 @@
 import dotenv from 'dotenv';
 import { pool } from '../src/db.js';
-import { clearTenantCache } from '../src/services/tenantService.js';
+import { clearTenantCache, generateTenantApiKey } from '../src/services/tenantService.js';
 
 dotenv.config();
 
 async function main() {
   const slug = process.env.DEFAULT_TENANT_SLUG || 'demo';
+  const apiKey = process.env.API_KEY || generateTenantApiKey();
   const tenant = (
     await pool.query(
-      `INSERT INTO tenants (slug, name, currency_symbol)
-       VALUES ($1, $2, 'CHF')
-       ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name
-       RETURNING id, slug, name`,
-      [slug, 'Demo Food Truck']
+      `INSERT INTO tenants (slug, name, currency_symbol, api_key, shop_enabled)
+       VALUES ($1, $2, 'CHF', $3, TRUE)
+       ON CONFLICT (slug) DO UPDATE SET
+         name = EXCLUDED.name,
+         api_key = COALESCE(tenants.api_key, EXCLUDED.api_key)
+       RETURNING id, slug, name, api_key`,
+      [slug, 'Demo Food Truck', apiKey]
     )
   ).rows[0];
 
@@ -45,6 +48,8 @@ async function main() {
   }
 
   console.log('Seed complete:', tenant);
+  console.log('Demo shop: https://shop.chaslay.com/' + tenant.slug);
+  console.log('POS API key:', tenant.api_key);
   await pool.end();
 }
 

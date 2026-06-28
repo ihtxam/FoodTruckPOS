@@ -1,12 +1,16 @@
 import { Router } from 'express';
 import { query } from '../db.js';
-import { getDefaultTenantId } from '../services/tenantService.js';
 
 const router = Router();
 
-router.get('/bootstrap', async (_req, res) => {
+function tenantIdFromRequest(req) {
+  if (req.tenantId) return req.tenantId;
+  throw new Error('Tenant not resolved from API key');
+}
+
+router.get('/bootstrap', async (req, res) => {
   try {
-    const tenantId = await getDefaultTenantId();
+    const tenantId = tenantIdFromRequest(req);
     const tenant = (await query(`SELECT id, slug, name, currency_symbol FROM tenants WHERE id = $1`, [tenantId])).rows[0];
     const categories = (
       await query(
@@ -36,7 +40,7 @@ router.get('/bootstrap', async (_req, res) => {
 
 router.get('/menu', async (req, res) => {
   try {
-    const tenantId = await getDefaultTenantId();
+    const tenantId = tenantIdFromRequest(req);
     const since = Number(req.query.since || 0);
     const sinceDate = since > 0 ? new Date(since) : new Date(0);
 

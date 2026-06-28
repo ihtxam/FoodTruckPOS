@@ -1,9 +1,15 @@
 {
-  api.example.com {
-    reverse_proxy api:3000
+	email admin@chaslay.com
 }
 
-# Replace api.example.com with your real domain, e.g.:
-# api.yourdomain.com {
-#   reverse_proxy api:3000
-# }
+api.chaslay.com {
+	reverse_proxy api:3000
+}
+
+shop.chaslay.com {
+	reverse_proxy api:3000
+}
+
+admin.chaslay.com {
+	reverse_proxy api:3000
+}

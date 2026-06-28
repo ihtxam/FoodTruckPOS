@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Chaslay Admin</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 720px; margin: 40px auto; padding: 16px; }
+    code, pre { background: #f5f5f5; border-radius: 6px; }
+    code { padding: 2px 6px; }
+    pre { padding: 12px; overflow-x: auto; }
+    a { color: #00897B; }
+  </style>
+</head>
+<body>
+  <h1>Chaslay merchant admin</h1>
+  <p>Full admin panel is coming next. For now, use SSH on your server:</p>
+  <h2>Create a merchant</h2>
+  <pre>docker compose exec api npm run create-tenant -- --slug=client-name --name="Shop Display Name"</pre>
+  <p>This prints a unique <strong>POS API key</strong> for that merchant. Put it in the Android app as <code>SYNC_API_KEY</code>.</p>
+  <h2>Online shop URL</h2>
+  <p><code>https://shop.chaslay.com/client-name</code></p>
+  <h2>License code</h2>
+  <pre>docker compose exec api npm run generate-code -- --tenantSlug=client-name --deviceId=DEVICE-UUID --days=365</pre>
+  <p>API docs: <a href="https://api.chaslay.com/health">api.chaslay.com/health</a></p>
+</body>
+</html>
