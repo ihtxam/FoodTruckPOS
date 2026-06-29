@@ -49,6 +49,29 @@ docker compose exec api npm run seed
 
 After changing `.env`, restart: `docker compose up -d --build`
 
+---
+
+## Merchant portal (shop owners)
+
+Merchants log in at **https://admin.chaslay.com** with email + password.
+
+**Create a merchant login** (superadmin ? Manage tenant ? Merchant portal login), or:
+
+```bash
+docker compose exec api npm run create-merchant-user -- \
+  --tenantSlug=demo \
+  --email=owner@shop.com \
+  --password=ChangeMe123 \
+  --name="Shop Owner"
+```
+
+Merchants can manage:
+- Menu (categories & products) — syncs to POS when online
+- Online orders & status
+- Opening hours, delivery zones, order settings
+
+See `backend/ROADMAP.md` for the OrderPin-style agency roadmap (KDS, kiosk, table plan, etc.).
+
 **Health check:** https://api.chaslay.com/health
 
 ---

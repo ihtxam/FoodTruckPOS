@@ -12,7 +12,8 @@
     "migrate": "node scripts/migrate.js",
     "seed": "node scripts/seed.js",
     "generate-code": "node scripts/generate-code.js",
-    "create-tenant": "node scripts/create-tenant.js"
+    "create-tenant": "node scripts/create-tenant.js",
+    "create-merchant-user": "node scripts/create-merchant-user.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
@@ -20,6 +21,7 @@
     "express": "^4.21.2",
     "helmet": "^8.0.0",
     "pg": "^8.13.1",
-    "uuid": "^11.0.5"
+    "uuid": "^11.0.5",
+    "bcryptjs": "^2.4.3"
   }
 }

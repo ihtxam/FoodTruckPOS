@@ -96,7 +96,41 @@ CREATE INDEX IF NOT EXISTS idx_categories_tenant_updated ON categories(tenant_id
 CREATE INDEX IF NOT EXISTS idx_products_tenant_updated ON products(tenant_id, updated_at);
 CREATE INDEX IF NOT EXISTS idx_online_orders_tenant_status ON online_orders(tenant_id, status, created_at);
 
+-- Future: agencies resell to merchants (OrderPin-style). Chaslay superadmin creates agencies; agencies create merchants.
+CREATE TABLE IF NOT EXISTS agencies (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  slug TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS admin_users (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('SUPERADMIN', 'AGENCY', 'MERCHANT')),
+  agency_id UUID REFERENCES agencies(id) ON DELETE SET NULL,
+  tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
+  name TEXT,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_login_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_admin_users_tenant ON admin_users(tenant_id) WHERE tenant_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_admin_users_agency ON admin_users(agency_id) WHERE agency_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS tenant_settings (
+  tenant_id UUID PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
+  opening_hours JSONB NOT NULL DEFAULT '{}',
+  delivery_zones JSONB NOT NULL DEFAULT '[]',
+  order_settings JSONB NOT NULL DEFAULT '{}',
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- Safe upgrades for existing databases
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS api_key TEXT;
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS shop_enabled BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS agency_id UUID REFERENCES agencies(id) ON DELETE SET NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS tenants_api_key_unique ON tenants(api_key) WHERE api_key IS NOT NULL;

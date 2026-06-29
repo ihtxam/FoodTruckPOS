@@ -10,6 +10,7 @@ import syncRoutes from './routes/sync.js';
 import ordersRoutes from './routes/orders.js';
 import shopRoutes from './routes/shop.js';
 import adminRoutes from './routes/admin.js';
+import merchantRoutes from './routes/merchant.js';
 import { requireApiKey } from './middleware/auth.js';
 import { registerShopSiteRoutes, registerAdminSiteRoutes } from './middleware/shopSite.js';
 
@@ -31,7 +32,7 @@ app.get('/health', (_req, res) => {
 /** Android POS licensing */
 app.use('/v1/license', licenseRoutes);
 
-/** POS sync ó tenant resolved from X-Api-Key */
+/** POS sync ù tenant resolved from X-Api-Key */
 app.use('/v1/sync', requireApiKey, syncRoutes);
 
 /** Public online shop API: /v1/shop/{clientName}/menu|orders */
@@ -42,6 +43,9 @@ app.use('/v1/orders', ordersRoutes);
 
 /** Superadmin API + panel at admin.chaslay.com */
 app.use('/v1/admin', adminRoutes);
+
+/** Merchant portal API (menu, orders, settings) */
+app.use('/v1/admin/merchant', merchantRoutes);
 
 /** Host-specific pages BEFORE static files (otherwise public/index.html hijacks /) */
 registerAdminSiteRoutes(app);

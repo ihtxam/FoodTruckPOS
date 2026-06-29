@@ -1,7 +1,13 @@
 import { Router } from 'express';
 import { query } from '../db.js';
-import { requireSuperadmin } from '../middleware/superadmin.js';
+import { requireSuperadmin, requireAdminSession } from '../middleware/adminAuth.js';
 import {
+  createAdminUser,
+  formatSessionUser,
+  listAdminUsersForTenant,
+  loginSuperadmin,
+  loginWithEmail,
+} from '../services/authService.js';
   createTenant,
   formatTenant,
   getTenantById,
@@ -21,21 +27,26 @@ import {
 
 const router = Router();
 
-router.post('/auth/login', (req, res) => {
-  const password = process.env.SUPERADMIN_PASSWORD;
-  if (!password) {
-    return res.status(503).json({
-      error: 'Superadmin is not configured. Set SUPERADMIN_PASSWORD in backend/.env and restart.',
-    });
+router.post('/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body ?? {};
+    if (email?.trim()) {
+      const result = await loginWithEmail(email.trim(), password ?? '');
+      return res.json(result);
+    }
+    const result = loginSuperadmin(password ?? '');
+    return res.json(result);
+  } catch (err) {
+    return res.status(401).json({ error: err.message ?? 'Login failed' });
   }
-  if (req.body?.password === password) {
-    return res.json({ ok: true });
-  }
-  return res.status(401).json({ error: 'Invalid password' });
 });
 
-router.get('/auth/check', requireSuperadmin, (_req, res) => {
-  res.json({ ok: true });
+router.get('/auth/me', requireAdminSession, (req, res) => {
+  res.json({ user: formatSessionUser(req.adminSession) });
+});
+
+router.get('/auth/check', requireAdminSession, (req, res) => {
+  res.json({ ok: true, user: formatSessionUser(req.adminSession) });
 });
 
 router.use(requireSuperadmin);
@@ -261,6 +272,59 @@ router.get('/orders', async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ error: err.message ?? 'List orders failed' });
+  }
+});
+
+router.get('/tenants/:tenantId/users', async (req, res) => {
+  try {
+    const tenant = await getTenantById(req.params.tenantId);
+    if (!tenant) return res.status(404).json({ error: 'Tenant not found' });
+    const users = await listAdminUsersForTenant(tenant.id);
+    res.json({
+      users: users.map((u) => ({
+        id: u.id,
+        email: u.email,
+        name: u.name,
+        role: u.role,
+        isActive: u.is_active,
+        createdAt: u.created_at,
+        lastLoginAt: u.last_login_at,
+      })),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message ?? 'List users failed' });
+  }
+});
+
+router.post('/tenants/:tenantId/users', async (req, res) => {
+  try {
+    const tenant = await getTenantById(req.params.tenantId);
+    if (!tenant) return res.status(404).json({ error: 'Tenant not found' });
+
+    const { email, password, name } = req.body ?? {};
+    if (!email?.trim() || !password || password.length < 8) {
+      return res.status(400).json({ error: 'email and password (min 8 chars) are required' });
+    }
+
+    const user = await createAdminUser({
+      email: email.trim(),
+      password,
+      role: 'MERCHANT',
+      tenantId: tenant.id,
+      name: name?.trim() || tenant.name,
+    });
+
+    res.status(201).json({
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        tenantId: user.tenant_id,
+      },
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message ?? 'Create user failed' });
   }
 });
 
