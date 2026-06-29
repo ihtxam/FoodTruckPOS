@@ -38,13 +38,30 @@ Open: **http://localhost:3000/admin/**
 
 **Platform admin login:** Platform admin tab ? password from `SUPERADMIN_PASSWORD` in `.env`
 
-**Create merchant login:**
+**Create merchant login** (must run **inside Docker**, not on Windows directly):
 
 ```powershell
-docker compose exec api npm run create-merchant-user -- --tenantSlug=demo --email=owner@test.com --password=ChangeMe123 --name="Test Owner"
+docker compose -f docker-compose.yml -f docker-compose.dev.yml exec api npm run create-merchant-user -- --tenantSlug=demo --email=owner@shop.com --password=ChangeMe123 --name="Shop Owner"
 ```
 
 Then Merchant login with that email/password.
+
+---
+
+## Error: `getaddrinfo ENOTFOUND postgres`
+
+You ran `npm run create-merchant-user` **on your PC** instead of **inside the Docker container**.
+
+- Hostname `postgres` only exists inside Docker.
+- **Fix:** use `docker compose exec api npm run ...` (command above).
+
+If you really need to run npm scripts on Windows, set in `.env`:
+
+```env
+DATABASE_URL=postgres://foodtruck:YOUR_PASSWORD@localhost:5433/foodtruckpos
+```
+
+(Postgres port `5433` is exposed when using `docker-compose.dev.yml`.)
 
 ---
 
