@@ -24,6 +24,8 @@ app.use(cors());
 app.use(express.json({ limit: '2mb' }));
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const publicDir = path.join(__dirname, '..', 'public');
+const adminDir = path.join(publicDir, 'admin');
 
 app.get('/health', (_req, res) => {
   res.json({ ok: true, service: 'chaslay-api', time: Date.now() });
@@ -47,11 +49,14 @@ app.use('/v1/admin', adminRoutes);
 /** Merchant portal API (menu, orders, settings) */
 app.use('/v1/admin/merchant', merchantRoutes);
 
-/** Host-specific pages BEFORE static files (otherwise public/index.html hijacks /) */
+/** Admin panel static files — always at /admin/* (works on localhost and admin.chaslay.com) */
+app.use('/admin', express.static(adminDir, { index: 'index.html', maxAge: process.env.NODE_ENV === 'production' ? '1h' : 0 }));
+
+/** Host-specific root pages (shop landing, admin login at / on admin domain) */
 registerAdminSiteRoutes(app);
 registerShopSiteRoutes(app);
 
-app.use(express.static(path.join(__dirname, '..', 'public'), { index: false }));
+app.use(express.static(publicDir, { index: false }));
 
 app.use((err, _req, res, _next) => {
   console.error(err);

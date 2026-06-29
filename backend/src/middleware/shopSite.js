@@ -45,20 +45,11 @@ const adminHtml = path.join(adminDir, 'index.html');
 
 function isAdminHost(hostname) {
   if (!hostname) return false;
+  if (hostname === 'localhost' || hostname === '127.0.0.1') return true;
   return hostname === ADMIN_HOST || hostname.startsWith('admin.');
 }
 
 export function registerAdminSiteRoutes(app) {
-  // Static assets must be served before any SPA fallback (/admin/app.js, /admin/admin.css)
-  app.get('/admin/:asset', (req, res, next) => {
-    if (!isAdminHost(req.hostname)) return next();
-    const allowed = new Set(['admin.css', 'app.js']);
-    if (!allowed.has(req.params.asset)) return next();
-    return res.sendFile(path.join(adminDir, req.params.asset), (err) => {
-      if (err) next(err);
-    });
-  });
-
   app.get('/', (req, res, next) => {
     if (!isAdminHost(req.hostname)) return next();
     return res.sendFile(adminHtml);
