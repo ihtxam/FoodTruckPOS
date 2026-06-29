@@ -40,7 +40,8 @@ export function registerShopSiteRoutes(app) {
 }
 
 const ADMIN_HOST = process.env.ADMIN_HOST || 'admin.chaslay.com';
-const adminHtml = path.join(__dirname, '..', '..', 'public', 'admin', 'index.html');
+const adminDir = path.join(__dirname, '..', '..', 'public', 'admin');
+const adminHtml = path.join(adminDir, 'index.html');
 
 function isAdminHost(hostname) {
   if (!hostname) return false;
@@ -48,13 +49,17 @@ function isAdminHost(hostname) {
 }
 
 export function registerAdminSiteRoutes(app) {
-  app.get('/', (req, res, next) => {
+  // Static assets must be served before any SPA fallback (/admin/app.js, /admin/admin.css)
+  app.get('/admin/:asset', (req, res, next) => {
     if (!isAdminHost(req.hostname)) return next();
-    return res.sendFile(adminHtml);
+    const allowed = new Set(['admin.css', 'app.js']);
+    if (!allowed.has(req.params.asset)) return next();
+    return res.sendFile(path.join(adminDir, req.params.asset), (err) => {
+      if (err) next(err);
+    });
   });
 
-  // SPA fallback on admin host (ignore API paths)
-  app.get(/^\/(?!v1\/).+/, (req, res, next) => {
+  app.get('/', (req, res, next) => {
     if (!isAdminHost(req.hostname)) return next();
     return res.sendFile(adminHtml);
   });
