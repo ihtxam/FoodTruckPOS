@@ -52,4 +52,10 @@ export function registerAdminSiteRoutes(app) {
     if (!isAdminHost(req.hostname)) return next();
     return res.sendFile(adminHtml);
   });
+
+  // SPA fallback on admin host (ignore API paths)
+  app.get(/^\/(?!v1\/).+/, (req, res, next) => {
+    if (!isAdminHost(req.hostname)) return next();
+    return res.sendFile(adminHtml);
+  });
 }

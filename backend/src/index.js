@@ -23,7 +23,6 @@ app.use(cors());
 app.use(express.json({ limit: '2mb' }));
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-app.use(express.static(path.join(__dirname, '..', 'public')));
 
 app.get('/health', (_req, res) => {
   res.json({ ok: true, service: 'chaslay-api', time: Date.now() });
@@ -32,7 +31,7 @@ app.get('/health', (_req, res) => {
 /** Android POS licensing */
 app.use('/v1/license', licenseRoutes);
 
-/** POS sync  tenant resolved from X-Api-Key */
+/** POS sync — tenant resolved from X-Api-Key */
 app.use('/v1/sync', requireApiKey, syncRoutes);
 
 /** Public online shop API: /v1/shop/{clientName}/menu|orders */
@@ -44,9 +43,11 @@ app.use('/v1/orders', ordersRoutes);
 /** Superadmin API + panel at admin.chaslay.com */
 app.use('/v1/admin', adminRoutes);
 
-/** shop.chaslay.com/{clientName} storefront pages */
-registerShopSiteRoutes(app);
+/** Host-specific pages BEFORE static files (otherwise public/index.html hijacks /) */
 registerAdminSiteRoutes(app);
+registerShopSiteRoutes(app);
+
+app.use(express.static(path.join(__dirname, '..', 'public'), { index: false }));
 
 app.use((err, _req, res, _next) => {
   console.error(err);
