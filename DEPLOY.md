@@ -41,8 +41,13 @@ docker compose exec api npm run seed
 | `POSTGRES_PASSWORD` | Long random password |
 | `API_KEY` | Global fallback key; also assigned to `demo` tenant on seed |
 | `LICENSE_SECRET` | Min 32 chars |
+| `SUPERADMIN_PASSWORD` | Login for https://admin.chaslay.com |
 
 `Caddyfile` is already set for `api.chaslay.com`, `shop.chaslay.com`, `admin.chaslay.com`.
+
+**Superadmin panel:** https://admin.chaslay.com (password = `SUPERADMIN_PASSWORD` in `.env`)
+
+After changing `.env`, restart: `docker compose up -d --build`
 
 **Health check:** https://api.chaslay.com/health
 

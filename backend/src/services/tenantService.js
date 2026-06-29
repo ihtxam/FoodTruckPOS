@@ -78,3 +78,73 @@ export async function createTenant({ slug, name, currencySymbol = 'CHF', apiKey 
 export function clearTenantCache() {
   cachedDefaultTenantId = null;
 }
+
+export async function listTenants() {
+  return (
+    await query(
+      `SELECT t.id, t.slug, t.name, t.currency_symbol, t.api_key, t.shop_enabled, t.created_at,
+              (SELECT COUNT(*)::int FROM devices d WHERE d.tenant_id = t.id) AS device_count,
+              (SELECT COUNT(*)::int FROM devices d WHERE d.tenant_id = t.id AND d.status = 'ACTIVE' AND d.expires_at > $1) AS active_device_count,
+              (SELECT COUNT(*)::int FROM activation_codes ac WHERE ac.tenant_id = t.id AND ac.used_at IS NULL) AS unused_code_count
+       FROM tenants t
+       ORDER BY t.created_at DESC`,
+      [Date.now()]
+    )
+  ).rows;
+}
+
+export async function getTenantById(id) {
+  return (await query(
+    `SELECT id, slug, name, currency_symbol, api_key, shop_enabled, created_at
+     FROM tenants WHERE id = $1 LIMIT 1`,
+    [id]
+  )).rows[0] ?? null;
+}
+
+export async function updateTenant(id, { name, currencySymbol, shopEnabled }) {
+  const row = (
+    await query(
+      `UPDATE tenants SET
+         name = COALESCE($2, name),
+         currency_symbol = COALESCE($3, currency_symbol),
+         shop_enabled = COALESCE($4, shop_enabled)
+       WHERE id = $1
+       RETURNING id, slug, name, currency_symbol, api_key, shop_enabled, created_at`,
+      [id, name ?? null, currencySymbol ?? null, shopEnabled ?? null]
+    )
+  ).rows[0];
+  if (!row) throw new Error('Tenant not found');
+  clearTenantCache();
+  return row;
+}
+
+export async function regenerateTenantApiKey(id) {
+  const apiKey = generateTenantApiKey();
+  const row = (
+    await query(
+      `UPDATE tenants SET api_key = $2 WHERE id = $1
+       RETURNING id, slug, name, currency_symbol, api_key, shop_enabled, created_at`,
+      [id, apiKey]
+    )
+  ).rows[0];
+  if (!row) throw new Error('Tenant not found');
+  return row;
+}
+
+export function formatTenant(row) {
+  if (!row) return null;
+  const shopHost = process.env.SHOP_HOST || 'shop.chaslay.com';
+  return {
+    id: row.id,
+    slug: row.slug,
+    name: row.name,
+    currencySymbol: row.currency_symbol,
+    apiKey: row.api_key,
+    shopEnabled: row.shop_enabled,
+    createdAt: row.created_at,
+    shopUrl: `https://${shopHost}/${row.slug}`,
+    deviceCount: row.device_count ?? undefined,
+    activeDeviceCount: row.active_device_count ?? undefined,
+    unusedCodeCount: row.unused_code_count ?? undefined,
+  };
+}

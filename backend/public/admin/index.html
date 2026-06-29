@@ -3,25 +3,616 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Chaslay Admin</title>
+  <title>Chaslay Superadmin</title>
   <style>
-    body { font-family: system-ui, sans-serif; max-width: 720px; margin: 40px auto; padding: 16px; }
-    code, pre { background: #f5f5f5; border-radius: 6px; }
-    code { padding: 2px 6px; }
-    pre { padding: 12px; overflow-x: auto; }
-    a { color: #00897B; }
+    :root {
+      --bg: #0f1419;
+      --panel: #1a2332;
+      --panel2: #243044;
+      --text: #e8eef7;
+      --muted: #93a4bc;
+      --brand: #00897B;
+      --brand2: #00695C;
+      --danger: #ef5350;
+      --ok: #66bb6a;
+      --border: #334155;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    button, input, select {
+      font: inherit;
+    }
+    .hidden { display: none !important; }
+    .login-wrap {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 24px;
+      width: min(420px, 100%);
+      box-shadow: 0 20px 60px rgba(0,0,0,.35);
+    }
+    h1, h2, h3 { margin: 0 0 12px; }
+    p { color: var(--muted); line-height: 1.5; }
+    label { display: block; margin-bottom: 14px; font-size: 14px; color: var(--muted); }
+    input, select {
+      width: 100%;
+      margin-top: 6px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--panel2);
+      color: var(--text);
+    }
+    .btn {
+      border: 0;
+      border-radius: 8px;
+      padding: 10px 14px;
+      cursor: pointer;
+      background: var(--brand);
+      color: #fff;
+      font-weight: 600;
+    }
+    .btn:hover { background: var(--brand2); }
+    .btn.secondary { background: var(--panel2); color: var(--text); border: 1px solid var(--border); }
+    .btn.danger { background: var(--danger); }
+    .btn.small { padding: 6px 10px; font-size: 13px; }
+    .layout { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
+    .sidebar {
+      background: var(--panel);
+      border-right: 1px solid var(--border);
+      padding: 20px 16px;
+    }
+    .brand { font-size: 18px; font-weight: 700; margin-bottom: 24px; color: var(--brand); }
+    .nav-btn {
+      width: 100%;
+      text-align: left;
+      margin-bottom: 8px;
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid transparent;
+    }
+    .nav-btn.active, .nav-btn:hover {
+      background: var(--panel2);
+      color: var(--text);
+      border-color: var(--border);
+    }
+    .main { padding: 24px; }
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .stat {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+    }
+    .stat .num { font-size: 28px; font-weight: 700; }
+    .stat .lbl { color: var(--muted); font-size: 13px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    th, td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+      font-size: 14px;
+      vertical-align: top;
+    }
+    th { background: var(--panel2); color: var(--muted); font-weight: 600; }
+    tr:last-child td { border-bottom: 0; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; word-break: break-all; }
+    .pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 12px;
+      background: var(--panel2);
+      border: 1px solid var(--border);
+    }
+    .pill.ok { color: var(--ok); border-color: #2e7d32; }
+    .pill.bad { color: var(--danger); border-color: #c62828; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+      .sidebar { border-right: 0; border-bottom: 1px solid var(--border); }
+      .grid2 { grid-template-columns: 1fr; }
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .msg { margin-top: 12px; padding: 10px 12px; border-radius: 8px; font-size: 14px; }
+    .msg.ok { background: rgba(102,187,106,.15); color: var(--ok); }
+    .msg.err { background: rgba(239,83,80,.15); color: #ff8a80; }
+    .modal-backdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,.55);
+      display: grid; place-items: center; padding: 16px; z-index: 20;
+    }
+    .modal {
+      width: min(960px, 100%);
+      max-height: 90vh;
+      overflow: auto;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px;
+    }
+    a { color: #4db6ac; }
   </style>
 </head>
 <body>
-  <h1>Chaslay merchant admin</h1>
-  <p>Full admin panel is coming next. For now, use SSH on your server:</p>
-  <h2>Create a merchant</h2>
-  <pre>docker compose exec api npm run create-tenant -- --slug=client-name --name="Shop Display Name"</pre>
-  <p>This prints a unique <strong>POS API key</strong> for that merchant. Put it in the Android app as <code>SYNC_API_KEY</code>.</p>
-  <h2>Online shop URL</h2>
-  <p><code>https://shop.chaslay.com/client-name</code></p>
-  <h2>License code</h2>
-  <pre>docker compose exec api npm run generate-code -- --tenantSlug=client-name --deviceId=DEVICE-UUID --days=365</pre>
-  <p>API docs: <a href="https://api.chaslay.com/health">api.chaslay.com/health</a></p>
+  <div id="loginView" class="login-wrap">
+    <div class="card">
+      <h1>Chaslay Superadmin</h1>
+      <p>Manage tenants, POS licenses, activation codes, and online orders.</p>
+      <label>Password
+        <input id="loginPassword" type="password" autocomplete="current-password" />
+      </label>
+      <button class="btn" id="loginBtn" style="width:100%">Sign in</button>
+      <div id="loginMsg" class="msg hidden"></div>
+    </div>
+  </div>
+
+  <div id="appView" class="layout hidden">
+    <aside class="sidebar">
+      <div class="brand">Chaslay Admin</div>
+      <button class="btn nav-btn active" data-view="dashboard">Dashboard</button>
+      <button class="btn nav-btn" data-view="tenants">Tenants</button>
+      <button class="btn nav-btn" data-view="orders">Online orders</button>
+      <button class="btn nav-btn secondary" id="logoutBtn" style="margin-top:24px">Log out</button>
+    </aside>
+    <main class="main">
+      <div class="topbar">
+        <h2 id="viewTitle">Dashboard</h2>
+        <span class="pill ok">Superadmin</span>
+      </div>
+
+      <section id="dashboardView">
+        <div class="stats" id="statsGrid"></div>
+        <div class="panel">
+          <h3>Recent online orders</h3>
+          <div id="recentOrders"></div>
+        </div>
+      </section>
+
+      <section id="tenantsView" class="hidden">
+        <div class="panel">
+          <h3>Create tenant</h3>
+          <div class="grid2">
+            <label>Slug (URL name)
+              <input id="newSlug" placeholder="acme-burger" />
+            </label>
+            <label>Display name
+              <input id="newName" placeholder="Acme Burger" />
+            </label>
+            <label>Currency
+              <input id="newCurrency" value="CHF" />
+            </label>
+          </div>
+          <div class="row" style="margin-top:12px">
+            <button class="btn" id="createTenantBtn">Create tenant</button>
+          </div>
+          <div id="createTenantMsg" class="msg hidden"></div>
+        </div>
+        <div class="panel">
+          <h3>All tenants</h3>
+          <div id="tenantsTable"></div>
+        </div>
+      </section>
+
+      <section id="ordersView" class="hidden">
+        <div class="panel">
+          <h3>Online orders</h3>
+          <div id="ordersTable"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="tenantModal" class="modal-backdrop hidden">
+    <div class="modal">
+      <div class="row" style="justify-content:space-between;margin-bottom:12px">
+        <h2 id="modalTitle">Tenant</h2>
+        <button class="btn secondary small" id="closeModalBtn">Close</button>
+      </div>
+      <div id="tenantDetail"></div>
+    </div>
+  </div>
+
+  <script>
+    const API = '/v1/admin';
+    const AUTH_KEY = 'chaslay_superadmin_token';
+    let currentTenantId = null;
+
+    function token() { return sessionStorage.getItem(AUTH_KEY); }
+    function setToken(value) {
+      if (value) sessionStorage.setItem(AUTH_KEY, value);
+      else sessionStorage.removeItem(AUTH_KEY);
+    }
+
+    async function api(path, options = {}) {
+      const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+      if (token()) headers.Authorization = `Bearer ${token()}`;
+      const res = await fetch(`${API}${path}`, { ...options, headers });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      return data;
+    }
+
+    function showMsg(el, text, ok) {
+      el.textContent = text;
+      el.className = `msg ${ok ? 'ok' : 'err'}`;
+      el.classList.remove('hidden');
+    }
+
+    function fmtDate(msOrIso) {
+      if (!msOrIso) return '—';
+      const d = typeof msOrIso === 'number' ? new Date(msOrIso) : new Date(msOrIso);
+      return d.toLocaleString();
+    }
+
+    function fmtMoney(v) {
+      return Number(v || 0).toFixed(2);
+    }
+
+    async function tryAutoLogin() {
+      if (!token()) return showLogin();
+      try {
+        await api('/auth/check');
+        showApp();
+        loadDashboard();
+      } catch {
+        setToken(null);
+        showLogin();
+      }
+    }
+
+    function showLogin() {
+      document.getElementById('loginView').classList.remove('hidden');
+      document.getElementById('appView').classList.add('hidden');
+    }
+
+    function showApp() {
+      document.getElementById('loginView').classList.add('hidden');
+      document.getElementById('appView').classList.remove('hidden');
+    }
+
+    document.getElementById('loginBtn').onclick = async () => {
+      const password = document.getElementById('loginPassword').value;
+      const msg = document.getElementById('loginMsg');
+      try {
+        await fetch(`${API}/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password })
+        }).then(async (res) => {
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || 'Login failed');
+        });
+        setToken(password);
+        showApp();
+        loadDashboard();
+        msg.classList.add('hidden');
+      } catch (e) {
+        showMsg(msg, e.message, false);
+      }
+    };
+
+    document.getElementById('logoutBtn').onclick = () => {
+      setToken(null);
+      showLogin();
+    };
+
+    document.querySelectorAll('.nav-btn[data-view]').forEach((btn) => {
+      btn.onclick = () => {
+        document.querySelectorAll('.nav-btn[data-view]').forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        const view = btn.dataset.view;
+        document.getElementById('viewTitle').textContent =
+          view === 'dashboard' ? 'Dashboard' : view === 'tenants' ? 'Tenants' : 'Online orders';
+        ['dashboard', 'tenants', 'orders'].forEach((v) => {
+          document.getElementById(`${v}View`).classList.toggle('hidden', v !== view);
+        });
+        if (view === 'dashboard') loadDashboard();
+        if (view === 'tenants') loadTenants();
+        if (view === 'orders') loadOrders();
+      };
+    });
+
+    async function loadDashboard() {
+      const stats = await api('/stats');
+      document.getElementById('statsGrid').innerHTML = [
+        ['Tenants', stats.tenantCount],
+        ['Active devices', stats.activeDevices],
+        ['Unused codes', stats.unusedCodes],
+        ['Orders (7 days)', stats.ordersLast7Days],
+      ].map(([lbl, num]) => `
+        <div class="stat"><div class="num">${num}</div><div class="lbl">${lbl}</div></div>
+      `).join('');
+
+      const orders = stats.recentOrders || [];
+      document.getElementById('recentOrders').innerHTML = orders.length ? `
+        <table>
+          <thead><tr><th>Order</th><th>Tenant</th><th>Total</th><th>Status</th><th>When</th></tr></thead>
+          <tbody>${orders.map((o) => `
+            <tr>
+              <td>${o.orderNumber}</td>
+              <td>${o.tenantName} <span class="mono">${o.tenantSlug}</span></td>
+              <td>${fmtMoney(o.total)}</td>
+              <td><span class="pill">${o.status}</span></td>
+              <td>${fmtDate(o.createdAt)}</td>
+            </tr>`).join('')}</tbody>
+        </table>` : '<p class="muted">No orders yet.</p>';
+    }
+
+    async function loadTenants() {
+      const { tenants } = await api('/tenants');
+      document.getElementById('tenantsTable').innerHTML = `
+        <table>
+          <thead>
+            <tr><th>Name</th><th>Slug / shop</th><th>Devices</th><th>Codes</th><th></th></tr>
+          </thead>
+          <tbody>
+            ${tenants.map((t) => `
+              <tr>
+                <td><strong>${t.name}</strong></td>
+                <td>
+                  <div class="mono">${t.slug}</div>
+                  <a href="${t.shopUrl}" target="_blank">${t.shopUrl}</a>
+                </td>
+                <td>${t.activeDeviceCount}/${t.deviceCount} active</td>
+                <td>${t.unusedCodeCount} unused</td>
+                <td><button class="btn small secondary" data-open-tenant="${t.id}">Manage</button></td>
+              </tr>`).join('')}
+          </tbody>
+        </table>`;
+      document.querySelectorAll('[data-open-tenant]').forEach((btn) => {
+        btn.onclick = () => openTenantModal(btn.dataset.openTenant);
+      });
+    }
+
+    document.getElementById('createTenantBtn').onclick = async () => {
+      const msg = document.getElementById('createTenantMsg');
+      try {
+        const body = {
+          slug: document.getElementById('newSlug').value.trim(),
+          name: document.getElementById('newName').value.trim(),
+          currencySymbol: document.getElementById('newCurrency').value.trim() || 'CHF',
+        };
+        const { tenant } = await api('/tenants', { method: 'POST', body: JSON.stringify(body) });
+        showMsg(msg, `Created ${tenant.name}. API key: ${tenant.apiKey}`, true);
+        document.getElementById('newSlug').value = '';
+        document.getElementById('newName').value = '';
+        loadTenants();
+      } catch (e) {
+        showMsg(msg, e.message, false);
+      }
+    };
+
+    async function loadOrders() {
+      const { orders } = await api('/orders?limit=100');
+      document.getElementById('ordersTable').innerHTML = orders.length ? `
+        <table>
+          <thead><tr><th>Order</th><th>Tenant</th><th>Customer</th><th>Total</th><th>Status</th><th>When</th></tr></thead>
+          <tbody>${orders.map((o) => `
+            <tr>
+              <td>${o.orderNumber}</td>
+              <td>${o.tenantName}</td>
+              <td>${o.customerName || '—'}</td>
+              <td>${fmtMoney(o.total)}</td>
+              <td><span class="pill">${o.status}</span></td>
+              <td>${fmtDate(o.createdAt)}</td>
+            </tr>`).join('')}</tbody>
+        </table>` : '<p class="muted">No orders yet.</p>';
+    }
+
+    document.getElementById('closeModalBtn').onclick = () => {
+      document.getElementById('tenantModal').classList.add('hidden');
+      currentTenantId = null;
+    };
+
+    async function openTenantModal(tenantId) {
+      currentTenantId = tenantId;
+      document.getElementById('tenantModal').classList.remove('hidden');
+      await renderTenantDetail();
+    }
+
+    async function renderTenantDetail() {
+      const root = document.getElementById('tenantDetail');
+      root.innerHTML = '<p class="muted">Loading…</p>';
+      const [{ tenant }, { devices }, { codes }] = await Promise.all([
+        api(`/tenants/${currentTenantId}`),
+        api(`/tenants/${currentTenantId}/devices`),
+        api(`/tenants/${currentTenantId}/codes`),
+      ]);
+      document.getElementById('modalTitle').textContent = tenant.name;
+
+      root.innerHTML = `
+        <div class="panel">
+          <h3>Tenant settings</h3>
+          <div class="grid2">
+            <label>Name<input id="editName" value="${tenant.name.replace(/"/g, '&quot;')}" /></label>
+            <label>Currency<input id="editCurrency" value="${tenant.currencySymbol}" /></label>
+            <label>Shop enabled
+              <select id="editShopEnabled">
+                <option value="true" ${tenant.shopEnabled ? 'selected' : ''}>Yes</option>
+                <option value="false" ${!tenant.shopEnabled ? 'selected' : ''}>No</option>
+              </select>
+            </label>
+          </div>
+          <p><strong>Shop URL:</strong> <a href="${tenant.shopUrl}" target="_blank">${tenant.shopUrl}</a></p>
+          <p><strong>POS API key:</strong> <span class="mono" id="apiKeyText">${tenant.apiKey}</span></p>
+          <div class="row" style="margin-top:12px">
+            <button class="btn small" id="saveTenantBtn">Save settings</button>
+            <button class="btn small secondary" id="regenKeyBtn">Regenerate API key</button>
+          </div>
+          <div id="tenantSaveMsg" class="msg hidden"></div>
+        </div>
+
+        <div class="panel">
+          <h3>Generate activation code</h3>
+          <div class="grid2">
+            <label>Label<input id="codeLabel" value="Annual license" /></label>
+            <label>Valid days<input id="codeDays" type="number" value="365" /></label>
+            <label>Bind to device ID (optional)<input id="codeDeviceId" placeholder="Leave empty for any device" /></label>
+          </div>
+          <button class="btn small" id="genCodeBtn" style="margin-top:12px">Generate code</button>
+          <div id="genCodeMsg" class="msg hidden"></div>
+        </div>
+
+        <div class="panel">
+          <h3>Activated devices (${devices.length})</h3>
+          ${devices.length ? `
+          <table>
+            <thead><tr><th>Device ID</th><th>Model</th><th>Status</th><th>Expires</th><th>Last seen</th><th></th></tr></thead>
+            <tbody>${devices.map((d) => `
+              <tr>
+                <td class="mono">${d.deviceId}</td>
+                <td>${d.deviceModel || '—'}</td>
+                <td><span class="pill ${d.status === 'ACTIVE' ? 'ok' : 'bad'}">${d.status}</span></td>
+                <td>${fmtDate(d.expiresAt)}</td>
+                <td>${fmtDate(d.lastSeenAt)}</td>
+                <td>
+                  <button class="btn small secondary" data-extend="${d.id}">+365d</button>
+                  ${d.status === 'ACTIVE'
+                    ? `<button class="btn small danger" data-expire="${d.id}">Expire</button>`
+                    : `<button class="btn small" data-activate="${d.id}">Activate</button>`}
+                </td>
+              </tr>`).join('')}</tbody>
+          </table>` : '<p class="muted">No devices activated yet.</p>'}
+        </div>
+
+        <div class="panel">
+          <h3>Activation codes (${codes.length})</h3>
+          ${codes.length ? `
+          <table>
+            <thead><tr><th>Label</th><th>Days</th><th>Bound device</th><th>Used</th><th>Created</th></tr></thead>
+            <tbody>${codes.map((c) => `
+              <tr>
+                <td>${c.label || '—'}</td>
+                <td>${c.validDays}</td>
+                <td class="mono">${c.boundDeviceId || 'Any device'}</td>
+                <td>${c.isUsed ? `Yes · ${fmtDate(c.usedAt)}` : '<span class="pill ok">Unused</span>'}</td>
+                <td>${fmtDate(c.createdAt)}</td>
+              </tr>`).join('')}</tbody>
+          </table>` : '<p class="muted">No codes yet.</p>'}
+        </div>`;
+
+      document.getElementById('saveTenantBtn').onclick = async () => {
+        const msg = document.getElementById('tenantSaveMsg');
+        try {
+          await api(`/tenants/${currentTenantId}`, {
+            method: 'PATCH',
+            body: JSON.stringify({
+              name: document.getElementById('editName').value.trim(),
+              currencySymbol: document.getElementById('editCurrency').value.trim(),
+              shopEnabled: document.getElementById('editShopEnabled').value === 'true',
+            }),
+          });
+          showMsg(msg, 'Saved.', true);
+          loadTenants();
+        } catch (e) {
+          showMsg(msg, e.message, false);
+        }
+      };
+
+      document.getElementById('regenKeyBtn').onclick = async () => {
+        if (!confirm('Regenerate API key? POS tablets must be updated with the new SYNC_API_KEY.')) return;
+        const msg = document.getElementById('tenantSaveMsg');
+        try {
+          const { tenant: updated } = await api(`/tenants/${currentTenantId}/regenerate-api-key`, { method: 'POST' });
+          document.getElementById('apiKeyText').textContent = updated.apiKey;
+          showMsg(msg, 'New API key generated.', true);
+        } catch (e) {
+          showMsg(msg, e.message, false);
+        }
+      };
+
+      document.getElementById('genCodeBtn').onclick = async () => {
+        const msg = document.getElementById('genCodeMsg');
+        try {
+          const body = {
+            label: document.getElementById('codeLabel').value.trim(),
+            validDays: Number(document.getElementById('codeDays').value || 365),
+            deviceId: document.getElementById('codeDeviceId').value.trim() || null,
+          };
+          const data = await api(`/tenants/${currentTenantId}/codes`, {
+            method: 'POST',
+            body: JSON.stringify(body),
+          });
+          showMsg(msg, `Activation code: ${data.code}`, true);
+          await renderTenantDetail();
+        } catch (e) {
+          showMsg(msg, e.message, false);
+        }
+      };
+
+      root.querySelectorAll('[data-extend]').forEach((btn) => {
+        btn.onclick = async () => {
+          await api(`/tenants/${currentTenantId}/devices/${btn.dataset.extend}/extend`, {
+            method: 'POST',
+            body: JSON.stringify({ extraDays: 365 }),
+          });
+          await renderTenantDetail();
+        };
+      });
+      root.querySelectorAll('[data-expire]').forEach((btn) => {
+        btn.onclick = async () => {
+          await api(`/tenants/${currentTenantId}/devices/${btn.dataset.expire}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ status: 'EXPIRED' }),
+          });
+          await renderTenantDetail();
+        };
+      });
+      root.querySelectorAll('[data-activate]').forEach((btn) => {
+        btn.onclick = async () => {
+          await api(`/tenants/${currentTenantId}/devices/${btn.dataset.activate}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ status: 'ACTIVE' }),
+          });
+          await renderTenantDetail();
+        };
+      });
+    }
+
+    document.getElementById('loginPassword').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') document.getElementById('loginBtn').click();
+    });
+
+    tryAutoLogin();
+  </script>
 </body>
 </html>

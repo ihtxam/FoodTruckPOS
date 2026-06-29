@@ -41,7 +41,7 @@ app.use('/v1/shop', shopRoutes);
 /** Legacy single-tenant order routes (default tenant) */
 app.use('/v1/orders', ordersRoutes);
 
-/** Merchant admin API (placeholder UI served separately) */
+/** Superadmin API + panel at admin.chaslay.com */
 app.use('/v1/admin', adminRoutes);
 
 /** shop.chaslay.com/{clientName} storefront pages */

@@ -98,3 +98,92 @@ export async function validateLicense({ tenantId, deviceId, appVersion }) {
     planLabel: device.plan_label,
   };
 }
+
+export async function listDevicesByTenant(tenantId) {
+  return (
+    await query(
+      `SELECT id, device_id, device_model, app_version, customer_name, plan_label, status,
+              expires_at, activated_at, last_seen_at
+       FROM devices
+       WHERE tenant_id = $1
+       ORDER BY activated_at DESC NULLS LAST, last_seen_at DESC NULLS LAST`,
+      [tenantId]
+    )
+  ).rows;
+}
+
+export async function listActivationCodesByTenant(tenantId) {
+  return (
+    await query(
+      `SELECT id, label, valid_days, bound_device_id, expires_at, used_at, created_at
+       FROM activation_codes
+       WHERE tenant_id = $1
+       ORDER BY created_at DESC
+       LIMIT 200`,
+      [tenantId]
+    )
+  ).rows;
+}
+
+export async function extendDeviceLicense({ tenantId, deviceRowId, extraDays }) {
+  const days = Number(extraDays);
+  if (!Number.isFinite(days) || days <= 0) {
+    throw new Error('extraDays must be a positive number');
+  }
+  const device = (
+    await query(`SELECT * FROM devices WHERE id = $1 AND tenant_id = $2`, [deviceRowId, tenantId])
+  ).rows[0];
+  if (!device) throw new Error('Device not found');
+
+  const base = Math.max(Number(device.expires_at), Date.now());
+  const expiresAt = base + days * 24 * 60 * 60 * 1000;
+  await query(
+    `UPDATE devices SET expires_at = $2, status = 'ACTIVE', last_seen_at = NOW() WHERE id = $1`,
+    [deviceRowId, expiresAt]
+  );
+  return { expiresAt, status: 'ACTIVE' };
+}
+
+export async function updateDeviceStatus({ tenantId, deviceRowId, status }) {
+  if (!['ACTIVE', 'EXPIRED'].includes(status)) {
+    throw new Error('status must be ACTIVE or EXPIRED');
+  }
+  const row = (
+    await query(
+      `UPDATE devices SET status = $3, last_seen_at = NOW()
+       WHERE id = $1 AND tenant_id = $2
+       RETURNING id, status, expires_at`,
+      [deviceRowId, tenantId, status]
+    )
+  ).rows[0];
+  if (!row) throw new Error('Device not found');
+  return { status: row.status, expiresAt: Number(row.expires_at) };
+}
+
+export function formatDevice(row) {
+  return {
+    id: row.id,
+    deviceId: row.device_id,
+    deviceModel: row.device_model,
+    appVersion: row.app_version,
+    customerName: row.customer_name,
+    planLabel: row.plan_label,
+    status: row.status,
+    expiresAt: Number(row.expires_at),
+    activatedAt: row.activated_at,
+    lastSeenAt: row.last_seen_at,
+  };
+}
+
+export function formatActivationCode(row) {
+  return {
+    id: row.id,
+    label: row.label,
+    validDays: row.valid_days,
+    boundDeviceId: row.bound_device_id,
+    expiresAt: row.expires_at,
+    usedAt: row.used_at,
+    createdAt: row.created_at,
+    isUsed: Boolean(row.used_at),
+  };
+}
