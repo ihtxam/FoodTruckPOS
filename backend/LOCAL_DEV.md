@@ -2,6 +2,69 @@
 
 Run the API on your PC first. When it works locally, push to GitHub and `git pull` on the server.
 
+---
+
+## No Docker on Windows?
+
+If you see `docker : The term 'docker' is not recognized`:
+
+### Option 1 — Install Docker Desktop (recommended)
+
+1. Download: https://www.docker.com/products/docker-desktop/
+2. Install and **restart Windows**
+3. Open Docker Desktop and wait until it says **Running**
+4. Open a **new** PowerShell window, then:
+
+```powershell
+cd C:\Users\Hussain\Downloads\FoodTruckPOS\backend
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+docker compose exec api npm run migrate
+docker compose exec api npm run seed
+```
+
+Open **http://localhost:3080/admin/**
+
+---
+
+### Option 2 — UI only on PC, database on server (no Docker needed)
+
+Test the **admin login screen** locally with Node:
+
+```powershell
+cd C:\Users\Hussain\Downloads\FoodTruckPOS\backend
+npm install
+$env:PORT="3080"
+$env:SUPERADMIN_PASSWORD="YourAdminPassword123"
+$env:LICENSE_SECRET="your-secret-at-least-32-characters-long"
+npm run dev
+```
+
+Open **http://localhost:3080/admin/** (dark login UI works).
+
+Create merchants, seed data, and activation codes on your **Hetzner server** via SSH (where Docker is already installed):
+
+```bash
+ssh root@116.202.26.15
+cd ~/FoodTruckPOS/backend
+docker compose exec api npm run create-merchant-user -- --tenantSlug=demo --email=owner@shop.com --password=ChangeMe123 --name="Shop Owner"
+```
+
+Production admin: **https://admin.chaslay.com**
+
+---
+
+### Option 3 — Install PostgreSQL on Windows (advanced)
+
+Install PostgreSQL 16, create database `foodtruckpos`, then in `.env` set:
+
+```env
+DATABASE_URL=postgres://postgres:YOUR_PASSWORD@localhost:5432/foodtruckpos
+```
+
+Then `npm run migrate`, `npm run seed`, `npm run create-merchant-user`, etc. on your PC.
+
+---
+
 ## Option A — Docker (easiest, matches production)
 
 From `FoodTruckPOS/backend`:
