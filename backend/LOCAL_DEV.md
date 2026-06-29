@@ -10,19 +10,31 @@ From `FoodTruckPOS/backend`:
 cd C:\Users\Hussain\Downloads\FoodTruckPOS\backend
 copy .env.example .env
 # Edit .env: set POSTGRES_PASSWORD, API_KEY, LICENSE_SECRET, SUPERADMIN_PASSWORD
-docker compose up -d --build
+```
+
+**If port 3000 is already used** (e.g. another project like Offers), use port **3080**:
+
+```powershell
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 docker compose exec api npm run migrate
 docker compose exec api npm run seed
 ```
 
-Open in browser:
+Open: **http://localhost:3080/admin/**
+
+If port 3000 is free, you can use the default instead:
+
+```powershell
+docker compose up -d --build
+```
+
+Open: **http://localhost:3000/admin/**
 
 | URL | What |
 |-----|------|
-| http://localhost:3000/admin/ | Admin panel (merchant + platform login) |
-| http://localhost:3000/health | API health |
-| http://localhost:3000/admin/admin.css | Should show CSS (not HTML) |
-| http://localhost:3000/admin/app.js | Should show JavaScript |
+| http://localhost:3080/admin/ | Admin panel (use 3080 if 3000 is busy) |
+| http://localhost:3080/health | API health |
+| http://localhost:3080/admin/admin.css | Must start with `:root {` — not HTML |
 
 **Platform admin login:** Platform admin tab ? password from `SUPERADMIN_PASSWORD` in `.env`
 

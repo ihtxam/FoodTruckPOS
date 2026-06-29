@@ -1,0 +1,6 @@
+# Use with: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+# Avoids conflict when port 3000 is already used (e.g. another Node/React app)
+services:
+  api:
+    ports:
+      - "3080:3000"
