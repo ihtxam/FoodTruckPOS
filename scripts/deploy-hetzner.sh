@@ -3,6 +3,7 @@
 set -euo pipefail
 
 REPO_DIR="${DEPLOY_PATH:-$HOME/FoodTruckPOS}"
+BACKEND_DIR="$REPO_DIR/backend"
 cd "$REPO_DIR"
 
 echo "=== ChaslayPOS deploy @ $(date -u +"%Y-%m-%dT%H:%M:%SZ") ==="
@@ -10,8 +11,8 @@ echo "=== Git pull ==="
 git fetch origin main
 git reset --hard origin/main
 
-BACKEND_ENV="$REPO_DIR/backend/.env"
-RECEIPTS_ENV="$REPO_DIR/server/chaslay-receipts/.env"
+BACKEND_ENV="$BACKEND_DIR/.env"
+RECEIPTS_ENV="$BACKEND_DIR/receipts.env"
 
 if [[ ! -f "$BACKEND_ENV" ]]; then
   echo "ERROR: Missing $BACKEND_ENV"
@@ -20,17 +21,17 @@ if [[ ! -f "$BACKEND_ENV" ]]; then
 fi
 
 if [[ ! -f "$RECEIPTS_ENV" ]]; then
-  echo "WARNING: Missing $RECEIPTS_ENV — copying from .env.example"
-  cp "$REPO_DIR/server/chaslay-receipts/.env.example" "$RECEIPTS_ENV"
-  echo "Edit $RECEIPTS_ENV before production use."
+  echo "WARNING: Missing $RECEIPTS_ENV — copying from receipts.env.example"
+  cp "$BACKEND_DIR/receipts.env.example" "$RECEIPTS_ENV"
+  echo "Edit $RECEIPTS_ENV (SMTP + API_KEY) before production use."
 fi
 
-cd "$REPO_DIR/backend"
+cd "$BACKEND_DIR"
 
-echo "=== Docker build & start ==="
+echo "=== Docker build & start (api + receipts + caddy + postgres) ==="
 docker compose up -d --build
 
-echo "=== Wait for API ==="
+echo "=== Wait for services ==="
 sleep 12
 
 echo "=== Database migrate ==="

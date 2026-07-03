@@ -17,11 +17,11 @@ cd "$DEPLOY_PATH"
 chmod +x scripts/deploy-hetzner.sh
 
 [[ -f backend/.env ]] || cp backend/.env.example backend/.env
-[[ -f server/chaslay-receipts/.env ]] || cp server/chaslay-receipts/.env.example server/chaslay-receipts/.env
+[[ -f backend/receipts.env ]] || cp backend/receipts.env.example backend/receipts.env
 
 echo ""
 echo "Edit secrets before going live:"
 echo "  nano $DEPLOY_PATH/backend/.env"
-echo "  nano $DEPLOY_PATH/server/chaslay-receipts/.env"
+echo "  nano $DEPLOY_PATH/backend/receipts.env"
 echo ""
 echo "Then run: bash $DEPLOY_PATH/scripts/deploy-hetzner.sh"

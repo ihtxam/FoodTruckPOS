@@ -29,10 +29,38 @@ ssh root@116.202.26.15
 git clone https://github.com/ihtxam/FoodTruckPOS.git
 cd FoodTruckPOS
 cp backend/.env.example backend/.env
-cp server/chaslay-receipts/.env.example server/chaslay-receipts/.env
-nano backend/.env                    # set secrets on the server
-nano server/chaslay-receipts/.env    # SMTP + API_KEY
+cp backend/receipts.env.example backend/receipts.env
+nano backend/.env
+nano backend/receipts.env
 bash scripts/deploy-hetzner.sh
+```
+
+### WinSCP — where files live on the server
+
+After `git clone`, everything is under **`/root/FoodTruckPOS/`**:
+
+| What | Path on server |
+|------|----------------|
+| Main API secrets | `/root/FoodTruckPOS/backend/.env` |
+| Receipts + SMTP | `/root/FoodTruckPOS/backend/receipts.env` |
+| Receipts code | `/root/FoodTruckPOS/backend/receipts/` |
+| Docker stack | `/root/FoodTruckPOS/backend/docker-compose.yml` |
+| Deploy script | `/root/FoodTruckPOS/scripts/deploy-hetzner.sh` |
+
+There is **no** separate `server/` folder anymore — receipts live inside `backend/`.
+
+If you only uploaded `backend/` before, run on the server (SSH):
+
+```bash
+cd /root/FoodTruckPOS && git pull
+```
+
+Or re-clone: `git clone https://github.com/ihtxam/FoodTruckPOS.git`
+
+Then create `backend/receipts.env` from `backend/receipts.env.example` and run:
+
+```bash
+bash /root/FoodTruckPOS/scripts/deploy-hetzner.sh
 ```
 
 **Do not commit `.env` files to GitHub** — they contain passwords. Keep secrets on the server only, or use [GitHub Actions secrets](https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions) for deploy keys (not app config).
