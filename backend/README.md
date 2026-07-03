@@ -31,8 +31,8 @@ sudo usermod -aG docker $USER
 ### 2. Clone and configure
 
 ```bash
-git clone https://github.com/ihtxam/FoodTruckPOS.git
-cd FoodTruckPOS/backend
+git clone https://github.com/ihtxam/ChaslayPOS.git
+cd ChaslayPOS/backend
 cp .env.example .env
 nano .env   # set strong POSTGRES_PASSWORD, API_KEY, LICENSE_SECRET
 ```
@@ -99,7 +99,7 @@ POS will pull new orders via `GET /v1/orders/incoming` (with `X-Api-Key`) — wire
 ## Backup
 
 ```bash
-docker compose exec postgres pg_dump -U foodtruck foodtruckpos > backup.sql
+docker compose exec postgres pg_dump -U foodtruck ChaslayPOS > backup.sql
 ```
 
 Enable Hetzner VPS snapshots weekly.

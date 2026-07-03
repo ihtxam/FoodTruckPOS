@@ -1,6 +1,6 @@
-# Food Truck POS
+# ChaslayPOS
 
-A native Android Point of Sale app built for food trucks and small businesses. Optimized for fast touchscreen checkout � similar simplicity to SumUp mPOS.
+A native Android Point of Sale app built for Chaslays and small businesses. Optimized for fast touchscreen checkout � similar simplicity to SumUp mPOS.
 
 ## Features
 
@@ -42,7 +42,7 @@ A native Android Point of Sale app built for food trucks and small businesses. O
 
 ### Open & Run
 
-1. In Android Studio, choose **File ? Open** and select the **`FoodTruckPOS`** folder (not the parent `Downloads` folder).
+1. In Android Studio, choose **File ? Open** and select the **`ChaslayPOS`** folder (not the parent `Downloads` folder).
 2. When prompted, trust the project and wait for **Gradle Sync** to finish.
 3. Go to **Settings ? Build, Execution, Deployment ? Build Tools ? Gradle** and set **Gradle JDK** to **Embedded JDK (17)**. Do **not** use JDK 24+ or OpenJDK 26.
 4. Click **File ? Sync Project with Gradle Files**.
@@ -93,4 +93,4 @@ These are scaffolded with simulation � replace with real SDKs:
 
 ## License
 
-Private � for your food truck business.
+Private � for your Chaslay business.

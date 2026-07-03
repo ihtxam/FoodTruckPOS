@@ -27,6 +27,19 @@ services:
     ports:
       - "3000:3000"
 
+  receipts:
+    build:
+      context: ../server/chaslay-receipts
+    restart: unless-stopped
+    env_file:
+      - ../server/chaslay-receipts/.env
+    environment:
+      RECEIPTS_DATA_DIR: /data/receipts
+    volumes:
+      - receipts_data:/data/receipts
+    ports:
+      - "8080:8080"
+
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
@@ -39,8 +52,10 @@ services:
       - caddy_config:/config
     depends_on:
       - api
+      - receipts
 
 volumes:
   postgres_data:
+  receipts_data:
   caddy_data:
   caddy_config:

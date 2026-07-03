@@ -16,7 +16,7 @@ If you see `docker : The term 'docker' is not recognized`:
 4. Open a **new** PowerShell window, then:
 
 ```powershell
-cd C:\Users\Hussain\Downloads\FoodTruckPOS\backend
+cd C:\Users\Hussain\Downloads\ChaslayPOS\backend
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 docker compose exec api npm run migrate
 docker compose exec api npm run seed
@@ -31,7 +31,7 @@ Open **http://localhost:3080/admin/**
 Test the **admin login screen** locally with Node:
 
 ```powershell
-cd C:\Users\Hussain\Downloads\FoodTruckPOS\backend
+cd C:\Users\Hussain\Downloads\ChaslayPOS\backend
 npm install
 $env:PORT="3080"
 $env:SUPERADMIN_PASSWORD="YourAdminPassword123"
@@ -45,7 +45,7 @@ Create merchants, seed data, and activation codes on your **Hetzner server** via
 
 ```bash
 ssh root@116.202.26.15
-cd ~/FoodTruckPOS/backend
+cd ~/ChaslayPOS/backend
 docker compose exec api npm run create-merchant-user -- --tenantSlug=demo --email=owner@shop.com --password=ChangeMe123 --name="Shop Owner"
 ```
 
@@ -55,10 +55,10 @@ Production admin: **https://admin.chaslay.com**
 
 ### Option 3 — Install PostgreSQL on Windows (advanced)
 
-Install PostgreSQL 16, create database `foodtruckpos`, then in `.env` set:
+Install PostgreSQL 16, create database `ChaslayPOS`, then in `.env` set:
 
 ```env
-DATABASE_URL=postgres://postgres:YOUR_PASSWORD@localhost:5432/foodtruckpos
+DATABASE_URL=postgres://postgres:YOUR_PASSWORD@localhost:5432/ChaslayPOS
 ```
 
 Then `npm run migrate`, `npm run seed`, `npm run create-merchant-user`, etc. on your PC.
@@ -67,10 +67,10 @@ Then `npm run migrate`, `npm run seed`, `npm run create-merchant-user`, etc. on 
 
 ## Option A — Docker (easiest, matches production)
 
-From `FoodTruckPOS/backend`:
+From `ChaslayPOS/backend`:
 
 ```powershell
-cd C:\Users\Hussain\Downloads\FoodTruckPOS\backend
+cd C:\Users\Hussain\Downloads\ChaslayPOS\backend
 copy .env.example .env
 # Edit .env: set POSTGRES_PASSWORD, API_KEY, LICENSE_SECRET, SUPERADMIN_PASSWORD
 ```
@@ -121,7 +121,7 @@ You ran `npm run create-merchant-user` **on your PC** instead of **inside the Do
 If you really need to run npm scripts on Windows, set in `.env`:
 
 ```env
-DATABASE_URL=postgres://foodtruck:YOUR_PASSWORD@localhost:5433/foodtruckpos
+DATABASE_URL=postgres://foodtruck:YOUR_PASSWORD@localhost:5433/ChaslayPOS
 ```
 
 (Postgres port `5433` is exposed when using `docker-compose.dev.yml`.)
@@ -134,7 +134,7 @@ DATABASE_URL=postgres://foodtruck:YOUR_PASSWORD@localhost:5433/foodtruckpos
 cd backend
 docker compose up -d postgres
 copy .env.example .env
-# Set DATABASE_URL to postgres://foodtruck:YOUR_PASSWORD@localhost:5432/foodtruckpos
+# Set DATABASE_URL to postgres://foodtruck:YOUR_PASSWORD@localhost:5432/ChaslayPOS
 # Expose postgres in docker-compose ports if needed, or use docker network host
 npm install
 npm run migrate
@@ -159,7 +159,7 @@ Open http://localhost:3000/admin/
 ```bash
 git add -A && git commit -m "..." && git push
 # On VPS:
-cd ~/FoodTruckPOS && git pull && cd backend && docker compose up -d --build
+cd ~/ChaslayPOS && git pull && cd backend && docker compose up -d --build
 docker compose exec api npm run migrate
 ```
 

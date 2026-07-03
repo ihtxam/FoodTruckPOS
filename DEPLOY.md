@@ -1,12 +1,13 @@
-# Chaslay POS ó deploy checklist
+# Chaslay POS ù deploy checklist
 
 Server IP: **116.202.26.15**
 
 | Domain | Purpose |
 |--------|---------|
-| `api.chaslay.com` | POS license, menu sync, order API |
+| `api.chaslay.com` | POS license, menu sync, order API, `/v1/receipts` |
+| `pay.chaslay.com` | Digital receipt pages (`/receipts/{id}`) |
 | `shop.chaslay.com/{clientName}` | Customer online shop per merchant |
-| `admin.chaslay.com` | Merchant back office (placeholder for now) |
+| `admin.chaslay.com` | Merchant back office + superadmin |
 
 ---
 
@@ -15,16 +16,62 @@ Server IP: **116.202.26.15**
 Point these **A records** to `116.202.26.15`:
 
 - `api.chaslay.com`
+- `pay.chaslay.com`
 - `shop.chaslay.com`
 - `admin.chaslay.com`
 
 ---
 
-## 2. Deploy / update backend on Hetzner
+## 2. First-time server setup (Hetzner)
 
 ```bash
 ssh root@116.202.26.15
-cd FoodTruckPOS   # or git clone https://github.com/ihtxam/FoodTruckPOS.git
+git clone https://github.com/ihtxam/FoodTruckPOS.git
+cd FoodTruckPOS
+cp backend/.env.example backend/.env
+cp server/chaslay-receipts/.env.example server/chaslay-receipts/.env
+nano backend/.env                    # set secrets on the server
+nano server/chaslay-receipts/.env    # SMTP + API_KEY
+bash scripts/deploy-hetzner.sh
+```
+
+**Do not commit `.env` files to GitHub** ó they contain passwords. Keep secrets on the server only, or use [GitHub Actions secrets](https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions) for deploy keys (not app config).
+
+---
+
+## 3. Auto-deploy on every push to `main`
+
+A GitHub Actions workflow (`.github/workflows/deploy-hetzner.yml`) SSHs into your VPS and runs `scripts/deploy-hetzner.sh`.
+
+### One-time GitHub setup
+
+Repo ? **Settings ? Secrets and variables ? Actions** ? add:
+
+| Secret | Example |
+|--------|---------|
+| `HETZNER_HOST` | `116.202.26.15` |
+| `HETZNER_USER` | `root` |
+| `HETZNER_SSH_KEY` | Private key (PEM) that can SSH to the server |
+| `HETZNER_DEPLOY_PATH` | `/root/FoodTruckPOS` (optional) |
+| `HETZNER_SSH_PORT` | `22` (optional) |
+
+On the server, add the matching **public key** to `~/.ssh/authorized_keys`.
+
+After that, every `git push` to `main` rebuilds Docker and runs migrations automatically.
+
+Manual deploy anytime:
+
+```bash
+ssh root@116.202.26.15 'bash /root/FoodTruckPOS/scripts/deploy-hetzner.sh'
+```
+
+---
+
+## 4. Deploy / update backend manually
+
+```bash
+ssh root@116.202.26.15
+cd ChaslayPOS   # or git clone https://github.com/ihtxam/ChaslayPOS.git
 git pull
 cd backend
 cp .env.example .env   # skip if .env already exists
@@ -66,7 +113,7 @@ docker compose exec api npm run create-merchant-user -- \
 ```
 
 Merchants can manage:
-- Menu (categories & products) ó syncs to POS when online
+- Menu (categories & products) ù syncs to POS when online
 - Online orders & status
 - Opening hours, delivery zones, order settings
 

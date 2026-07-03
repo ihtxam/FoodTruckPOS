@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="pos_cash">#2E7D32</color>
-    <color name="pos_card">#1565C0</color>
-    <color name="pos_accent">#FF6F00</color>
+    <color name="pos_cash">#3D8B5E</color>
+    <color name="pos_card">#2E6DB4</color>
+    <color name="pos_accent">#714B67</color>
+    <color name="ic_launcher_background">#000000</color>
 </resources>

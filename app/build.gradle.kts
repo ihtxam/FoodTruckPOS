@@ -7,11 +7,11 @@ plugins {
 }
 
 android {
-    namespace = "com.foodtruck.pos"
+    namespace = "com.chaslay.pos"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.foodtruck.pos"
+        applicationId = "com.chaslay.pos"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
@@ -83,6 +83,8 @@ dependencies {
     implementation("com.google.dagger:hilt-android:2.59.2")
     ksp("com.google.dagger:hilt-android-compiler:2.59.2")
     implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
+    implementation("androidx.hilt:hilt-work:1.2.0")
+    ksp("androidx.hilt:hilt-compiler:1.2.0")
 
     implementation("androidx.room:room-runtime:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1")
@@ -94,6 +96,10 @@ dependencies {
 
     implementation("io.coil-kt:coil-compose:2.7.0")
     implementation("com.google.zxing:core:3.5.3")
+    implementation("com.google.mlkit:barcode-scanning:17.3.0")
+    implementation("androidx.camera:camera-camera2:1.4.1")
+    implementation("androidx.camera:camera-lifecycle:1.4.1")
+    implementation("androidx.camera:camera-view:1.4.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")

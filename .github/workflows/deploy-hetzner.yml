@@ -1,0 +1,26 @@
+name: Deploy to Hetzner
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: deploy-hetzner
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.HETZNER_HOST }}
+          username: ${{ secrets.HETZNER_USER }}
+          key: ${{ secrets.HETZNER_SSH_KEY }}
+          port: ${{ secrets.HETZNER_SSH_PORT || 22 }}
+          script_stop: true
+          script: |
+            export DEPLOY_PATH="${{ secrets.HETZNER_DEPLOY_PATH || '/root/FoodTruckPOS' }}"
+            bash "$DEPLOY_PATH/scripts/deploy-hetzner.sh"

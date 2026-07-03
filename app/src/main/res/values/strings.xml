@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Food Truck POS</string>
+    <string name="app_name">ChaslayPOS</string>
 
     <!-- Auth -->
     <string name="login_title">Sign in</string>
@@ -8,6 +8,7 @@
     <string name="email_login">Email Login</string>
     <string name="biometric_login">Use Biometric</string>
     <string name="enter_pin">Enter PIN</string>
+    <string name="login_enter_pin_to_continue">Enter your PIN to sign in or switch staff</string>
     <string name="email">Email</string>
     <string name="password">Password</string>
     <string name="login">Login</string>
@@ -71,6 +72,13 @@
     <string name="split_bill_n">Split %1$d</string>
     <string name="send_to_kitchen">Send kitchen</string>
     <string name="digital_receipt">Send Digital Receipt</string>
+    <string name="scan_digital_receipt">Scan for your digital receipt</string>
+    <string name="email_receipt">Email receipt</string>
+    <string name="email_receipt_title">Send receipt by email</string>
+    <string name="email_receipt_hint">We will email a link to the digital receipt.</string>
+    <string name="customer_email">Customer email</string>
+    <string name="item_discounts">Item discounts</string>
+    <string name="sending">Sending…</string>
     <string name="skip_receipt">Skip</string>
     <string name="tap_to_pay">Tap card or phone to pay</string>
     <string name="waiting_terminal">Waiting for terminal�</string>
@@ -101,6 +109,8 @@
     <string name="delivery_order">Delivery order</string>
     <string name="order_number">Order number</string>
     <string name="pickup_asap">ASAP (now)</string>
+    <string name="asap_now">ASAP / Now</string>
+    <string name="schedule_later">Schedule for later</string>
     <string name="pickup_time">Pickup time (HH:mm)</string>
     <string name="client_name">Client name</string>
     <string name="zip_code">ZIP code</string>
@@ -124,10 +134,58 @@
     <string name="cart_tab_ordered">ORDERED</string>
     <string name="table_busy">Busy</string>
     <string name="ongoing_orders">Ongoing Orders</string>
+    <string name="programmed_orders">Programmed Orders</string>
+    <string name="no_programmed_orders">No scheduled orders</string>
+    <string name="paid">Paid</string>
+    <string name="not_paid">Not paid</string>
+    <string name="pay_later">Pay Later</string>
+    <string name="pay_later_subtitle">Collect payment at pickup</string>
+    <string name="pos_register">Register</string>
+    <string name="pos_orders">Orders</string>
+    <string name="main_floor">Main Floor</string>
+    <string name="patio_floor">Patio</string>
+    <string name="fire_course_n">Fire course %1$d</string>
+    <string name="online_orders_channel">Online orders</string>
+    <string name="online_orders_channel_desc">Alerts when new shop orders arrive while the app is in the background</string>
+    <string name="new_online_order_title">New online order</string>
+    <string name="new_online_orders_title">%1$d new online orders</string>
+    <string name="new_online_order_body">Tap to open the POS and view the order.</string>
+    <string name="keypad_mode_qty">Qty</string>
+    <string name="keypad_mode_percent">%</string>
+    <string name="keypad_mode_price">Price</string>
+    <string name="keypad_expand">Show keypad</string>
+    <string name="keypad_collapse">Hide keypad</string>
+    <string name="pickup_today">Today</string>
+    <string name="pickup_tomorrow">Tomorrow</string>
+    <string name="pickup_select_time">Select time</string>
+    <string name="keypad_hint_qty">Enter quantity, then Enter</string>
+    <string name="keypad_hint_percent">Enter discount %, then Enter</string>
     <string name="order_history">Order History</string>
     <string name="hold_order">Hold</string>
     <string name="hold_short">Hold</string>
     <string name="hold_and_send">H+S</string>
+    <string name="save_hold_order">Save / Hold</string>
+    <string name="save_hold_short">Save</string>
+    <string name="takeout">Takeout</string>
+    <string name="choose_customer">Choose Customer</string>
+    <string name="create_customer">Create</string>
+    <string name="search_customers">Search Customers…</string>
+    <string name="discard">Discard</string>
+    <string name="business_hours">Business hours</string>
+    <string name="business_hours_help">Used for takeaway time slots on the register.</string>
+    <string name="open_hour">Open hour</string>
+    <string name="open_minute">Open minute</string>
+    <string name="close_hour">Close hour</string>
+    <string name="close_minute">Close minute</string>
+    <string name="open_hours_display">Open %1$s – %2$s</string>
+    <string name="morning">Morning</string>
+    <string name="afternoon">Afternoon</string>
+    <string name="evening">Evening</string>
+    <string name="stock_quantity">Stock quantity</string>
+    <string name="low_stock_threshold">Low stock alert</string>
+    <string name="stock_left">%1$d left</string>
+    <string name="continue_action">Continue</string>
+    <string name="new_contact">New contact</string>
     <string name="split_by_items">Split by items</string>
     <string name="split_equal">Split equally</string>
     <string name="cancel_order">Cancel Order</string>
@@ -200,6 +258,14 @@
     <string name="product_name">Product Name</string>
     <string name="sku">SKU</string>
     <string name="barcode">Barcode</string>
+    <string name="pos_mode">Business type</string>
+    <string name="pos_mode_retail">Retail</string>
+    <string name="pos_mode_restaurant">Restaurant</string>
+    <string name="pos_mode_help">Retail hides tables, hold orders, and kitchen printing. Restaurant enables full table service.</string>
+    <string name="scan_barcode">Scan barcode</string>
+    <string name="camera_permission_required">Camera permission is required to scan barcodes.</string>
+    <string name="barcode_not_found">No product found for barcode %1$s</string>
+    <string name="scan_at_checkout">Scan items</string>
     <string name="category">Category</string>
     <string name="tax_rate">Tax Rate (%)</string>
     <string name="price">Price</string>
@@ -238,12 +304,30 @@
     <string name="name">Name</string>
     <string name="no">No</string>
     <string name="yes">Yes</string>
-    <string name="logout">Logout</string>
+    <string name="users_accounts">Users &amp; roles</string>
+    <string name="users_accounts_help">Create staff accounts with POS PINs, assign roles, and reset passwords.</string>
+    <string name="users_list">Staff accounts</string>
+    <string name="roles_list">Roles &amp; permissions</string>
+    <string name="add_user">Add user</string>
+    <string name="edit_user">Edit user</string>
+    <string name="add_role">Add role</string>
+    <string name="edit_role">Edit role</string>
+    <string name="user_name">Name</string>
+    <string name="email_optional">Email (optional)</string>
+    <string name="assign_role">Role</string>
+    <string name="pos_pin">POS PIN (4–6 digits)</string>
+    <string name="password_reset_new">Password (leave blank to keep)</string>
+    <string name="user_active">Active</string>
+    <string name="role_name">Role name</string>
+    <string name="permissions">Permissions</string>
+    <string name="logout">Log out</string>
 
     <!-- Roles -->
     <string name="role_admin">Admin</string>
     <string name="role_manager">Manager</string>
     <string name="role_cashier">Cashier</string>
+    <string name="role_waiter">Waiter</string>
+    <string name="role_delivery">Delivery</string>
 
     <!-- Misc -->
     <string name="cancel">Cancel</string>
@@ -259,8 +343,17 @@
     <!-- Adyen / Payment -->
     <string name="adyen_api_key">Adyen API Key</string>
     <string name="adyen_client_id">Adyen Client ID</string>
+    <string name="adyen_sale_id">POS Sale ID (optional)</string>
+    <string name="adyen_sale_id_help">Identifies this POS in Adyen logs. Leave blank to use ChaslayPOS.</string>
     <string name="adyen_merchant_account">Adyen Merchant Account</string>
-    <string name="adyen_terminal_id">Adyen Terminal ID</string>
+    <string name="adyen_terminal_id">Adyen Terminal ID (POIID)</string>
+    <string name="adyen_terminal_id_help">Format: model-serial, e.g. V400m-324688179</string>
+    <string name="adyen_live_environment">Use live Adyen environment</string>
+    <string name="adyen_live_region">Live region</string>
+    <string name="adyen_use_legacy">Use legacy Terminal API endpoint</string>
+    <string name="test_adyen_connection">Test Adyen connection</string>
+    <string name="testing_adyen">Testing Adyen…</string>
+    <string name="adyen_setup_help">Use a Web service API key (not the client key). It must have the Cloud Device API role under Developers → API credentials → Permissions → POS. Enable Terminal API under In-person payments. Error 00_403 means the API key lacks this permission.</string>
     <string name="default_rounding">Default Rounding</string>
     <string name="payment_cash">Accept Cash</string>
     <string name="payment_card">Accept Card</string>
@@ -333,15 +426,26 @@
     <string name="receipt_template">Receipt template</string>
     <string name="receipt_show_vat">Show VAT breakdown table</string>
     <string name="receipt_show_staff">Show staff line on receipt</string>
+    <string name="receipt_show_qr">Print digital receipt QR code</string>
     <string name="kitchen_large_items">Large item text on kitchen ticket</string>
     <string name="kitchen_large_header">Large header on kitchen ticket</string>
+    <string name="kitchen_text_size">Kitchen ticket text size</string>
+    <string name="kitchen_item_text_size">Item text</string>
+    <string name="kitchen_header_text_size">Header text</string>
+    <string name="kitchen_text_normal">Normal</string>
+    <string name="kitchen_text_large">Large</string>
+    <string name="kitchen_text_extra">Extra large</string>
+    <string name="receipt_logo_help">Logo prints at the top of customer receipts (recommended: square PNG, light background).</string>
+    <string name="choose_receipt_logo">Choose logo</string>
+    <string name="remove_receipt_logo">Remove logo</string>
+    <string name="receipt_logo_set">Logo saved — appears on printed receipts after you save settings.</string>
     <string name="drag_to_reorder">Long-press and drag to reorder</string>
     <string name="verify_printer_ip">Verify IP connection</string>
     <string name="printer_name_optional_hint">Printer name is optional — a default name will be used if left blank.</string>
     <string name="quick_edit">Quick edit</string>
 
     <!-- License -->
-    <string name="license_activate_title">Activate FoodTruck POS</string>
+    <string name="license_activate_title">Activate ChaslayPOS</string>
     <string name="license_activate_body">Your trial has ended. Enter the activation code we sent you. Internet is required once to activate this device.</string>
     <string name="license_expired_title">Subscription expired</string>
     <string name="license_expired_body">Your yearly subscription has expired. Contact support for a renewal code, then enter it below.</string>

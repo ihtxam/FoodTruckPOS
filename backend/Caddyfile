@@ -3,7 +3,16 @@
 }
 
 api.chaslay.com {
-	reverse_proxy api:3000
+	handle /v1/receipts* {
+		reverse_proxy receipts:8080
+	}
+	handle {
+		reverse_proxy api:3000
+	}
+}
+
+pay.chaslay.com {
+	reverse_proxy receipts:8080
 }
 
 shop.chaslay.com {
