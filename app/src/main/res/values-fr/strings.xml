@@ -97,7 +97,10 @@
     <string name="sending">Envoi en cours...</string>
     <string name="skip_receipt">Ignorer</string>
     <string name="tap_to_pay">Appuyez sur la carte ou le téléphone pour payer</string>
-    <string name="waiting_terminal">En attente duterminal</string>
+    <string name="waiting_terminal">En attente du terminal…</string>
+    <string name="terminal_payment_in_progress">Paiement en cours</string>
+    <string name="terminal_payment_hint">Finalisez le paiement sur le terminal Adyen. Si le terminal ne répond pas, annulez ici pour choisir un autre mode de paiement.</string>
+    <string name="cancel_payment">Annuler le paiement</string>
     <string name="settings">Réglages</string>
     <string name="general_settings">Général</string>
     <string name="currency_settings">Devise</string>

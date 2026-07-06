@@ -53,6 +53,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.withContext
@@ -81,6 +82,7 @@ data class PosUiState(
     val activeTableName: String? = null,
     val kitchenSentToPrinter: Boolean = false,
     val isProcessingPayment: Boolean = false,
+    val waitingForTerminalPayment: Boolean = false,
     val showOpenPriceDialog: Boolean = false,
     val showVariantDialog: Boolean = false,
     val productCustomize: ProductCustomizeState? = null,
@@ -168,6 +170,7 @@ class PosViewModel @Inject constructor(
     private var cachedSettings = BusinessSettingsEntity()
     private val tableOrderMutex = Mutex()
     private var persistTableJob: Job? = null
+    private var checkoutJob: Job? = null
 
     private val _productCustomize = MutableStateFlow<ProductCustomizeState?>(null)
 
@@ -203,6 +206,7 @@ class PosViewModel @Inject constructor(
             activeTableName = bundle.cart.tableName,
             kitchenSentToPrinter = extras.kitchenSentToPrinter,
             isProcessingPayment = extras.isProcessingPayment,
+            waitingForTerminalPayment = extras.waitingForTerminalPayment,
             showOpenPriceDialog = extras.showOpenPriceDialog,
             showVariantDialog = extras.showVariantDialog,
             productCustomize = productCustomize,
@@ -1713,8 +1717,10 @@ class PosViewModel @Inject constructor(
         val payable = cartManager.paymentSnapshot()
         if (payable.isEmpty && !(fullCart.splitCount > 1 && !fullCart.splitByItems)) return
 
-        viewModelScope.launch {
-            updateExtras { it.copy(isProcessingPayment = true, errorMessage = null) }
+        checkoutJob?.cancel()
+        checkoutJob = viewModelScope.launch {
+            updateExtras { it.copy(isProcessingPayment = true, waitingForTerminalPayment = false, errorMessage = null) }
+            try {
             persistTableOrderIfNeeded()
             if (method != PaymentMethod.ADYEN_TERMINAL) {
                 printPendingKitchenForCurrentTable()
@@ -1798,6 +1804,7 @@ class PosViewModel @Inject constructor(
                         settings = settings
                     )
                 }
+                updateExtras { it.copy(waitingForTerminalPayment = true) }
             }
 
             val paymentResult = when (method) {
@@ -1899,6 +1906,7 @@ class PosViewModel @Inject constructor(
                             updateExtras {
                                 it.copy(
                                     isProcessingPayment = false,
+                                    waitingForTerminalPayment = false,
                                     showCheckoutScreen = true,
                                     showOrderComplete = false,
                                     showSplitBillScreen = false,
@@ -1926,6 +1934,7 @@ class PosViewModel @Inject constructor(
                     updateExtras {
                         it.copy(
                             isProcessingPayment = false,
+                            waitingForTerminalPayment = false,
                             showCheckoutScreen = false,
                             showOrderComplete = true,
                             completedTransaction = publishedTx,
@@ -1950,13 +1959,44 @@ class PosViewModel @Inject constructor(
                 is PaymentResult.Failure -> updateExtras {
                     it.copy(
                         isProcessingPayment = false,
+                        waitingForTerminalPayment = false,
                         errorMessage = paymentResult.message,
                         errorTitle = "Payment failed"
                     )
                 }
                 PaymentResult.Cancelled -> updateExtras {
-                    it.copy(isProcessingPayment = false)
+                    it.copy(isProcessingPayment = false, waitingForTerminalPayment = false)
                 }
+            }
+            } catch (e: CancellationException) {
+                updateExtras {
+                    it.copy(isProcessingPayment = false, waitingForTerminalPayment = false)
+                }
+            } catch (e: Exception) {
+                Log.e("POS", "Checkout failed", e)
+                updateExtras {
+                    it.copy(
+                        isProcessingPayment = false,
+                        waitingForTerminalPayment = false,
+                        errorTitle = "Payment error",
+                        errorMessage = e.message ?: "Checkout failed unexpectedly"
+                    )
+                }
+            }
+        }
+    }
+
+    fun cancelTerminalPayment() {
+        adyenTerminalService.cancelActivePayment()
+        checkoutJob?.cancel()
+        viewModelScope.launch {
+            val settings = settingsRepository.getSettings()
+            adyenTerminalService.abortPayment(settings)
+            updateExtras {
+                it.copy(
+                    isProcessingPayment = false,
+                    waitingForTerminalPayment = false
+                )
             }
         }
     }
@@ -2364,6 +2404,7 @@ class PosViewModel @Inject constructor(
 
     private data class PosDialogState(
         val isProcessingPayment: Boolean = false,
+        val waitingForTerminalPayment: Boolean = false,
         val showOpenPriceDialog: Boolean = false,
         val showVariantDialog: Boolean = false,
         val optionGroupPicker: OptionGroupPicker? = null,

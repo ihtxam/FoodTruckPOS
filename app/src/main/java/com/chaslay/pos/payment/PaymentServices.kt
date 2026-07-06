@@ -106,6 +106,14 @@ class AdyenTerminalService @Inject constructor(
         )
         adyenTerminalClient.sendDisplayReceipt(settings, base64)
     }
+
+    fun cancelActivePayment() {
+        adyenTerminalClient.cancelActivePaymentRequest()
+    }
+
+    suspend fun abortPayment(settings: BusinessSettingsEntity) {
+        adyenTerminalClient.abortTerminalPayment(settings)
+    }
 }
 
 @Singleton

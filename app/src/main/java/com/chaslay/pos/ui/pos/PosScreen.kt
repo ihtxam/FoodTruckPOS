@@ -225,6 +225,11 @@ fun PosScreen(
             onNextSplitBill = { viewModel.navigateSplitBill(1) },
             onScanBarcode = { showBarcodeScanner = true }
         )
+        if (state.waitingForTerminalPayment) {
+            TerminalPaymentProgressDialog(
+                onCancel = viewModel::cancelTerminalPayment
+            )
+        }
         if (state.showOrderComplete && state.completedTransaction != null) {
             OrderCompleteDialog(
                 transaction = state.completedTransaction!!,
@@ -2317,6 +2322,35 @@ private fun DiscountDialog(
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+        }
+    )
+}
+
+@Composable
+private fun TerminalPaymentProgressDialog(
+    onCancel: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = {},
+        title = { Text(stringResource(R.string.terminal_payment_in_progress)) },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text(
+                    stringResource(R.string.terminal_payment_hint),
+                    textAlign = TextAlign.Center
+                )
+                CircularProgressIndicator()
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onCancel) {
+                Text(stringResource(R.string.cancel_payment))
+            }
         }
     )
 }

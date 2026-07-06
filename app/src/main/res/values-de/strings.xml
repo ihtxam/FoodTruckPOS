@@ -97,7 +97,10 @@
     <string name="sending">Senden…</string>
     <string name="skip_receipt">Überspringen</string>
     <string name="tap_to_pay">Tippe zum Bezahlen auf Karte oder Telefon.</string>
-    <string name="waiting_terminal">Warten auf Terminal</string>
+    <string name="waiting_terminal">Warten auf Terminal…</string>
+    <string name="terminal_payment_in_progress">Zahlung läuft</string>
+    <string name="terminal_payment_hint">Schliessen Sie die Zahlung am Adyen-Terminal ab. Wenn das Terminal nicht reagiert, hier abbrechen und eine andere Zahlungsart wählen.</string>
+    <string name="cancel_payment">Zahlung abbrechen</string>
     <string name="settings">Einstellungen</string>
     <string name="general_settings">Allgemeine Konfiguration (Common)</string>
     <string name="currency_settings">Währung</string>
