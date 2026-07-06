@@ -290,111 +290,121 @@ private fun RecordsFilterBar(
     onType: (ServiceType?) -> Unit,
     onPayment: (PaymentMethod?) -> Unit
 ) {
+    val scrollState = rememberScrollState()
     Surface(
         shape = RoundedCornerShape(10.dp),
         color = Color.White,
         shadowElevation = 1.dp,
         modifier = Modifier.fillMaxWidth()
     ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(scrollState)
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Text("DATE", fontSize = 10.sp, color = TextMuted, fontWeight = FontWeight.Bold)
-                Text(state.dateRangeLabel, fontSize = 11.sp, color = TextPrimary, fontWeight = FontWeight.SemiBold)
-            }
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                listOf(
-                    HistoryDateFilter.TODAY to stringResource(R.string.today),
-                    HistoryDateFilter.YESTERDAY to stringResource(R.string.yesterday),
-                    HistoryDateFilter.WEEK to "Last Week",
-                    HistoryDateFilter.MONTH to stringResource(R.string.month),
-                    HistoryDateFilter.THREE_MONTHS to "Last 3 Months",
-                    HistoryDateFilter.ALL to stringResource(R.string.all)
-                ).forEach { (filter, label) ->
-                    RecordsTabChip(
-                        label = label,
-                        selected = state.dateFilter == filter,
-                        onClick = { onDate(filter) }
-                    )
-                }
+            FilterSectionLabel("DATE")
+            listOf(
+                HistoryDateFilter.TODAY to stringResource(R.string.today),
+                HistoryDateFilter.YESTERDAY to stringResource(R.string.yesterday),
+                HistoryDateFilter.WEEK to "Week",
+                HistoryDateFilter.MONTH to stringResource(R.string.month),
+                HistoryDateFilter.THREE_MONTHS to "3 Mo",
+                HistoryDateFilter.ALL to stringResource(R.string.all)
+            ).forEach { (filter, label) ->
+                RecordsTabChip(
+                    label = label,
+                    selected = state.dateFilter == filter,
+                    compact = true,
+                    onClick = { onDate(filter) }
+                )
             }
 
-            FilterChipRow(
-                label = "STATUS",
-                options = listOf(null to "All") + PaymentStatus.entries
-                    .filter { it != PaymentStatus.PENDING && it != PaymentStatus.FAILED }
-                    .map { it to it.name.replace('_', ' ') },
-                selected = state.statusFilter,
-                onSelect = onStatus
+            FilterDivider()
+
+            FilterSectionLabel("STATUS")
+            RecordsTabChip(label = "All", selected = state.statusFilter == null, compact = true, onClick = { onStatus(null) })
+            PaymentStatus.entries
+                .filter { it != PaymentStatus.PENDING && it != PaymentStatus.FAILED }
+                .forEach { status ->
+                    RecordsTabChip(
+                        label = statusShortLabel(status),
+                        selected = state.statusFilter == status,
+                        compact = true,
+                        onClick = { onStatus(status) }
+                    )
+                }
+
+            FilterDivider()
+
+            FilterSectionLabel("TYPE")
+            RecordsTabChip(label = "All", selected = state.serviceFilter == null, compact = true, onClick = { onType(null) })
+            RecordsTabChip(
+                label = "Dine In",
+                selected = state.serviceFilter == ServiceType.DINE_IN,
+                compact = true,
+                onClick = { onType(ServiceType.DINE_IN) }
             )
-            FilterChipRow(
-                label = "TYPE",
-                options = listOf(
-                    null to "All",
-                    ServiceType.DINE_IN to "Dine In",
-                    ServiceType.TAKEAWAY to "Takeaway"
-                ),
-                selected = state.serviceFilter,
-                onSelect = onType
+            RecordsTabChip(
+                label = "Takeaway",
+                selected = state.serviceFilter == ServiceType.TAKEAWAY,
+                compact = true,
+                onClick = { onType(ServiceType.TAKEAWAY) }
             )
-            FilterChipRow(
-                label = "PAYMENT",
-                options = listOf(null to "All") + PaymentMethod.entries.map { method ->
-                    method to paymentLabel(method)
-                },
-                selected = state.paymentFilter,
-                onSelect = onPayment
-            )
+
+            FilterDivider()
+
+            FilterSectionLabel("PAY")
+            RecordsTabChip(label = "All", selected = state.paymentFilter == null, compact = true, onClick = { onPayment(null) })
+            PaymentMethod.entries.forEach { method ->
+                RecordsTabChip(
+                    label = paymentShortLabel(method),
+                    selected = state.paymentFilter == method,
+                    compact = true,
+                    onClick = { onPayment(method) }
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun <T> FilterChipRow(
-    label: String,
-    options: List<Pair<T?, String>>,
-    selected: T?,
-    onSelect: (T?) -> Unit
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
-    ) {
-        Text(
-            label,
-            fontSize = 10.sp,
-            color = TextMuted,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.width(56.dp)
-        )
-        Row(
-            modifier = Modifier
-                .weight(1f)
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            options.forEach { (value, text) ->
-                RecordsTabChip(
-                    label = text,
-                    selected = selected == value,
-                    compact = true,
-                    onClick = { onSelect(value) }
-                )
-            }
-        }
-    }
+private fun FilterSectionLabel(text: String) {
+    Text(
+        text,
+        fontSize = 9.sp,
+        color = TextMuted,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.padding(start = 2.dp, end = 2.dp)
+    )
+}
+
+@Composable
+private fun FilterDivider() {
+    Box(
+        modifier = Modifier
+            .height(20.dp)
+            .width(1.dp)
+            .background(Color(0xFFE5E7EB))
+    )
+}
+
+private fun statusShortLabel(status: PaymentStatus): String = when (status) {
+    PaymentStatus.COMPLETED -> "Done"
+    PaymentStatus.REFUNDED -> "Refund"
+    PaymentStatus.CANCELLED -> "Cancel"
+    PaymentStatus.PARTIALLY_REFUNDED -> "Part"
+    else -> status.name.take(6)
+}
+
+private fun paymentShortLabel(method: PaymentMethod): String = when (method) {
+    PaymentMethod.CASH -> "Cash"
+    PaymentMethod.CARD -> "Card"
+    PaymentMethod.TAP_TO_PAY -> "Tap"
+    PaymentMethod.ADYEN_TERMINAL -> "Term"
+    PaymentMethod.PAY_LATER -> "Later"
 }
 
 @Composable
@@ -684,6 +694,15 @@ private fun OrderDetailDialog(
                         Text("$discountLabel: -${formatMoney(orderDiscount, currencySymbol)}")
                     }
                     Text("Total: ${formatMoney(order.total, currencySymbol)}", fontWeight = FontWeight.Bold)
+                    if (order.paymentStatus == PaymentStatus.CANCELLED) {
+                        order.cancelReason?.takeIf { it.isNotBlank() }?.let { reason ->
+                            Text(
+                                "${stringResource(R.string.cancel_reason)}: $reason",
+                                color = Color(0xFFDC2626),
+                                fontSize = 13.sp
+                            )
+                        }
+                    }
                 }
             }
         },

@@ -14,7 +14,8 @@ data class ReceiptPrintContext(
     val paymentMethod: PaymentMethod? = null,
     val amountPaid: Double? = null,
     val staffName: String = "Staff",
-    val sourceLabel: String = "POS"
+    val sourceLabel: String = "POS",
+    val isProvisional: Boolean = paymentMethod == null
 )
 
 object ReceiptVatCalculator {

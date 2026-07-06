@@ -1,10 +1,13 @@
 package com.chaslay.pos.data.local
 
+import android.content.Context
 import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
 import java.security.MessageDigest
 
-class DatabaseCallback : RoomDatabase.Callback() {
+class DatabaseCallback(
+    private val context: Context
+) : RoomDatabase.Callback() {
     override fun onCreate(db: SupportSQLiteDatabase) {
         super.onCreate(db)
         seedAll(db)
@@ -12,8 +15,11 @@ class DatabaseCallback : RoomDatabase.Callback() {
 
     override fun onOpen(db: SupportSQLiteDatabase) {
         super.onOpen(db)
+        wipeLegacyOrderDataIfNeeded(db)
         if (count(db, "categories") == 0L || count(db, "products") == 0L) {
-            seedCatalog(db)
+            SushiSakeCatalogSeeder.seed(db)
+        } else if (SushiSakeCatalogSeeder.isDemoCatalog(db)) {
+            SushiSakeCatalogSeeder.replaceCatalog(db)
         }
         if (count(db, "roles") == 0L) {
             seedRoles(db)
@@ -56,7 +62,7 @@ class DatabaseCallback : RoomDatabase.Callback() {
         seedUsers(db)
         seedSettings(db)
         seedTables(db)
-        seedCatalog(db)
+        SushiSakeCatalogSeeder.seed(db)
         seedDiscountPresets(db)
         seedCancelReasons(db)
         seedCustomers(db)
@@ -122,12 +128,12 @@ class DatabaseCallback : RoomDatabase.Callback() {
                 dineInVatRate, takeawayVatRate, defaultServiceType, posMode,
                 receiptBaseUrl, receiptHeader, receiptFooter, kitchenTicketHeader, kitchenTicketFooter
             ) VALUES (
-                1, '${q("Demo Restaurant")}', 'CHE-123.456.789', '${q("Main Street 1")}', '+41 44 000 00 00', 'demo@restaurant.local', '',
-                'CHF', 'CHF', 'en',
+                1, '${q("Sushi Sake")}', '', '${q("17 Rue Cheneau-de-Bourg, 1003 Lausanne")}', '+41 79 621 39 37', 'noreply@chaslay.com', '',
+                'CHF', 'CHF', 'fr',
                 0, 0, '', '', '',
                 8.1, 2.6, 'TAKEAWAY', 'RESTAURANT',
                 'https://pay.chaslay.com/receipts',
-                '${q("Demo Restaurant")}', '${q("Merci / Thank you!")}', '', ''
+                '${q("Sushi Sake")}', '${q("Merci!")}', '', ''
             )
             """.trimIndent()
         )
@@ -195,92 +201,18 @@ class DatabaseCallback : RoomDatabase.Callback() {
         }
     }
 
-    private fun seedCatalog(db: SupportSQLiteDatabase) {
-        val now = System.currentTimeMillis()
-        val categories = listOf(
-            Triple("Soup", "#4ECDC4", "KITCHEN"),
-            Triple("Starters", "#E8923A", "KITCHEN"),
-            Triple("Salads", "#5B9BD5", "KITCHEN"),
-            Triple("Vegetables", "#6B8E6B", "KITCHEN"),
-            Triple("Fish", "#2E86AB", "KITCHEN"),
-            Triple("Meat", "#C0392B", "KITCHEN"),
-            Triple("Snacks", "#F39C12", "KITCHEN"),
-            Triple("Dish of the day", "#9B59B6", "KITCHEN"),
-            Triple("Desserts", "#C75B9E", "KITCHEN"),
-            Triple("Drinks", "#3498DB", "POS")
-        )
-        categories.forEachIndexed { index, (name, color, target) ->
-            val id = index + 1L
-            db.execSQL(
-                """
-                INSERT OR IGNORE INTO categories (id, name, sortOrder, isActive, colorHex, onlineVisible, printTarget, updatedAt)
-                VALUES ($id, '${q(name)}', $index, 1, '${q(color)}', 1, '$target', $now)
-                """.trimIndent()
-            )
-        }
-
-        val products = listOf(
-            Triple(1L, "Chicken broth", 5.50),
-            Triple(1L, "Tomato soup", 4.50),
-            Triple(1L, "Vegetable soup", 4.50),
-            Triple(2L, "Carpaccio", 12.90),
-            Triple(2L, "Bruschetta", 8.50),
-            Triple(2L, "Antipasti", 9.50),
-            Triple(3L, "Mixed salad", 8.50),
-            Triple(3L, "Salad small", 4.50),
-            Triple(3L, "Salad large", 7.50),
-            Triple(3L, "Caesar's salad", 9.90),
-            Triple(4L, "Seasonal vegetables", 6.50),
-            Triple(4L, "Grilled vegetables", 7.50),
-            Triple(5L, "Salmon fillet", 18.90),
-            Triple(5L, "Fish & chips", 14.50),
-            Triple(5L, "Fish of the day", 17.50),
-            Triple(6L, "Burger Classic", 12.50),
-            Triple(6L, "Steak", 24.90),
-            Triple(6L, "Schnitzel", 16.50),
-            Triple(6L, "Vegetable lasagne", 14.90),
-            Triple(7L, "French fries", 4.50),
-            Triple(7L, "Onion rings", 5.00),
-            Triple(7L, "Nachos", 6.50),
-            Triple(8L, "Chef special", 15.90),
-            Triple(9L, "Tiramisu", 6.50),
-            Triple(9L, "Chocolate brownie", 5.50),
-            Triple(9L, "Ice cream", 4.50),
-            Triple(10L, "Coke small", 3.50),
-            Triple(10L, "Coke large", 4.50),
-            Triple(10L, "Lemonade small", 3.50),
-            Triple(10L, "Soda small", 3.00),
-            Triple(10L, "Espresso", 2.00),
-            Triple(10L, "Cappuccino", 3.50),
-            Triple(10L, "Bitter small", 4.00),
-            Triple(10L, "Bitter large", 5.50),
-            Triple(10L, "Gin Tonic", 8.50),
-            Triple(10L, "Lager small", 4.50),
-            Triple(10L, "Sparkling water", 3.50)
-        )
-        products.forEachIndexed { index, (categoryId, name, price) ->
-            insertProduct(db, categoryId, name, price, 2.6, index + 1, now)
-        }
-        insertProduct(db, 8L, "Divers", 0.0, 2.6, 100, now, openPrice = true)
-        insertProduct(db, 9L, "Donation", 0.0, 0.0, 101, now, openPrice = true)
-    }
-
-    private fun insertProduct(
-        db: SupportSQLiteDatabase,
-        categoryId: Long,
-        name: String,
-        price: Double,
-        taxRate: Double,
-        sortOrder: Int,
-        timestamp: Long,
-        openPrice: Boolean = false
-    ) {
-        db.execSQL(
-            """
-            INSERT INTO products (name, categoryId, taxRate, price, isActive, onlineVisible, isOpenPrice, sortOrder, stockQuantity, lowStockThreshold, createdAt, updatedAt, printTarget)
-            VALUES ('${q(name)}', $categoryId, $taxRate, $price, 1, 1, ${if (openPrice) 1 else 0}, $sortOrder, ${if (openPrice) "NULL" else "50"}, ${if (openPrice) "NULL" else "5"}, $timestamp, $timestamp, NULL)
-            """.trimIndent()
-        )
+    /** One-time wipe so client handoff builds start without demo sales history. */
+    private fun wipeLegacyOrderDataIfNeeded(db: SupportSQLiteDatabase) {
+        val prefs = context.getSharedPreferences("pos_migrations", Context.MODE_PRIVATE)
+        if (prefs.getBoolean("client_order_wipe_v2", false)) return
+        db.execSQL("DELETE FROM transaction_items")
+        db.execSQL("DELETE FROM transactions")
+        db.execSQL("DELETE FROM kitchen_messages")
+        db.execSQL("DELETE FROM table_order_items")
+        db.execSQL("DELETE FROM table_orders")
+        db.execSQL("DELETE FROM held_order_items")
+        db.execSQL("DELETE FROM held_orders")
+        prefs.edit().putBoolean("client_order_wipe_v2", true).apply()
     }
 
     private fun q(value: String): String = value.replace("'", "''")

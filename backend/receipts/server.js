@@ -8,7 +8,7 @@ import { renderReceiptPage } from './lib/receiptHtml.js';
 
 const app = express();
 const port = Number(process.env.PORT || 8080);
-const apiKey = process.env.API_KEY || '';
+const apiKey = (process.env.API_KEY || '').trim();
 const publicBase = (process.env.PUBLIC_RECEIPT_BASE_URL || 'https://pay.chaslay.com/receipts').replace(/\/$/, '');
 const storage = createReceiptStorage(process.env.RECEIPTS_DATA_DIR || './data/receipts');
 
@@ -18,7 +18,7 @@ app.use(express.json({ limit: '1mb' }));
 
 function requireApiKey(req, res, next) {
   if (!apiKey) return next();
-  const provided = req.header('X-Api-Key') || req.header('x-api-key');
+  const provided = (req.header('X-Api-Key') || req.header('x-api-key') || '').trim();
   if (provided !== apiKey) {
     return res.status(401).json({ error: 'Unauthorized' });
   }

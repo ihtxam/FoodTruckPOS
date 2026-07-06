@@ -182,6 +182,9 @@ interface TransactionDao {
     @Query("SELECT * FROM transactions WHERE id = :id LIMIT 1")
     suspend fun getById(id: String): TransactionEntity?
 
+    @Query("UPDATE transactions SET receiptUrl = :url WHERE id = :id")
+    suspend fun updateReceiptUrl(id: String, url: String)
+
     @Query(
         """
         SELECT * FROM transactions
@@ -232,6 +235,19 @@ interface TransactionDao {
         """
     )
     suspend fun getTopProducts(startOfDay: Long, endOfDay: Long, limit: Int = 10): List<ProductSalesRow>
+
+    @Query(
+        """
+        SELECT ti.productName, SUM(ti.quantity) as qty, SUM(ti.lineTotal) as revenue
+        FROM transaction_items ti
+        INNER JOIN transactions t ON t.id = ti.transactionId
+        WHERE t.createdAt >= :startMs AND t.createdAt < :endMs
+        AND t.paymentStatus = 'COMPLETED'
+        GROUP BY ti.productName
+        ORDER BY qty DESC, ti.productName ASC
+        """
+    )
+    suspend fun getProductsSold(startMs: Long, endMs: Long): List<ProductSalesRow>
 
     @Query(
         """
@@ -398,6 +414,9 @@ interface TableOrderDao {
 
     @Query("DELETE FROM table_orders")
     suspend fun deleteAll()
+
+    @Query("DELETE FROM table_orders WHERE id = :id")
+    suspend fun deleteById(id: String)
 
     @Query(
         """

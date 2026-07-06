@@ -27,7 +27,7 @@ export function renderReceiptPage(receipt) {
       return `
         <div class="item">
           <div class="item-top">
-            <span>${item.quantity}� ${escapeHtml(label)}</span>
+            <span>${item.quantity}&times; ${escapeHtml(label)}</span>
             <strong>${money(receipt.currency, item.line_subtotal ?? item.line_total)}</strong>
           </div>
           ${discountRow}
@@ -63,7 +63,7 @@ export function renderReceiptPage(receipt) {
     <h1>${escapeHtml(receipt.business_name)}</h1>
     <div class="meta">
       Receipt #${escapeHtml(receipt.transaction_number)}<br>
-      ${escapeHtml(created)} � ${escapeHtml(receipt.payment_method)}
+      ${escapeHtml(created)} &middot; ${escapeHtml(receipt.payment_method)}
     </div>
     ${itemRows}
     <div class="summary">

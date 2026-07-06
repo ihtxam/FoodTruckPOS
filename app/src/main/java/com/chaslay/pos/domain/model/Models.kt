@@ -161,6 +161,24 @@ fun resolveVatRate(productTaxRate: Double, serviceType: ServiceType, settings: c
     }
 }
 
+fun computeLineTax(lineSubtotal: Double, taxRate: Double, vatIncludedInPrice: Boolean): Double {
+    if (taxRate <= 0.0 || lineSubtotal <= 0.0) return 0.0
+    return if (vatIncludedInPrice) {
+        roundMoney(lineSubtotal - lineSubtotal / (1.0 + taxRate / 100.0))
+    } else {
+        roundMoney(lineSubtotal * (taxRate / 100.0))
+    }
+}
+
+fun computeLineTotal(lineSubtotal: Double, taxRate: Double, vatIncludedInPrice: Boolean): Double {
+    if (lineSubtotal <= 0.0) return 0.0
+    return if (vatIncludedInPrice) {
+        roundMoney(lineSubtotal)
+    } else {
+        roundMoney(lineSubtotal + computeLineTax(lineSubtotal, taxRate, false))
+    }
+}
+
 data class CartItem(
     val id: String,
     val productId: Long,
@@ -178,13 +196,14 @@ data class CartItem(
     val sentToKitchen: Boolean = false,
     val splitCheck: Int = 1,
     val modifiers: List<SelectedModifier> = emptyList(),
-    val addons: List<SelectedAddon> = emptyList()
+    val addons: List<SelectedAddon> = emptyList(),
+    val vatIncludedInPrice: Boolean = false
 ) {
     val catalogUnitPrice: Double get() = originalUnitPrice ?: unitPrice
     val lineSubtotal: Double get() = unitPrice * quantity
     val lineDiscount: Double get() = lineDiscountPerUnit * quantity
-    val lineTax: Double get() = lineSubtotal * (taxRate / 100.0)
-    val lineTotal: Double get() = lineSubtotal + lineTax
+    val lineTax: Double get() = computeLineTax(lineSubtotal, taxRate, vatIncludedInPrice)
+    val lineTotal: Double get() = computeLineTotal(lineSubtotal, taxRate, vatIncludedInPrice)
 
     fun optionNotes(): String? {
         val lines = mutableListOf<String>()
@@ -218,7 +237,8 @@ data class CartSummary(
     val courseCount: Int = 1,
     val splitCount: Int = 1,
     val splitByItems: Boolean = false,
-    val activeSplitCheck: Int = 1
+    val activeSplitCheck: Int = 1,
+    val vatIncludedInPrice: Boolean = false
 ) {
     val visibleItems: List<CartItem>
         get() = if (splitByItems && splitCount > 1) {
@@ -226,11 +246,16 @@ data class CartSummary(
         } else items
 
     val displayTotal: Double
-        get() = if (splitByItems && splitCount > 1) {
-            CartSummary(items = visibleItems).total
-        } else if (splitCount > 1) {
-            total / splitCount
-        } else total
+        get() = when {
+            splitByItems && splitCount > 1 -> CartSummary(
+                items = visibleItems,
+                discountPercent = discountPercent,
+                discountAmount = discountAmount,
+                vatIncludedInPrice = vatIncludedInPrice
+            ).total
+            splitCount > 1 -> total / splitCount
+            else -> total
+        }
 
     val fullTotal: Double get() = total
     val subtotal: Double get() = items.sumOf { it.catalogUnitPrice * it.quantity }
@@ -243,8 +268,27 @@ data class CartSummary(
             else -> 0.0
         }
     val total: Double
-        get() = (subtotal + taxTotal - itemDiscountTotal - discountValue).coerceAtLeast(0.0)
+        get() = if (vatIncludedInPrice) {
+            (subtotal - itemDiscountTotal - discountValue).coerceAtLeast(0.0)
+        } else {
+            (subtotal + taxTotal - itemDiscountTotal - discountValue).coerceAtLeast(0.0)
+        }
     val isEmpty: Boolean get() = items.isEmpty()
+
+    /** Amount due for products before tip and cash rounding. */
+    fun merchandiseTotal(checkoutDiscountPercent: Double = 0.0): Double {
+        val netSubtotal = subtotal - itemDiscountTotal
+        val discount = if (checkoutDiscountPercent > 0) {
+            netSubtotal * (checkoutDiscountPercent / 100.0)
+        } else {
+            discountValue
+        }
+        return if (vatIncludedInPrice) {
+            roundMoney((netSubtotal - discount).coerceAtLeast(0.0))
+        } else {
+            roundMoney((netSubtotal + taxTotal - discount).coerceAtLeast(0.0))
+        }
+    }
 }
 
 data class ProductWithVariants(
@@ -453,7 +497,8 @@ data class EndOfDayReport(
     val dineInTotal: Double,
     val dineInCount: Int,
     val takeawayTotal: Double,
-    val takeawayCount: Int
+    val takeawayCount: Int,
+    val productsSold: List<ProductSalesReport> = emptyList()
 )
 
 data class DiscountPreset(

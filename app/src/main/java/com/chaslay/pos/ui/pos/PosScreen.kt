@@ -32,7 +32,7 @@ import androidx.compose.material.icons.automirrored.filled.CallSplit
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.foundation.layout.heightIn
@@ -61,6 +61,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -369,7 +370,13 @@ fun PosScreen(
                         onKeypadEnter = viewModel::onKeypadEnter,
                         onKeypadModeChange = viewModel::setKeypadMode,
                         onKeypadExpandedChange = viewModel::setKeypadExpanded,
-                        onPrintProvisional = viewModel::printProvisionalReceipt,
+                        onPrintReceipt = viewModel::printProvisionalReceipt,
+                        onPrintKitchen = viewModel::printKitchenTicket,
+                        onAddCustomer = viewModel::showAttachCustomerDialog,
+                        onChangeOrderType = viewModel::toggleCartOrderType,
+                        onCancelOrder = viewModel::showCartCancelDialog,
+                        canCancelOrder = state.canCancelCartOrder,
+                        serviceType = state.cart.serviceType,
                         onSendActiveCourse = viewModel::sendActiveCourseToKitchen,
                         onSendAllCourses = viewModel::sendAllCoursesToKitchen,
                         onAddCourse = viewModel::addCourse,
@@ -436,6 +443,25 @@ fun PosScreen(
             presets = state.kitchenMessagePresets,
             onSend = viewModel::sendKitchenMessage,
             onDismiss = viewModel::dismissKitchenMessageDialog
+        )
+    }
+
+    if (state.showAttachCustomerDialog) {
+        ChooseCustomerDialog(
+            customers = state.deliveryCustomers,
+            title = stringResource(R.string.add_customer),
+            onSearch = viewModel::searchDeliveryCustomers,
+            onCreateCustomer = viewModel::createDeliveryCustomer,
+            onSelectCustomer = viewModel::attachCustomerToCart,
+            onDismiss = viewModel::dismissAttachCustomerDialog
+        )
+    }
+
+    if (state.showCartCancelDialog) {
+        CartCancelOrderDialog(
+            reasons = state.cartCancelReasons,
+            onDismiss = viewModel::dismissCartCancelDialog,
+            onConfirm = viewModel::confirmCancelCartOrder
         )
     }
 
@@ -878,7 +904,13 @@ private fun VectronOrderPanel(
     onKeypadEnter: () -> Unit,
     onKeypadModeChange: (KeypadMode) -> Unit,
     onKeypadExpandedChange: (Boolean) -> Unit,
-    onPrintProvisional: () -> Unit,
+    onPrintReceipt: () -> Unit,
+    onPrintKitchen: () -> Unit,
+    onAddCustomer: () -> Unit,
+    onChangeOrderType: () -> Unit,
+    onCancelOrder: () -> Unit,
+    canCancelOrder: Boolean,
+    serviceType: ServiceType,
     onSendActiveCourse: () -> Unit,
     onSendAllCourses: () -> Unit,
     onAddCourse: () -> Unit,
@@ -957,27 +989,34 @@ private fun VectronOrderPanel(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(Color(0xFFF2F2F2), RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp))
-                .padding(horizontal = 10.dp, vertical = 6.dp),
+                .padding(horizontal = 6.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(stringResource(R.string.receipt), color = Color(0xFF333333), fontWeight = FontWeight.Bold, fontSize = 14.sp)
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (!cart.isEmpty) {
-                    IconButton(onClick = onPrintProvisional, modifier = Modifier.size(32.dp)) {
-                        Icon(
-                            Icons.Default.Print,
-                            contentDescription = stringResource(R.string.provisional_receipt),
-                            tint = Color(0xFF2E6DB4),
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                }
+            CartOrderMenuButton(
+                enabled = !cart.isEmpty,
+                isDineIn = activeTableName != null || serviceType == ServiceType.DINE_IN,
+                canCancelOrder = canCancelOrder,
+                onPrintReceipt = onPrintReceipt,
+                onPrintKitchen = onPrintKitchen,
+                onAddCustomer = onAddCustomer,
+                onChangeOrderType = onChangeOrderType,
+                onCancelOrder = onCancelOrder
+            )
+            Column(horizontalAlignment = Alignment.End) {
+                Text(stringResource(R.string.receipt), color = Color(0xFF333333), fontWeight = FontWeight.Bold, fontSize = 14.sp)
                 Text(
-                    text = if (activeTableName != null) stringResource(R.string.dine_in) else stringResource(R.string.take_away_delivery),
+                    text = when {
+                        activeTableName != null -> activeTableName
+                        serviceType == ServiceType.DINE_IN -> stringResource(R.string.dine_in)
+                        else -> stringResource(R.string.take_away)
+                    },
                     color = Color(0xFF666666),
                     fontSize = 11.sp
                 )
+                cart.deliveryName?.takeIf { it.isNotBlank() }?.let { name ->
+                    Text(name, color = Color(0xFF666666), fontSize = 10.sp, maxLines = 1)
+                }
             }
         }
 
@@ -1171,6 +1210,117 @@ private fun FulfillmentInfoBar(cart: com.chaslay.pos.domain.model.CartSummary) {
             )
         }
     }
+}
+
+@Composable
+private fun CartOrderMenuButton(
+    enabled: Boolean,
+    isDineIn: Boolean,
+    canCancelOrder: Boolean,
+    onPrintReceipt: () -> Unit,
+    onPrintKitchen: () -> Unit,
+    onAddCustomer: () -> Unit,
+    onChangeOrderType: () -> Unit,
+    onCancelOrder: () -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        IconButton(
+            onClick = { if (enabled) expanded = true },
+            enabled = enabled,
+            modifier = Modifier.size(36.dp)
+        ) {
+            Icon(
+                Icons.Default.Menu,
+                contentDescription = stringResource(R.string.cart_order_menu),
+                tint = if (enabled) Color(0xFF333333) else Color(0xFFBBBBBB)
+            )
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.print_receipt)) },
+                onClick = {
+                    expanded = false
+                    onPrintReceipt()
+                }
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.print_kitchen_ticket)) },
+                onClick = {
+                    expanded = false
+                    onPrintKitchen()
+                }
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.add_customer)) },
+                onClick = {
+                    expanded = false
+                    onAddCustomer()
+                }
+            )
+            DropdownMenuItem(
+                text = {
+                    Text(
+                        if (isDineIn) stringResource(R.string.switch_to_takeaway)
+                        else stringResource(R.string.switch_to_dine_in)
+                    )
+                },
+                onClick = {
+                    expanded = false
+                    onChangeOrderType()
+                }
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.cancel_order), color = Color(0xFFC0392B)) },
+                onClick = {
+                    expanded = false
+                    onCancelOrder()
+                },
+                enabled = canCancelOrder
+            )
+        }
+    }
+}
+
+@Composable
+private fun CartCancelOrderDialog(
+    reasons: List<String>,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var selected by remember(reasons) { mutableStateOf(reasons.firstOrNull().orEmpty()) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.cancel_order)) },
+        text = {
+            Column {
+                Text(stringResource(R.string.cancel_order_reason_prompt), fontSize = 13.sp)
+                Spacer(modifier = Modifier.height(8.dp))
+                reasons.forEach { reason ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { selected = reason }
+                    ) {
+                        RadioButton(selected = selected == reason, onClick = { selected = reason })
+                        Text(reason)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onConfirm(selected) }, enabled = selected.isNotBlank()) {
+                Text(stringResource(R.string.confirm))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+        }
+    )
 }
 
 @Composable
@@ -2195,8 +2345,15 @@ private fun PaymentSummaryDialog(
                 } else if (splitCount > 1) {
                     Text(stringResource(R.string.split_each, splitCount, formatMoney(cart.total / splitCount, currencySymbol)))
                 }
-                SummaryRow(stringResource(R.string.subtotal), formatMoney(cart.subtotal, currencySymbol))
-                SummaryRow(stringResource(R.string.tax), formatMoney(cart.taxTotal, currencySymbol))
+                if (!cart.vatIncludedInPrice) {
+                    SummaryRow(stringResource(R.string.subtotal), formatMoney(cart.subtotal, currencySymbol))
+                    SummaryRow(stringResource(R.string.tax), formatMoney(cart.taxTotal, currencySymbol))
+                } else {
+                    SummaryRow(
+                        stringResource(R.string.tax_included_in_total),
+                        formatMoney(cart.taxTotal, currencySymbol)
+                    )
+                }
                 SummaryRow(stringResource(R.string.total), formatMoney(cart.total, currencySymbol), bold = true)
                 method?.let {
                     Text(
@@ -2531,6 +2688,7 @@ private fun TakeoutScheduleDialog(
 @Composable
 private fun ChooseCustomerDialog(
     customers: List<CustomerEntity>,
+    title: String = stringResource(R.string.choose_customer),
     onSearch: (String) -> Unit,
     onCreateCustomer: (String, String, String, String, String, (CustomerEntity) -> Unit) -> Unit,
     onSelectCustomer: (CustomerEntity) -> Unit,
@@ -2568,7 +2726,7 @@ private fun ChooseCustomerDialog(
                         Text(stringResource(R.string.create_customer))
                     }
                     Text(
-                        stringResource(R.string.choose_customer),
+                        title,
                         modifier = Modifier.weight(1f),
                         textAlign = TextAlign.Center,
                         fontWeight = FontWeight.Bold,

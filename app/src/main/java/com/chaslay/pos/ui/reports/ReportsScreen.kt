@@ -227,6 +227,18 @@ private fun EndOfDayTab(report: EndOfDayReport, currency: String, onPrint: () ->
         report.orderTypeRows.forEach { row ->
             ReportRow(row.label, "${row.count} · ${"%.1f".format(row.percent)}% · ${formatMoney(row.amount, currency)}")
         }
+
+        if (report.productsSold.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(stringResource(R.string.products_sold).uppercase(), fontWeight = FontWeight.Bold)
+            ReportRow(
+                stringResource(R.string.total_products_sold),
+                report.productsSold.sumOf { it.quantitySold }.toString()
+            )
+            report.productsSold.forEach { product ->
+                ReportRow(product.productName, product.quantitySold.toString())
+            }
+        }
     }
 }
 

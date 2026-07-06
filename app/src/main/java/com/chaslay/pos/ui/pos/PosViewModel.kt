@@ -9,6 +9,7 @@ import com.chaslay.pos.data.local.entity.CustomerEntity
 import com.chaslay.pos.data.local.entity.CategoryEntity
 import com.chaslay.pos.data.local.entity.ProductEntity
 import com.chaslay.pos.data.local.entity.TransactionEntity
+import com.chaslay.pos.data.local.entity.TransactionItemEntity
 import com.chaslay.pos.data.preferences.SessionManager
 import com.chaslay.pos.data.repository.CartManager
 import com.chaslay.pos.data.repository.MenuRepository
@@ -126,7 +127,11 @@ data class PosUiState(
     val showSplitDialog: Boolean = false,
     val equalSplitPaidCount: Int = 0,
     val splitPaymentIndex: Int? = null,
-    val splitPaymentTotal: Int? = null
+    val splitPaymentTotal: Int? = null,
+    val showCartCancelDialog: Boolean = false,
+    val cartCancelReasons: List<String> = emptyList(),
+    val showAttachCustomerDialog: Boolean = false,
+    val canCancelCartOrder: Boolean = false
 ) {
     val kitchenMessagePresets: List<KitchenMessagePreset> = listOf(
         KitchenMessagePreset("Bring next dish", "Bring next dish"),
@@ -244,11 +249,20 @@ class PosViewModel @Inject constructor(
             showSplitDialog = extras.showSplitDialog,
             equalSplitPaidCount = extras.equalSplitPaidCount,
             splitPaymentIndex = extras.splitPaymentIndex,
-            splitPaymentTotal = extras.splitPaymentTotal
+            splitPaymentTotal = extras.splitPaymentTotal,
+            showCartCancelDialog = extras.showCartCancelDialog,
+            cartCancelReasons = extras.cartCancelReasons,
+            showAttachCustomerDialog = extras.showAttachCustomerDialog,
+            canCancelCartOrder = extras.orderCommittedForCancel
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), PosUiState())
 
     init {
+        viewModelScope.launch {
+            settingsRepository.observeSettings().collect { settings ->
+                cartManager.setVatIncludedInPrice(settings.vatIncludedInPrice)
+            }
+        }
         viewModelScope.launch {
             settingsRepository.observeDiscountPresets().collect { presets ->
                 _discountPresets.value = presets
@@ -317,16 +331,19 @@ class PosViewModel @Inject constructor(
                 serviceType = ServiceType.DINE_IN,
                 items = items,
                 discountPercent = order.discountPercent,
-                discountAmount = order.discountAmount
+                discountAmount = order.discountAmount,
+                vatIncludedInPrice = cachedSettings.vatIncludedInPrice
             )
             val sentFlags = tableOrderRepository.getOrderItemEntities(order.id)
                 .associate { it.id to (it.sentToKitchenAt != null) }
             cartManager.refreshSentFlags(sentFlags)
             applyServiceTypeRates(ServiceType.DINE_IN)
+            val hasSentKitchen = items.any { it.sentToKitchen }
             updateExtras {
                 it.copy(
                     showTablePicker = false,
-                    kitchenSentToPrinter = order.lastSentAt != null
+                    kitchenSentToPrinter = order.lastSentAt != null,
+                    orderCommittedForCancel = hasSentKitchen || order.lastSentAt != null
                 )
             }
             refreshTables()
@@ -338,7 +355,7 @@ class PosViewModel @Inject constructor(
             persistTableOrderIfNeeded()
             cartManager.clear()
             refreshTables()
-            updateExtras { it.copy(showTablePicker = false, kitchenSentToPrinter = false) }
+            updateExtras { it.copy(showTablePicker = false, kitchenSentToPrinter = false, orderCommittedForCancel = false) }
         }
     }
 
@@ -347,7 +364,7 @@ class PosViewModel @Inject constructor(
             persistTableOrderIfNeeded()
             cartManager.clear()
             refreshTables()
-            updateExtras { it.copy(kitchenSentToPrinter = false) }
+            updateExtras { it.copy(kitchenSentToPrinter = false, orderCommittedForCancel = false) }
         }
     }
 
@@ -805,6 +822,7 @@ class PosViewModel @Inject constructor(
                     updateExtras {
                         it.copy(
                             kitchenSentToPrinter = true,
+                            orderCommittedForCancel = true,
                             snackbarMessage = "Sent ${unsent.size} item(s) to kitchen",
                             selectedCartItemId = null,
                             keypadBuffer = ""
@@ -879,6 +897,7 @@ class PosViewModel @Inject constructor(
                 ).onSuccess {
                     updateExtras {
                         it.copy(
+                            orderCommittedForCancel = true,
                             snackbarMessage = "Course $courseNumber fired to kitchen",
                             selectedCartItemId = null,
                             keypadBuffer = ""
@@ -926,6 +945,9 @@ class PosViewModel @Inject constructor(
                         }
                     }
                 }.onFailure { e -> Log.e("HOLD_ORDER", "Kitchen print during hold failed", e) }
+                if (sendToKitchen) {
+                    updateExtras { it.copy(orderCommittedForCancel = true) }
+                }
             }
 
             // 2. Ensure table order is persisted + marked HELD (best effort)
@@ -1020,6 +1042,7 @@ class PosViewModel @Inject constructor(
                             item.id to (item.sentToKitchen || unsent.any { it.id == item.id })
                         }
                     )
+                    updateExtras { it.copy(orderCommittedForCancel = true) }
                 }
                 .onFailure { e -> Log.e("KITCHEN_SEND", "Walk-in kitchen print on sale failed", e) }
             return
@@ -1062,6 +1085,7 @@ class PosViewModel @Inject constructor(
             val sentFlags = tableOrderRepository.getOrderItemEntities(orderId)
                 .associate { it.id to (it.sentToKitchenAt != null) }
             cartManager.refreshSentFlags(sentFlags)
+            updateExtras { it.copy(orderCommittedForCancel = true) }
         }
     }
 
@@ -1301,6 +1325,125 @@ class PosViewModel @Inject constructor(
         }
     }
 
+    fun printKitchenTicket() {
+        viewModelScope.launch {
+            val cart = cartManager.snapshot()
+            if (cart.isEmpty) {
+                showError("Print", "Add items before printing")
+                return@launch
+            }
+            runCatching {
+                withContext(Dispatchers.IO) { printWalkInKitchenTicket(cart) }
+            }.onSuccess {
+                updateExtras { it.copy(orderCommittedForCancel = true) }
+            }.onFailure { e -> showError("Print", e.message ?: "Kitchen print failed") }
+        }
+    }
+
+    fun showAttachCustomerDialog() {
+        viewModelScope.launch {
+            val customers = customerRepository.getAll()
+            updateExtras {
+                it.copy(showAttachCustomerDialog = true, deliveryCustomers = customers)
+            }
+        }
+    }
+
+    fun dismissAttachCustomerDialog() = updateExtras { it.copy(showAttachCustomerDialog = false) }
+
+    fun attachCustomerToCart(customer: CustomerEntity) {
+        cartManager.setCustomerInfo(
+            name = customer.name,
+            phone = customer.phone,
+            email = customer.email,
+            address = customer.address,
+            zip = customer.zip
+        )
+        updateExtras {
+            it.copy(
+                showAttachCustomerDialog = false,
+                snackbarMessage = customer.name
+            )
+        }
+    }
+
+    fun toggleCartOrderType() {
+        val cart = cartManager.snapshot()
+        if (cart.tableId != null) {
+            viewModelScope.launch {
+                val items = cart.items.map { it.copy(sentToKitchen = false) }
+                cart.tableOrderId?.let { tableOrderRepository.voidOpenOrder(it, "Converted to takeaway") }
+                cartManager.clear()
+                applyServiceTypeRates(ServiceType.TAKEAWAY)
+                cartManager.setPickupOrder(suggestOrderNumber(), null)
+                items.forEach { cartManager.addItem(it) }
+                refreshTables()
+                updateExtras { it.copy(snackbarMessage = "Switched to takeaway") }
+            }
+            return
+        }
+        when (cart.serviceType) {
+            ServiceType.TAKEAWAY -> {
+                if (isRestaurantMode()) {
+                    refreshTables()
+                    updateExtras { it.copy(showTablePicker = true) }
+                } else {
+                    setServiceType(ServiceType.DINE_IN)
+                    updateExtras { it.copy(snackbarMessage = "Switched to dine-in") }
+                }
+            }
+            ServiceType.DINE_IN -> {
+                setServiceType(ServiceType.TAKEAWAY)
+                updateExtras { it.copy(snackbarMessage = "Switched to takeaway") }
+            }
+        }
+    }
+
+    fun showCartCancelDialog() {
+        if (cartManager.snapshot().isEmpty) return
+        if (!_uiExtras.value.orderCommittedForCancel) {
+            updateExtras { it.copy(snackbarMessage = "Send to kitchen or print a receipt before cancelling") }
+            return
+        }
+        viewModelScope.launch {
+            val reasons = heldOrderRepository.getCancelReasons().map { it.label }
+            updateExtras {
+                it.copy(showCartCancelDialog = true, cartCancelReasons = reasons)
+            }
+        }
+    }
+
+    fun dismissCartCancelDialog() = updateExtras { it.copy(showCartCancelDialog = false) }
+
+    fun confirmCancelCartOrder(reason: String) {
+        viewModelScope.launch {
+            if (!_uiExtras.value.orderCommittedForCancel) {
+                showError("Cancel", "Send to kitchen or print a receipt before cancelling")
+                return@launch
+            }
+            val cart = cartManager.snapshot()
+            val userId = sessionManager.currentUserId.first() ?: 0L
+            val userName = sessionManager.currentUserName.first() ?: "Staff"
+            transactionRepository.recordCancelledOrder(cart, userId, userName, reason)
+            cart.tableOrderId?.let { orderId ->
+                tableOrderRepository.voidOpenOrder(orderId, reason)
+            }
+            cartManager.clear()
+            refreshTables()
+            updateExtras {
+                it.copy(
+                    showCartCancelDialog = false,
+                    selectedCartItemId = null,
+                    keypadBuffer = "",
+                    orderCommittedForCancel = false,
+                    kitchenSentToPrinter = false,
+                    receiptPrintedForOrder = false,
+                    snackbarMessage = "Order cancelled"
+                )
+            }
+        }
+    }
+
     fun printProvisionalReceipt() {
         viewModelScope.launch {
             val cart = cartManager.snapshot()
@@ -1309,7 +1452,7 @@ class PosViewModel @Inject constructor(
                 return@launch
             }
             val settings = settingsRepository.getSettings()
-            val total = applyCashRounding(cart.displayTotal, settings.roundingStep)
+            val total = applyCashRounding(cart.merchandiseTotal(), settings.roundingStep)
             val staffName = sessionManager.currentUserName.first() ?: "Staff"
             val context = com.chaslay.pos.printer.ReceiptPrintContext(
                 orderNumber = cart.orderNumber,
@@ -1317,7 +1460,8 @@ class PosViewModel @Inject constructor(
                 fulfillmentType = cart.fulfillmentType,
                 tableName = cart.tableName,
                 paymentMethod = null,
-                staffName = staffName
+                staffName = staffName,
+                isProvisional = true
             )
             withContext(Dispatchers.IO) {
                 printerService.routeCartReceipt(
@@ -1328,6 +1472,8 @@ class PosViewModel @Inject constructor(
                     tipAmount = 0.0,
                     total = total
                 )
+            }.onSuccess {
+                updateExtras { it.copy(orderCommittedForCancel = true, receiptPrintedForOrder = true) }
             }.onFailure { e -> showError("Print", e.message ?: "Print failed") }
         }
     }
@@ -1341,21 +1487,27 @@ class PosViewModel @Inject constructor(
                 return@launch
             }
             val checkout = _uiExtras.value.checkoutState
-            val subtotal = cart.subtotal - cart.itemDiscountTotal
+            val netSubtotal = cart.subtotal - cart.itemDiscountTotal
             val discount = if (checkout.discountPercent > 0) {
-                subtotal * (checkout.discountPercent / 100.0)
-            } else cart.discountValue
-            val rawTotal = (subtotal + cart.taxTotal - discount + checkout.tipAmount).coerceAtLeast(0.0)
-            val total = applyCashRounding(rawTotal, checkout.roundingStep.takeIf { it > 0 } ?: settings.roundingStep)
+                netSubtotal * (checkout.discountPercent / 100.0)
+            } else {
+                cart.discountValue
+            }
+            val equalSplitCount = if (cart.splitCount > 1 && !cart.splitByItems) cart.splitCount else 1
+            val merchandiseTotal = cart.merchandiseTotal(checkout.discountPercent)
+            val shareTotal = if (equalSplitCount > 1) merchandiseTotal / equalSplitCount else merchandiseTotal
+            val rawTotal = shareTotal + checkout.tipAmount
+            val roundingStep = checkout.roundingStep.takeIf { it > 0 } ?: settings.roundingStep
+            val total = applyCashRounding(rawTotal, roundingStep)
             val staffName = sessionManager.currentUserName.first() ?: "Staff"
             val context = com.chaslay.pos.printer.ReceiptPrintContext(
                 orderNumber = cart.orderNumber,
                 serviceType = cart.serviceType,
                 fulfillmentType = cart.fulfillmentType,
                 tableName = cart.tableName,
-                paymentMethod = checkout.method,
-                amountPaid = checkout.tenderAmount.takeIf { it > 0 } ?: total,
-                staffName = staffName
+                paymentMethod = null,
+                staffName = staffName,
+                isProvisional = true
             )
             withContext(Dispatchers.IO) {
                 printerService.routeCartReceipt(
@@ -1409,13 +1561,11 @@ class PosViewModel @Inject constructor(
     fun printCompletedReceipt() {
         viewModelScope.launch {
             val tx = _uiExtras.value.completedTransaction ?: return@launch
-            val publicUrl = _uiExtras.value.receiptPublicUrl ?: tx.receiptUrl
             val full = transactionRepository.getTransaction(tx.id) ?: return@launch
             val settings = settingsRepository.getSettings()
-            val transaction = if (!publicUrl.isNullOrBlank()) {
-                full.first.copy(receiptUrl = publicUrl)
-            } else {
-                full.first
+            val (transaction, publicUrl) = publishAndPersistReceipt(full.first, full.second, settings)
+            if (publicUrl != null) {
+                updateExtras { it.copy(receiptPublicUrl = publicUrl, completedTransaction = transaction) }
             }
             withContext(Dispatchers.IO) {
                 printerService.routeReceipt(settings, transaction, full.second)
@@ -1443,26 +1593,49 @@ class PosViewModel @Inject constructor(
 
     fun sendReceiptByEmail(email: String) {
         val tx = _uiExtras.value.completedTransaction ?: return
-        val receiptId = tx.id
         viewModelScope.launch {
             updateExtras { it.copy(isSendingReceiptEmail = true, receiptEmailError = null) }
-            receiptRepository.sendReceiptEmail(receiptId, email)
-                .onSuccess { message ->
-                    updateExtras {
-                        it.copy(
-                            isSendingReceiptEmail = false,
-                            showReceiptEmailDialog = false,
-                            orderCompleteNotice = message
-                        )
-                    }
+            val settings = settingsRepository.getSettings()
+            val full = transactionRepository.getTransaction(tx.id)
+            if (full == null) {
+                updateExtras {
+                    it.copy(
+                        isSendingReceiptEmail = false,
+                        receiptEmailError = "Transaction not found"
+                    )
                 }
+                return@launch
+            }
+            val (transaction, items) = full
+            receiptRepository.ensureReceiptPublished(transaction, items, settings)
                 .onFailure { e ->
                     updateExtras {
                         it.copy(
                             isSendingReceiptEmail = false,
-                            receiptEmailError = e.message ?: "Could not send email"
+                            receiptEmailError = e.message ?: "Could not upload receipt"
                         )
                     }
+                }
+                .onSuccess { publicUrl ->
+                    updateExtras { it.copy(receiptPublicUrl = publicUrl) }
+                    receiptRepository.sendReceiptEmail(transaction.id, email)
+                        .onSuccess { message ->
+                            updateExtras {
+                                it.copy(
+                                    isSendingReceiptEmail = false,
+                                    showReceiptEmailDialog = false,
+                                    orderCompleteNotice = message
+                                )
+                            }
+                        }
+                        .onFailure { e ->
+                            updateExtras {
+                                it.copy(
+                                    isSendingReceiptEmail = false,
+                                    receiptEmailError = e.message ?: "Could not send email"
+                                )
+                            }
+                        }
                 }
         }
     }
@@ -1486,7 +1659,7 @@ class PosViewModel @Inject constructor(
             val userId = sessionManager.currentUserId.first() ?: 0L
             val userName = sessionManager.currentUserName.first() ?: "Cashier"
             val paidIds = payable.items.map { it.id }.toSet()
-            val rawTotal = payable.total
+            val rawTotal = payable.merchandiseTotal()
             val roundedTotal = applyCashRounding(rawTotal, settings.roundingStep)
             val roundingAmount = roundedTotal - rawTotal
             val transaction = transactionRepository.completeSale(
@@ -1494,8 +1667,11 @@ class PosViewModel @Inject constructor(
                 paymentMethod = PaymentMethod.CASH,
                 userId = userId,
                 userName = userName,
-                roundingAmount = roundingAmount
+                roundingAmount = roundingAmount,
+                overrideTotal = roundedTotal
             )
+            val receiptItems = transactionRepository.getTransaction(transaction.id)?.second.orEmpty()
+            val (publishedTx, publicReceiptUrl) = publishAndPersistReceipt(transaction, receiptItems, settings)
             cartManager.removeItemsAfterPayment(paidIds)
             decrementStockForCartItems(payable.items)
             if (cartManager.snapshot().items.isEmpty()) {
@@ -1507,7 +1683,8 @@ class PosViewModel @Inject constructor(
                 it.copy(
                     isProcessingPayment = false,
                     showOrderComplete = true,
-                    completedTransaction = transaction,
+                    completedTransaction = publishedTx,
+                    receiptPublicUrl = publicReceiptUrl,
                     successMessage = "Payment completed",
                     selectedCartItemId = null,
                     keypadBuffer = "",
@@ -1547,17 +1724,14 @@ class PosViewModel @Inject constructor(
             val userName = sessionManager.currentUserName.first() ?: "Cashier"
             val paidIds = payable.items.map { it.id }.toSet()
 
-            val subtotal = payable.subtotal - payable.itemDiscountTotal
-            val checkoutDiscount = if (checkout.discountPercent > 0) {
-                subtotal * (checkout.discountPercent / 100.0)
-            } else 0.0
-            val preTipTotal = (subtotal + payable.taxTotal - payable.discountValue - checkoutDiscount).coerceAtLeast(0.0)
-            val roundingStep = checkout.roundingStep.takeIf { it > 0 } ?: settings.roundingStep
+            val cartForMerchandise = if (fullCart.splitCount > 1 && !fullCart.splitByItems) fullCart else payable
+            val merchandiseTotal = cartForMerchandise.merchandiseTotal(checkout.discountPercent)
             val rawTotal = when {
                 fullCart.splitCount > 1 && !fullCart.splitByItems ->
-                    (fullCart.total / fullCart.splitCount) + checkout.tipAmount
-                else -> preTipTotal + checkout.tipAmount
+                    merchandiseTotal / fullCart.splitCount + checkout.tipAmount
+                else -> merchandiseTotal + checkout.tipAmount
             }
+            val roundingStep = checkout.roundingStep.takeIf { it > 0 } ?: settings.roundingStep
             val roundedTotal = applyCashRounding(rawTotal, roundingStep)
             val roundingAmount = roundedTotal - rawTotal
 
@@ -1667,7 +1841,7 @@ class PosViewModel @Inject constructor(
                         tipAmount = checkout.tipAmount,
                         roundingAmount = roundingAmount,
                         checkoutDiscountPercent = checkout.discountPercent,
-                        overrideTotal = if (fullCart.splitCount > 1 && !fullCart.splitByItems) roundedTotal else null,
+                        overrideTotal = roundedTotal,
                         masterOrderId = masterId,
                         splitCheckNumber = if (fullCart.splitByItems) fullCart.activeSplitCheck else null,
                         amountTendered = tender,
@@ -1676,15 +1850,19 @@ class PosViewModel @Inject constructor(
                         receiptUrl = pendingReceiptUrl
                     )
                     val receiptItems = transactionRepository.getTransaction(transaction.id)?.second.orEmpty()
-                    val publicReceiptUrl = receiptRepository.publishReceipt(transaction, receiptItems, settings)
+                    val (publishedTx, publicReceiptUrl) = publishAndPersistReceipt(
+                        transaction,
+                        receiptItems,
+                        settings
+                    )
                     if (method == PaymentMethod.ADYEN_TERMINAL && settings.adyenTerminalEnabled) {
                         runCatching {
                             adyenTerminalService.showDigitalReceipt(
                                 settings = settings,
                                 items = saleCart.items,
-                                total = transaction.total,
+                                total = publishedTx.total,
                                 currencySymbol = settings.currencySymbol,
-                                receiptUrl = publicReceiptUrl
+                                receiptUrl = publicReceiptUrl ?: publishedTx.receiptUrl.orEmpty()
                             )
                         }.onFailure { e ->
                             Log.w("POS", "Could not show digital receipt on terminal", e)
@@ -1750,9 +1928,9 @@ class PosViewModel @Inject constructor(
                             isProcessingPayment = false,
                             showCheckoutScreen = false,
                             showOrderComplete = true,
-                            completedTransaction = transaction,
+                            completedTransaction = publishedTx,
                             receiptPublicUrl = publicReceiptUrl,
-                            orderCompleteNotice = null,
+                            orderCompleteNotice = receiptUploadNotice(publicReceiptUrl),
                             splitPaymentIndex = splitIndex,
                             splitPaymentTotal = splitTotal,
                             successMessage = if (splitIndex != null && splitTotal != null) {
@@ -1794,7 +1972,8 @@ class PosViewModel @Inject constructor(
             val tx = _uiExtras.value.lastTransaction ?: return@launch
             val full = transactionRepository.getTransaction(tx.id) ?: return@launch
             val settings = settingsRepository.getSettings()
-            printerService.routeReceipt(settings, full.first, full.second)
+            val (transaction, _) = publishAndPersistReceipt(full.first, full.second, settings)
+            printerService.routeReceipt(settings, transaction, full.second)
                 .onFailure { e -> updateExtras { it.copy(errorMessage = e.message) } }
             dismissReceiptOptions()
         }
@@ -1832,7 +2011,14 @@ class PosViewModel @Inject constructor(
 
     fun confirmClearCart() {
         cartManager.clear()
-        updateExtras { it.copy(showClearCartDialog = false, snackbarMessage = "Cart cleared") }
+        updateExtras {
+            it.copy(
+                showClearCartDialog = false,
+                orderCommittedForCancel = false,
+                receiptPrintedForOrder = false,
+                snackbarMessage = "Cart cleared"
+            )
+        }
         refreshTables()
     }
 
@@ -1987,6 +2173,30 @@ class PosViewModel @Inject constructor(
     private fun checkoutRoundingDefault(): Double =
         cachedSettings.roundingStep.takeIf { it > 0.0 } ?: 0.05
 
+    private suspend fun publishAndPersistReceipt(
+        transaction: TransactionEntity,
+        items: List<TransactionItemEntity>,
+        settings: BusinessSettingsEntity
+    ): Pair<TransactionEntity, String?> {
+        return receiptRepository.ensureReceiptPublished(transaction, items, settings).fold(
+            onSuccess = { url ->
+                transactionRepository.updateReceiptUrl(transaction.id, url)
+                transaction.copy(receiptUrl = url) to url
+            },
+            onFailure = { e ->
+                Log.w("POS", "Receipt publish failed: ${e.message}", e)
+                transaction to null
+            }
+        )
+    }
+
+    private fun receiptUploadNotice(publicUrl: String?): String? =
+        if (publicUrl.isNullOrBlank()) {
+            "Digital receipt could not be uploaded. Check internet and API key."
+        } else {
+            null
+        }
+
     private fun checkLowStockAlert(productId: Long, addedQty: Int) {
         viewModelScope.launch {
             val product = productRepository.getProduct(productId) ?: return@launch
@@ -2103,7 +2313,8 @@ class PosViewModel @Inject constructor(
             discountPercent = order.discountPercent,
             discountAmount = order.discountAmount,
             courseCount = cart.courseCount,
-            activeCourse = cart.activeCourse
+            activeCourse = cart.activeCourse,
+            vatIncludedInPrice = cachedSettings.vatIncludedInPrice
         )
     }
 
@@ -2200,7 +2411,12 @@ class PosViewModel @Inject constructor(
         val receiptPublicUrl: String? = null,
         val showReceiptEmailDialog: Boolean = false,
         val isSendingReceiptEmail: Boolean = false,
-        val receiptEmailError: String? = null
+        val receiptEmailError: String? = null,
+        val showCartCancelDialog: Boolean = false,
+        val cartCancelReasons: List<String> = emptyList(),
+        val showAttachCustomerDialog: Boolean = false,
+        val orderCommittedForCancel: Boolean = false,
+        val receiptPrintedForOrder: Boolean = false
     )
 
     private fun updateExtras(block: (PosDialogState) -> PosDialogState) {

@@ -12,6 +12,8 @@ import com.chaslay.pos.data.repository.TransactionRepository
 import com.chaslay.pos.debug.CrashLogEntry
 import com.chaslay.pos.debug.CrashLogger
 import com.chaslay.pos.domain.model.AppLanguage
+import androidx.annotation.StringRes
+import com.chaslay.pos.R
 import com.chaslay.pos.domain.model.PosMode
 import com.chaslay.pos.domain.model.PosThemeMode
 import com.chaslay.pos.domain.model.CategoryPrintSetting
@@ -40,15 +42,15 @@ import javax.inject.Inject
 data class PrinterLinkProduct(val id: Long, val name: String)
 data class PrinterLinkCategory(val id: Long, val name: String, val products: List<PrinterLinkProduct>)
 
-enum class SettingsSection(val title: String) {
-    GENERAL("General"),
-    VAT_TABLES("VAT & Tables"),
-    PAYMENTS("Payments"),
-    PRINTERS("Printers"),
-    RECEIPTS("Receipts"),
-    USERS_ACCOUNTS("Users & Roles"),
-    APPEARANCE("Appearance"),
-    DIAGNOSTICS("Diagnostics")
+enum class SettingsSection(@StringRes val titleRes: Int) {
+    GENERAL(R.string.settings_section_general),
+    VAT_TABLES(R.string.settings_section_vat_tables),
+    PAYMENTS(R.string.settings_section_payments),
+    PRINTERS(R.string.settings_section_printers),
+    RECEIPTS(R.string.settings_section_receipts),
+    USERS_ACCOUNTS(R.string.settings_section_users),
+    APPEARANCE(R.string.settings_section_appearance),
+    LICENSE(R.string.settings_section_license)
 }
 
 data class SettingsUiState(
@@ -81,6 +83,7 @@ data class SettingsUiState(
     val kitchenPrinterPrintKitchen: Boolean = true,
     val dineInVatRate: String = "8.1",
     val takeawayVatRate: String = "2.6",
+    val vatIncludedInPrice: Boolean = false,
     val newTableName: String = "",
     val tables: List<String> = emptyList(),
     val printers: List<DiscoveredPrinter> = emptyList(),
@@ -116,8 +119,6 @@ data class SettingsUiState(
     val selectedCrashLog: String? = null,
     val crashLogContent: String = "",
     val isPrinterBusy: Boolean = false,
-    val showDeleteOrdersDialog: Boolean = false,
-    val isDeletingOrders: Boolean = false,
     val posMode: PosMode = PosMode.RESTAURANT,
     val openHour: String = "10",
     val openMinute: String = "0",
@@ -192,6 +193,7 @@ class SettingsViewModel @Inject constructor(
                     kitchenPrinterPrintKitchen = settings.kitchenPrinterPrintKitchen,
                     dineInVatRate = settings.dineInVatRate.toString(),
                     takeawayVatRate = settings.takeawayVatRate.toString(),
+                    vatIncludedInPrice = settings.vatIncludedInPrice,
                     receiptHeader = settings.receiptHeader,
                     receiptFooter = settings.receiptFooter,
                     kitchenTicketHeader = settings.kitchenTicketHeader,
@@ -243,7 +245,6 @@ class SettingsViewModel @Inject constructor(
 
     fun selectSection(section: SettingsSection) {
         _uiState.update { it.copy(selectedSection = section) }
-        if (section == SettingsSection.DIAGNOSTICS) refreshCrashLogs()
     }
 
     fun updatePosThemeMode(mode: PosThemeMode) {
@@ -270,33 +271,6 @@ class SettingsViewModel @Inject constructor(
         crashLogger.clearLogs()
         refreshCrashLogs()
         _uiState.update { it.copy(selectedCrashLog = null, crashLogContent = "") }
-    }
-
-    fun showDeleteOrdersDialog() = _uiState.update { it.copy(showDeleteOrdersDialog = true) }
-    fun dismissDeleteOrdersDialog() = _uiState.update { it.copy(showDeleteOrdersDialog = false) }
-
-    /** Wipes all sales/order history (transactions, table orders, held orders). Keeps products & settings. */
-    fun deleteAllOrderData() {
-        viewModelScope.launch {
-            _uiState.update { it.copy(isDeletingOrders = true) }
-            val result = runCatching {
-                withContext(Dispatchers.IO) {
-                    transactionRepository.clearAllTransactions()
-                    tableOrderRepository.clearAllOrders()
-                    heldOrderRepository.clearAll()
-                }
-            }
-            _uiState.update {
-                it.copy(
-                    isDeletingOrders = false,
-                    showDeleteOrdersDialog = false,
-                    message = result.fold(
-                        onSuccess = { "All order data deleted" },
-                        onFailure = { e -> e.message ?: "Could not delete order data" }
-                    )
-                )
-            }
-        }
     }
 
     private fun loadSavedPrinters() {
@@ -466,6 +440,10 @@ class SettingsViewModel @Inject constructor(
     fun updateKitchenPrinterPrintKitchen(enabled: Boolean) = _uiState.update { it.copy(kitchenPrinterPrintKitchen = enabled) }
     fun updateDineInVatRate(value: String) = _uiState.update { it.copy(dineInVatRate = value) }
     fun updateTakeawayVatRate(value: String) = _uiState.update { it.copy(takeawayVatRate = value) }
+    fun updateVatIncludedInPrice(value: Boolean) {
+        _uiState.update { it.copy(vatIncludedInPrice = value) }
+        saveSettings()
+    }
     fun updateNewTableName(value: String) = _uiState.update { it.copy(newTableName = value) }
 
     fun updateNewPresetName(value: String) = _uiState.update { it.copy(newPresetName = value) }
@@ -803,6 +781,7 @@ class SettingsViewModel @Inject constructor(
             kitchenPrinterPrintKitchen = state.kitchenPrinterPrintKitchen,
             dineInVatRate = state.dineInVatRate.toDoubleOrNull() ?: 8.1,
             takeawayVatRate = state.takeawayVatRate.toDoubleOrNull() ?: 2.6,
+            vatIncludedInPrice = state.vatIncludedInPrice,
             printerMacAddress = state.selectedPrinter?.address,
             printerName = state.selectedPrinter?.name,
             kitchenPrinterMacAddress = state.selectedKitchenPrinter?.address,

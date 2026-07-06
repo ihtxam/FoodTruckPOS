@@ -62,47 +62,149 @@ class AdyenTerminalClient @Inject constructor() {
             val terminalId = normalizeTerminalId(settings.adyenTerminalId)
             val apiKey = settings.adyenApiKey.trim()
             val live = settings.adyenLiveEnvironment
-            val url = deviceStatusUrl(live, settings.adyenLiveRegion, merchantAccount, terminalId)
+            val saleId = settings.adyenClientId.trim().ifBlank { "ChaslayPOS" }
 
-            val request = Request.Builder()
-                .url(url)
-                .get()
-                .header("X-API-Key", apiKey)
-                .build()
-
-            runCatching {
-                httpClient.newCall(request).execute().use { response ->
-                    val body = response.body?.string().orEmpty()
-                    Log.d(TAG, "Adyen status HTTP ${response.code}: ${body.take(500)}")
-                    if (!response.isSuccessful) {
-                        val apiError = parseAdyenApiError(body)
-                        return@withContext AdyenConnectionTestResult(
-                            success = false,
-                            message = formatHttpError(response.code, apiError, triedLegacy = false)
-                        )
-                    }
-                    val status = runCatching {
-                        gson.fromJson(body, JsonObject::class.java).get("status")?.asString
-                    }.getOrNull()
-                    when (status?.uppercase()) {
-                        "ONLINE" -> AdyenConnectionTestResult(
-                            success = true,
-                            message = "Terminal $terminalId is ONLINE and reachable via Adyen cloud."
-                        )
-                        "OFFLINE" -> AdyenConnectionTestResult(
-                            success = false,
-                            message = "API key works, but terminal $terminalId is OFFLINE. Check terminal network/power."
-                        )
-                        else -> AdyenConnectionTestResult(
-                            success = true,
-                            message = "Adyen API credentials accepted. Response: ${body.take(120)}"
-                        )
-                    }
-                }
-            }.getOrElse { e ->
-                AdyenConnectionTestResult(false, "Network error: ${e.message ?: "Could not reach Adyen"}")
+            if (settings.adyenUseLegacyEndpoint) {
+                return@withContext testLegacyConnection(apiKey, live, saleId, terminalId)
             }
+
+            val cloudResult = testCloudDeviceStatus(apiKey, live, settings.adyenLiveRegion, merchantAccount, terminalId)
+            if (!cloudResult.success && cloudResult.message.contains("00_403", ignoreCase = true)) {
+                val legacyResult = testLegacyConnection(apiKey, live, saleId, terminalId)
+                if (legacyResult.success) {
+                    return@withContext AdyenConnectionTestResult(
+                        success = true,
+                        message = buildString {
+                            append(legacyResult.message)
+                            append("\n\nCloud Device API returned 00_403 (missing POS ? Cloud Device API role). ")
+                            append("Payments will use the legacy Terminal API endpoint. ")
+                            append("Keep \"Use legacy Terminal API\" enabled, or add Cloud Device API to your Web service user for the newer endpoint.")
+                        }
+                    )
+                }
+            }
+            cloudResult
         }
+
+    private fun testCloudDeviceStatus(
+        apiKey: String,
+        live: Boolean,
+        region: String,
+        merchantAccount: String,
+        terminalId: String
+    ): AdyenConnectionTestResult {
+        val url = deviceStatusUrl(live, region, merchantAccount, terminalId)
+        val request = Request.Builder()
+            .url(url)
+            .get()
+            .header("X-API-Key", apiKey)
+            .build()
+
+        return runCatching {
+            httpClient.newCall(request).execute().use { response ->
+                val body = response.body?.string().orEmpty()
+                Log.d(TAG, "Adyen status HTTP ${response.code}: ${body.take(500)}")
+                if (!response.isSuccessful) {
+                    val apiError = parseAdyenApiError(body)
+                    return AdyenConnectionTestResult(
+                        success = false,
+                        message = formatHttpError(response.code, apiError, triedLegacy = false)
+                    )
+                }
+                val status = runCatching {
+                    gson.fromJson(body, JsonObject::class.java).get("status")?.asString
+                }.getOrNull()
+                when (status?.uppercase()) {
+                    "ONLINE" -> AdyenConnectionTestResult(
+                        success = true,
+                        message = "Terminal $terminalId is ONLINE and reachable via Adyen cloud."
+                    )
+                    "OFFLINE" -> AdyenConnectionTestResult(
+                        success = false,
+                        message = "API key works, but terminal $terminalId is OFFLINE. Check terminal network/power."
+                    )
+                    else -> AdyenConnectionTestResult(
+                        success = true,
+                        message = "Adyen API credentials accepted. Response: ${body.take(120)}"
+                    )
+                }
+            }
+        }.getOrElse { e ->
+            AdyenConnectionTestResult(false, "Network error: ${e.message ?: "Could not reach Adyen"}")
+        }
+    }
+
+    private fun testLegacyConnection(
+        apiKey: String,
+        live: Boolean,
+        saleId: String,
+        terminalId: String
+    ): AdyenConnectionTestResult {
+        val url = legacySyncUrl(live)
+        val body = buildDiagnosisRequestBody(saleId, terminalId).toRequestBody(jsonMediaType)
+        val request = Request.Builder()
+            .url(url)
+            .post(body)
+            .header("X-API-Key", apiKey)
+            .header("Content-Type", "application/json")
+            .build()
+
+        return runCatching {
+            httpClient.newCall(request).execute().use { response ->
+                val responseBody = response.body?.string().orEmpty()
+                Log.d(TAG, "Adyen legacy diagnosis HTTP ${response.code}: ${responseBody.take(500)}")
+                if (!response.isSuccessful) {
+                    val apiError = parseAdyenApiError(responseBody)
+                    return AdyenConnectionTestResult(
+                        success = false,
+                        message = formatHttpError(response.code, apiError, triedLegacy = true)
+                    )
+                }
+                val result = runCatching {
+                    gson.fromJson(responseBody, JsonObject::class.java)
+                        .getAsJsonObject("SaleToPOIResponse")
+                        ?.getAsJsonObject("DiagnosisResponse")
+                        ?.getAsJsonObject("Response")
+                        ?.get("Result")
+                        ?.asString
+                }.getOrNull()
+                if (result.equals("Success", ignoreCase = true)) {
+                    AdyenConnectionTestResult(
+                        success = true,
+                        message = "Legacy Terminal API accepted your credentials. Terminal $terminalId responded to a diagnosis request."
+                    )
+                } else {
+                    AdyenConnectionTestResult(
+                        success = true,
+                        message = "Legacy Terminal API credentials accepted. Response: ${responseBody.take(120)}"
+                    )
+                }
+            }
+        }.getOrElse { e ->
+            AdyenConnectionTestResult(false, "Network error: ${e.message ?: "Could not reach Adyen"}")
+        }
+    }
+
+    private fun buildDiagnosisRequestBody(saleId: String, poiId: String): String {
+        val serviceId = generateServiceId()
+        val payload = mapOf(
+            "SaleToPOIRequest" to mapOf(
+                "MessageHeader" to mapOf(
+                    "ProtocolVersion" to "3.0",
+                    "MessageClass" to "Service",
+                    "MessageCategory" to "Diagnosis",
+                    "MessageType" to "Request",
+                    "ServiceID" to serviceId,
+                    "SaleID" to saleId,
+                    "POIID" to poiId
+                ),
+                "DiagnosisRequest" to mapOf(
+                    "HostDiagnosisFlag" to true
+                )
+            )
+        )
+        return gson.toJson(payload)
+    }
 
     suspend fun sendPaymentRequest(
         amount: Double,
@@ -309,15 +411,19 @@ class AdyenTerminalClient @Inject constructor() {
     private fun formatHttpError(code: Int, apiError: AdyenApiError?, triedLegacy: Boolean): String {
         if (apiError?.errorCode == "00_403") {
             return buildString {
-                append("Adyen permission denied (00_403). The request never reached your terminal.\n\n")
+                append("Adyen permission denied (00_403). The POS API key is not allowed to call this Adyen endpoint.\n\n")
+                append("Note: a terminal showing ONLINE in Adyen Customer Area only means the device reached Adyen. ")
+                append("It does not mean your Web service API key has Cloud Device API permission.\n\n")
                 append("Fix in Adyen Customer Area:\n")
-                append("1. Developers ? API credentials ? open your Web service user\n")
+                append("1. Developers ? API credentials ? open your Web service user (not the client key)\n")
                 append("2. Permissions ? Roles ? POS ? enable \"Cloud Device API\"\n")
-                append("3. Generate a new API key and paste it here (not the client key)\n")
+                append("3. Generate a new API key and paste it here\n")
                 append("4. Match the Test/Live toggle to your key environment\n")
                 append("5. Enable Terminal API under In-person payments ? Terminal settings\n\n")
                 if (!triedLegacy) {
-                    append("Tip: enable \"Use legacy Terminal API\" in Settings if your account is not migrated yet.\n\n")
+                    append("Tip: enable \"Use legacy Terminal API\" in Settings and test again if your account is not migrated to Cloud Device API yet.\n\n")
+                } else {
+                    append("Legacy Terminal API also returned 00_403. Your Web service user likely needs Terminal API / POS payment roles as well.\n\n")
                 }
                 apiError.detail?.takeIf { it.isNotBlank() }?.let { append("Adyen: $it\n") }
                 apiError.requestId?.takeIf { it.isNotBlank() }?.let { append("Request ID: $it") }
@@ -341,7 +447,7 @@ class AdyenTerminalClient @Inject constructor() {
             apiError.detail,
             apiError.requestId?.let { "Request ID: $it" }
         )
-        return parts.joinToString(" ù ").ifBlank { null }
+        return parts.joinToString(" ? ").ifBlank { null }
     }
 
     private fun parseAdyenApiError(body: String): AdyenApiError? {

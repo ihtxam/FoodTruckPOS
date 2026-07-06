@@ -8,7 +8,7 @@ function getTransporter() {
   const host = process.env.SMTP_HOST?.trim();
   const port = Number(process.env.SMTP_PORT || 587);
   const user = process.env.SMTP_USER?.trim();
-  const pass = process.env.SMTP_PASS;
+  const pass = process.env.SMTP_PASS?.trim()?.replace(/^["']|["']$/g, '');
 
   if (!host || !user || !pass) {
     throw new Error(
@@ -56,7 +56,7 @@ export async function sendReceiptEmail({
       <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px">
         <p>${greeting}</p>
         <p>Thank you for your purchase at <strong>${escapeHtml(businessName)}</strong>.</p>
-        <p>Order <strong>#${escapeHtml(transactionNumber)}</strong> � <strong>${escapeHtml(amount)}</strong></p>
+        <p>Order <strong>#${escapeHtml(transactionNumber)}</strong> &middot; <strong>${escapeHtml(amount)}</strong></p>
         <p style="margin:24px 0">
           <a href="${receiptUrl}" style="background:#0f172a;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;display:inline-block">
             View digital receipt

@@ -224,6 +224,8 @@ data class BusinessSettingsEntity(
     val kitchenPrinterName: String? = null,
     val dineInVatRate: Double = 8.1,
     val takeawayVatRate: Double = 2.6,
+    /** When true, catalog prices already include VAT; tax is extracted from the price. */
+    val vatIncludedInPrice: Boolean = false,
     val defaultServiceType: ServiceType = ServiceType.TAKEAWAY,
     val posMode: PosMode = PosMode.RESTAURANT,
     val receiptBaseUrl: String = "https://pay.chaslay.com/receipts",

@@ -352,8 +352,14 @@ class TransactionRepository @Inject constructor(
             cart.discountAmount > 0 -> cart.discountAmount
             else -> 0.0
         }
-        val baseTotal = (subtotal + cart.taxTotal - itemDiscount - discountAmount).coerceAtLeast(0.0)
-        val finalTotal = (overrideTotal ?: (baseTotal + tipAmount + roundingAmount)).coerceAtLeast(0.0)
+        val baseTotal = if (cart.vatIncludedInPrice) {
+            (subtotal - itemDiscount - discountAmount).coerceAtLeast(0.0)
+        } else {
+            (subtotal + cart.taxTotal - itemDiscount - discountAmount).coerceAtLeast(0.0)
+        }
+        val finalTotal = roundMoney(
+            overrideTotal ?: (baseTotal + tipAmount + roundingAmount)
+        ).coerceAtLeast(0.0)
 
         val transaction = TransactionEntity(
             id = resolvedTransactionId,
@@ -412,6 +418,10 @@ class TransactionRepository @Inject constructor(
         return tx to items
     }
 
+    suspend fun updateReceiptUrl(transactionId: String, url: String) {
+        transactionDao.updateReceiptUrl(transactionId, url)
+    }
+
     suspend fun getTransactionsBetween(start: Long, end: Long): List<TransactionEntity> =
         transactionDao.getAllInRange(start, end)
 
@@ -443,6 +453,11 @@ class TransactionRepository @Inject constructor(
             ProductSalesReport(it.productName, it.qty, roundMoney(it.revenue))
         }
     }
+
+    suspend fun getProductsSold(start: Long, end: Long): List<ProductSalesReport> =
+        transactionDao.getProductsSold(start, end).map {
+            ProductSalesReport(it.productName, it.qty, roundMoney(it.revenue))
+        }
 
     suspend fun getUserPerformance(): List<UserPerformanceReport> {
         val (start, end) = dayBounds()
@@ -524,6 +539,10 @@ class TransactionRepository @Inject constructor(
             )
         }
 
+        val productsSold = transactionDao.getProductsSold(start, end).map {
+            ProductSalesReport(it.productName, it.qty, roundMoney(it.revenue))
+        }
+
         return EndOfDayReport(
             periodStart = start,
             periodEnd = end,
@@ -545,7 +564,8 @@ class TransactionRepository @Inject constructor(
             dineInTotal = roundMoney(completed.filter { it.serviceType == ServiceType.DINE_IN }.sumOf { brutOf(it) }),
             dineInCount = completed.count { it.serviceType == ServiceType.DINE_IN },
             takeawayTotal = roundMoney(completed.filter { it.serviceType == ServiceType.TAKEAWAY }.sumOf { brutOf(it) }),
-            takeawayCount = completed.count { it.serviceType == ServiceType.TAKEAWAY }
+            takeawayCount = completed.count { it.serviceType == ServiceType.TAKEAWAY },
+            productsSold = productsSold
         )
     }
 
@@ -576,6 +596,74 @@ class TransactionRepository @Inject constructor(
             reason = reason,
             cancelledAt = System.currentTimeMillis()
         )
+    }
+
+    /** Records a cancelled open order in sales history (kitchen sent or receipt printed). */
+    suspend fun recordCancelledOrder(
+        cart: CartSummary,
+        userId: Long,
+        userName: String,
+        reason: String
+    ): TransactionEntity {
+        val settings = settingsDao.get() ?: BusinessSettingsEntity()
+        val transactionId = UUID.randomUUID().toString()
+        val txNumber = cart.orderNumber?.trim()?.takeIf { it.isNotBlank() } ?: generateTransactionNumber()
+        val subtotal = cart.subtotal
+        val itemDiscount = cart.itemDiscountTotal
+        val discountAmount = when {
+            cart.discountPercent > 0 -> (subtotal - itemDiscount) * (cart.discountPercent / 100.0)
+            cart.discountAmount > 0 -> cart.discountAmount
+            else -> 0.0
+        }
+        val discountPercent = if (cart.discountPercent > 0) cart.discountPercent else 0.0
+        val finalTotal = if (cart.vatIncludedInPrice) {
+            roundMoney((subtotal - itemDiscount - discountAmount).coerceAtLeast(0.0))
+        } else {
+            roundMoney((subtotal + cart.taxTotal - itemDiscount - discountAmount).coerceAtLeast(0.0))
+        }
+        val cancelledAt = System.currentTimeMillis()
+        val transaction = TransactionEntity(
+            id = transactionId,
+            transactionNumber = txNumber,
+            userId = userId,
+            userName = userName,
+            subtotal = subtotal,
+            taxTotal = cart.taxTotal,
+            discountPercent = discountPercent,
+            discountAmount = discountAmount,
+            total = finalTotal,
+            paymentMethod = PaymentMethod.PAY_LATER,
+            paymentStatus = PaymentStatus.CANCELLED,
+            currencyCode = settings.defaultCurrency,
+            notes = buildOrderNotes(cart),
+            tableId = cart.tableId,
+            serviceType = cart.serviceType,
+            syncStatus = SyncStatus.PENDING,
+            cancelReason = reason,
+            cancelledAt = cancelledAt,
+            pickupTimeMs = cart.pickupTimeMs,
+            createdAt = cancelledAt
+        )
+        val items = cart.items.map { item ->
+            TransactionItemEntity(
+                transactionId = transactionId,
+                productId = item.productId,
+                productName = item.productName,
+                variantName = item.variantName,
+                sku = item.sku,
+                unitPrice = item.unitPrice,
+                quantity = item.quantity,
+                taxRate = item.taxRate,
+                lineSubtotal = item.lineSubtotal,
+                lineTax = item.lineTax,
+                lineTotal = item.lineTotal,
+                originalUnitPrice = item.originalUnitPrice ?: item.catalogUnitPrice,
+                lineDiscountPerUnit = item.lineDiscountPerUnit,
+                notes = item.notes
+            )
+        }
+        transactionDao.insertFullTransaction(transaction, items)
+        return transaction
     }
 
     suspend fun refundOrder(transactionId: String, amount: Double, fullRefund: Boolean) {
@@ -676,31 +764,32 @@ class CartManager @Inject constructor() {
 
     fun addItem(item: CartItem) {
         _cart.update { cart ->
-            val canMerge = cart.tableOrderId == null && !item.sentToKitchen
+            val stamped = item.copy(vatIncludedInPrice = cart.vatIncludedInPrice)
+            val canMerge = cart.tableOrderId == null && !stamped.sentToKitchen
             val existing = if (canMerge) {
                 cart.items.find {
-                    it.productId == item.productId &&
-                        it.variantName == item.variantName &&
-                        it.unitPrice == item.unitPrice &&
-                        it.modifiers == item.modifiers &&
-                        it.addons == item.addons &&
-                        it.notes == item.notes &&
-                        it.courseNumber == item.courseNumber &&
-                        it.splitCheck == item.splitCheck &&
+                    it.productId == stamped.productId &&
+                        it.variantName == stamped.variantName &&
+                        it.unitPrice == stamped.unitPrice &&
+                        it.modifiers == stamped.modifiers &&
+                        it.addons == stamped.addons &&
+                        it.notes == stamped.notes &&
+                        it.courseNumber == stamped.courseNumber &&
+                        it.splitCheck == stamped.splitCheck &&
                         !it.sentToKitchen
                 }
             } else null
             if (existing != null) {
                 cart.copy(
                     items = cart.items.map {
-                        if (it.id == existing.id) it.copy(quantity = it.quantity + item.quantity) else it
+                        if (it.id == existing.id) it.copy(quantity = it.quantity + stamped.quantity) else it
                     }
                 )
             } else {
                 val enriched = when {
-                    cart.tableOrderId != null -> item.copy(courseNumber = cart.activeCourse)
-                    cart.splitByItems && cart.splitCount > 1 -> item.copy(splitCheck = cart.activeSplitCheck)
-                    else -> item
+                    cart.tableOrderId != null -> stamped.copy(courseNumber = cart.activeCourse)
+                    cart.splitByItems && cart.splitCount > 1 -> stamped.copy(splitCheck = cart.activeSplitCheck)
+                    else -> stamped
                 }
                 cart.copy(items = cart.items + enriched)
             }
@@ -764,7 +853,8 @@ class CartManager @Inject constructor() {
                 unitPrice = price,
                 quantity = 1,
                 taxRate = taxRate,
-                categoryId = categoryId
+                categoryId = categoryId,
+                vatIncludedInPrice = cart.vatIncludedInPrice
             )
         )
     }
@@ -893,6 +983,19 @@ class CartManager @Inject constructor() {
         }
     }
 
+    fun setVatIncludedInPrice(included: Boolean) {
+        _cart.update { cart ->
+            if (cart.vatIncludedInPrice == included && cart.items.all { it.vatIncludedInPrice == included }) {
+                cart
+            } else {
+                cart.copy(
+                    vatIncludedInPrice = included,
+                    items = cart.items.map { it.copy(vatIncludedInPrice = included) }
+                )
+            }
+        }
+    }
+
     fun loadTableOrder(
         tableId: Long,
         tableName: String,
@@ -902,11 +1005,13 @@ class CartManager @Inject constructor() {
         discountPercent: Double,
         discountAmount: Double,
         courseCount: Int = 1,
-        activeCourse: Int = 1
+        activeCourse: Int = 1,
+        vatIncludedInPrice: Boolean? = null
     ) {
+        val included = vatIncludedInPrice ?: _cart.value.vatIncludedInPrice
         val maxCourse = items.maxOfOrNull { it.courseNumber } ?: 1
         _cart.value = CartSummary(
-            items = items,
+            items = items.map { it.copy(vatIncludedInPrice = included) },
             discountPercent = discountPercent,
             discountAmount = discountAmount,
             serviceType = serviceType,
@@ -914,7 +1019,8 @@ class CartManager @Inject constructor() {
             tableOrderId = orderId,
             tableName = tableName,
             activeCourse = activeCourse,
-            courseCount = maxOf(courseCount, maxCourse)
+            courseCount = maxOf(courseCount, maxCourse),
+            vatIncludedInPrice = included
         )
     }
 
@@ -945,7 +1051,13 @@ class CartManager @Inject constructor() {
     }
 
     fun clear() {
-        _cart.value = CartSummary(emptyList())
+        _cart.update { cart ->
+            CartSummary(
+                items = emptyList(),
+                vatIncludedInPrice = cart.vatIncludedInPrice,
+                serviceType = cart.serviceType
+            )
+        }
     }
 
     fun setPickupOrder(orderNumber: String, pickupTimeMs: Long?) {
@@ -962,6 +1074,24 @@ class CartManager @Inject constructor() {
                 deliveryAddress = null,
                 deliveryZip = null,
                 deliveryPhone = null
+            )
+        }
+    }
+
+    fun setCustomerInfo(
+        name: String,
+        phone: String?,
+        email: String? = null,
+        address: String? = null,
+        zip: String? = null
+    ) {
+        _cart.update {
+            it.copy(
+                deliveryName = name,
+                deliveryPhone = phone,
+                deliveryAddress = address,
+                deliveryZip = zip,
+                cartNotes = email?.takeIf { e -> e.isNotBlank() } ?: it.cartNotes
             )
         }
     }
@@ -1005,7 +1135,8 @@ class TableOrderRepository @Inject constructor(
     private val tableDao: RestaurantTableDao,
     private val orderDao: TableOrderDao,
     private val orderItemDao: TableOrderItemDao,
-    private val kitchenMessageDao: KitchenMessageDao
+    private val kitchenMessageDao: KitchenMessageDao,
+    private val settingsDao: BusinessSettingsDao
 ) {
     fun observeTables(): Flow<List<RestaurantTableEntity>> = tableDao.observeActive()
 
@@ -1177,6 +1308,16 @@ class TableOrderRepository @Inject constructor(
         orderDao.updateStatus(orderId, TableOrderStatus.PAID)
     }
 
+    suspend fun voidOpenOrder(orderId: String, reason: String) {
+        val order = orderDao.getById(orderId) ?: return
+        val table = tableDao.getById(order.tableId)
+        if (table != null) {
+            addKitchenMessage(orderId, table.id, table.name, "ORDER CANCELLED: $reason")
+        }
+        orderItemDao.deleteByOrder(orderId)
+        orderDao.deleteById(orderId)
+    }
+
     suspend fun getTable(tableId: Long): RestaurantTableEntity? = tableDao.getById(tableId)
 
     suspend fun addTable(name: String): Long {
@@ -1203,6 +1344,7 @@ class TableOrderRepository @Inject constructor(
         val order = orderDao.getById(orderId) ?: return false
         val table = tableDao.getById(order.tableId) ?: return false
         val items = orderItemDao.getByOrder(orderId).map { it.toCartItem() }
+        val vatIncluded = settingsDao.get()?.vatIncludedInPrice ?: false
         cartManager.loadTableOrder(
             tableId = table.id,
             tableName = table.name,
@@ -1210,7 +1352,8 @@ class TableOrderRepository @Inject constructor(
             serviceType = order.serviceType,
             items = items,
             discountPercent = order.discountPercent,
-            discountAmount = order.discountAmount
+            discountAmount = order.discountAmount,
+            vatIncludedInPrice = vatIncluded
         )
         if (order.status == TableOrderStatus.HELD) {
             orderDao.updateStatus(orderId, TableOrderStatus.OPEN)
@@ -1264,7 +1407,8 @@ class HeldOrderRepository @Inject constructor(
     private val heldOrderDao: com.chaslay.pos.data.local.dao.HeldOrderDao,
     private val heldOrderItemDao: com.chaslay.pos.data.local.dao.HeldOrderItemDao,
     private val cancelReasonDao: com.chaslay.pos.data.local.dao.CancelReasonDao,
-    private val tableOrderItemDao: TableOrderItemDao
+    private val tableOrderItemDao: TableOrderItemDao,
+    private val settingsDao: BusinessSettingsDao
 ) {
     suspend fun getCancelReasons(): List<com.chaslay.pos.data.local.entity.CancelReasonEntity> =
         cancelReasonDao.getActive()
@@ -1402,6 +1546,7 @@ class HeldOrderRepository @Inject constructor(
     suspend fun loadHeldOrderToCart(cartManager: CartManager, heldOrderId: String): Boolean {
         val order = heldOrderDao.getById(heldOrderId) ?: return false
         val items = heldOrderItemDao.getByOrder(heldOrderId).map { it.toCartItem() }
+        val vatIncluded = settingsDao.get()?.vatIncludedInPrice ?: false
         if (order.tableId != null && order.tableName != null && order.tableOrderId != null) {
             cartManager.loadTableOrder(
                 tableId = order.tableId,
@@ -1410,13 +1555,15 @@ class HeldOrderRepository @Inject constructor(
                 serviceType = order.serviceType,
                 items = items,
                 discountPercent = order.discountPercent,
-                discountAmount = order.discountAmount
+                discountAmount = order.discountAmount,
+                vatIncludedInPrice = vatIncluded
             )
             val sentFlags = tableOrderItemDao.getByOrder(order.tableOrderId)
                 .associate { it.id to (it.sentToKitchenAt != null) }
             cartManager.refreshSentFlags(sentFlags)
         } else {
             cartManager.clear()
+            cartManager.setVatIncludedInPrice(vatIncluded)
             cartManager.setServiceType(order.serviceType) { it.taxRate }
             when (order.fulfillmentType) {
                 FulfillmentType.PICKUP -> cartManager.setPickupOrder(

@@ -310,18 +310,20 @@ class BluetoothPrinterService @Inject constructor(
         settings: BusinessSettingsEntity,
         report: EndOfDayReport
     ): Result<Unit> = withContext(Dispatchers.IO) {
-        val payload = buildEndOfDayReport(settings, report)
         val reportPrinters = runCatching { printerConfigDao.getAll() }.getOrDefault(emptyList())
             .filter { it.isEnabled && it.printEndOfDayReports && it.address.isNotBlank() }
         if (reportPrinters.isNotEmpty()) {
             var last: Result<Unit> = Result.success(Unit)
             for (printer in reportPrinters) {
+                val lineWidth = lineWidthFor(printer.paperWidthMm)
+                val payload = buildEndOfDayReport(settings, report, lineWidth)
                 last = sendBytes(printer.address, settings, payload, "End of day ${printer.name}")
             }
             return@withContext last
         }
         val legacyAddress = settings.printerMacAddress?.takeIf { it.isNotBlank() }
             ?: return@withContext Result.failure(IllegalStateException("No report printer configured. Add a printer with ENDOFDAY REPORTS enabled."))
+        val payload = buildEndOfDayReport(settings, report, LINE_WIDTH_80)
         sendBytes(legacyAddress, settings, payload, "End of day report")
     }
 
@@ -622,6 +624,7 @@ class BluetoothPrinterService @Inject constructor(
         lineWidth: Int = LINE_WIDTH_80
     ): ByteArray {
         val sb = StringBuilder()
+        val labels = ReceiptLabels.forLanguage(settings.defaultLanguage)
         val dateTimeFmt = SimpleDateFormat("dd-MM-yyyy HH:mm", Locale.getDefault())
         val sepEq = "=".repeat(lineWidth.coerceAtMost(32))
         val subtotal = cart.subtotal - cart.itemDiscountTotal
@@ -630,33 +633,23 @@ class BluetoothPrinterService @Inject constructor(
         } else 1.0
         val vatRows = ReceiptVatCalculator.vatRowsFromCartItems(cart.items, discountFactor)
 
-        appendHeader(sb, settings.receiptHeader.ifBlank { settings.businessName }, lineWidth)
-        if (settings.receiptHeader.isBlank()) {
-            sb.appendLine(center(settings.businessName, lineWidth))
+        if (context.isProvisional) {
+            appendCenteredLines(sb, labels.provisionalInvoice, lineWidth, bold = true)
+            sb.appendLine(center(sepEq, lineWidth))
         }
-        if (context.paymentMethod == null) {
-            sb.appendLine(center("PROVISIONAL INVOICE", lineWidth))
-        }
-        if (settings.vatNumber.isNotBlank()) {
-            sb.appendLine(center(settings.vatNumber, lineWidth))
-        }
+        appendReceiptStoreBlock(sb, settings, lineWidth)
         sb.appendLine(center(sepEq, lineWidth))
 
-        val orderType = when (context.fulfillmentType) {
-            FulfillmentType.DINE_IN -> "DINE-IN"
-            FulfillmentType.PICKUP -> "TAKEAWAY"
-            FulfillmentType.DELIVERY -> "DELIVERY"
-            else -> context.serviceType.displayName.uppercase(Locale.getDefault())
+        val orderType = labels.fulfillmentLabel(context.fulfillmentType, context.serviceType)
+        appendReceiptOrderType(sb, orderType, lineWidth)
+        context.orderNumber?.let {
+            appendReceiptOrderNumber(sb, labels.orderNumber, it, lineWidth)
         }
-        sb.append(escAlignCenter())
-        sb.append(escDoubleHeight(true))
-        sb.append(escBold(true))
-        sb.appendLine(orderType)
-        context.orderNumber?.let { sb.appendLine("Order #$it") }
-        sb.append(escBold(false))
-        sb.append(escDoubleHeight(false))
-        sb.append(escAlignLeft())
-        context.tableName?.let { sb.appendLine("Table: $it") }
+        context.tableName?.let {
+            wrapText("${labels.table} $it", lineWidth).forEach { line ->
+                sb.appendLine(center(line, lineWidth))
+            }
+        }
 
         sb.appendLine(center(sepEq, lineWidth))
         cart.items.forEach { item ->
@@ -664,13 +657,14 @@ class BluetoothPrinterService @Inject constructor(
                 append("${item.quantity}x ${item.productName}")
                 if (item.variantName != null) append(" (${item.variantName})")
             }
+            val lineAmount = if (cart.vatIncludedInPrice) item.lineTotal else item.lineSubtotal
             sb.appendLine(
-                leftRight(label.take(lineWidth - 12), formatMoney(item.lineSubtotal, settings.currencySymbol), lineWidth)
+                leftRight(label.take(lineWidth - 12), formatMoney(lineAmount, settings.currencySymbol), lineWidth)
             )
             if (item.lineDiscount > 0) {
                 sb.appendLine(
                     leftRight(
-                        "  Item discount",
+                        "  ${labels.itemDiscount}",
                         "-${formatMoney(item.lineDiscount, settings.currencySymbol)}",
                         lineWidth
                     )
@@ -682,46 +676,42 @@ class BluetoothPrinterService @Inject constructor(
             item.notes?.lines()?.filter { line ->
                 !Regex("^\\d+x\\s+").containsMatchIn(line.trim())
             }?.map { it.trim() }?.filter { it.isNotBlank() }?.forEach { note ->
-                sb.appendLine("  Note: $note")
+                sb.appendLine("  ${labels.note} $note")
             }
         }
 
         if (discountAmount > 0.0) {
-            sb.appendLine(leftRight("Discount:", "-${formatMoney(discountAmount, settings.currencySymbol)}", lineWidth))
+            sb.appendLine(leftRight(labels.discount, "-${formatMoney(discountAmount, settings.currencySymbol)}", lineWidth))
         }
 
-        sb.append(escAlignCenter())
-        sb.append(escDoubleHeight(true))
-        sb.append(escBold(true))
-        sb.appendLine(leftRight("TOTAL", formatMoney(total, settings.currencySymbol), lineWidth))
-        sb.append(escBold(false))
-        sb.append(escDoubleHeight(false))
-        sb.append(escAlignLeft())
+        appendReceiptTotal(sb, labels.total, total, settings.currencySymbol, lineWidth)
 
         if (settings.receiptShowVatTable && vatRows.isNotEmpty()) {
-            sb.appendLine("TVA")
-            sb.appendLine(vatRow("Type", "Net", "TVA", "Brut"))
+            if (cart.vatIncludedInPrice) {
+                sb.appendLine(labels.vatIncludedNote)
+            }
+            sb.appendLine(labels.vatTitle)
+            sb.appendLine(vatRow(labels.vatType, labels.vatNet, labels.vatTax, labels.vatGross, lineWidth))
             vatRows.forEach { row ->
-                sb.appendLine(vatRow(row.label.take(14), twoDp(row.net), twoDp(row.tva), twoDp(row.brut)))
+                sb.appendLine(vatRow(row.label, twoDp(row.net), twoDp(row.tva), twoDp(row.brut), lineWidth))
             }
         }
 
         context.paymentMethod?.let { method ->
-            sb.appendLine(leftRight("Payment:", paymentLabel(method), lineWidth))
+            sb.appendLine(leftRight(labels.payment, labels.paymentMethod(method), lineWidth))
             context.amountPaid?.let { paid ->
-                sb.appendLine(leftRight("Paid:", twoDp(paid), lineWidth))
+                sb.appendLine(leftRight(labels.paid, twoDp(paid), lineWidth))
             }
         }
         if (tipAmount > 0.0) {
-            sb.appendLine(leftRight("Tip:", formatMoney(tipAmount, settings.currencySymbol), lineWidth))
+            sb.appendLine(leftRight(labels.tip, formatMoney(tipAmount, settings.currencySymbol), lineWidth))
         }
 
         if (settings.receiptShowStaffLine) {
-            sb.appendLine("Staff: ${context.staffName}")
+            sb.appendLine("${labels.staff} ${context.staffName}")
         }
-        sb.appendLine(dateTimeFmt.format(Date()))
-        context.orderNumber?.let { sb.appendLine("Order #$it") }
-        sb.appendLine("Source: ${context.sourceLabel}")
+        sb.appendLine(center(dateTimeFmt.format(Date()), lineWidth))
+        sb.appendLine(center("${labels.source} ${context.sourceLabel}", lineWidth))
         appendFooter(sb, settings.receiptFooter, lineWidth)
         sb.appendLine("\n\n\n")
         return finalizePayload(sb.toString(), settings, lineWidth)
@@ -734,33 +724,28 @@ class BluetoothPrinterService @Inject constructor(
         lineWidth: Int = LINE_WIDTH_80
     ): ByteArray {
         val sb = StringBuilder()
+        val labels = ReceiptLabels.forLanguage(settings.defaultLanguage)
         val dateTimeFmt = SimpleDateFormat("dd-MM-yyyy HH:mm", Locale.getDefault())
         val sepEq = "=".repeat(lineWidth.coerceAtMost(32))
         val vatRows = items.filter { it.taxRate > 0.0 }
             .groupBy { it.taxRate }
             .map { (rate, groupItems) ->
-                val brut = groupItems.sumOf { it.lineSubtotal + (it.lineSubtotal * it.taxRate / 100.0) }
-                val net = brut / (1.0 + rate / 100.0)
-                val tva = brut - net
+                val brut = groupItems.sumOf { it.lineTotal }
+                val tva = groupItems.sumOf { it.lineTax }
+                val net = brut - tva
                 VatBreakdownRow("A: ${"%.1f".format(rate)}%", rate, net, tva, brut)
             }
 
-        appendHeader(sb, settings.receiptHeader.ifBlank { settings.businessName }, lineWidth)
-        if (settings.receiptHeader.isBlank()) {
-            sb.appendLine(center(settings.businessName, lineWidth))
-        }
-        if (settings.vatNumber.isNotBlank()) {
-            sb.appendLine(center(settings.vatNumber, lineWidth))
-        }
+        appendReceiptStoreBlock(sb, settings, lineWidth)
         sb.appendLine(center(sepEq, lineWidth))
 
-        sb.append(escAlignCenter())
-        sb.append(escDoubleHeight(true))
-        sb.append(escBold(true))
-        sb.appendLine("Order #${transaction.transactionNumber}")
-        sb.append(escBold(false))
-        sb.append(escDoubleHeight(false))
-        sb.append(escAlignLeft())
+        val serviceType = transaction.serviceType ?: com.chaslay.pos.domain.model.ServiceType.TAKEAWAY
+        val orderType = labels.fulfillmentLabel(
+            com.chaslay.pos.domain.model.FulfillmentType.WALK_IN,
+            serviceType
+        )
+        appendReceiptOrderType(sb, orderType, lineWidth)
+        appendReceiptOrderNumber(sb, labels.orderNumber, transaction.transactionNumber, lineWidth)
 
         sb.appendLine(center(sepEq, lineWidth))
         items.forEach { item ->
@@ -768,14 +753,15 @@ class BluetoothPrinterService @Inject constructor(
                 append("${item.quantity}x ${item.productName}")
                 if (item.variantName != null) append(" (${item.variantName})")
             }
+            val lineAmount = if (settings.vatIncludedInPrice) item.lineTotal else item.lineSubtotal
             sb.appendLine(
-                leftRight(label.take(lineWidth - 12), formatMoney(item.lineSubtotal, settings.currencySymbol), lineWidth)
+                leftRight(label.take(lineWidth - 12), formatMoney(lineAmount, settings.currencySymbol), lineWidth)
             )
             val lineDiscount = item.lineDiscountPerUnit * item.quantity
             if (lineDiscount > 0.0) {
                 sb.appendLine(
                     leftRight(
-                        "  Item discount",
+                        "  ${labels.itemDiscount}",
                         "-${formatMoney(lineDiscount, settings.currencySymbol)}",
                         lineWidth
                     )
@@ -789,43 +775,39 @@ class BluetoothPrinterService @Inject constructor(
         val orderDiscount = resolveReceiptDiscount(transaction)
         if (orderDiscount > 0.0) {
             val discountLabel = if (transaction.discountPercent > 0) {
-                "Discount (${transaction.discountPercent.toInt()}%):"
+                labels.discountPercent.format(transaction.discountPercent.toInt())
             } else {
-                "Discount:"
+                labels.discount
             }
             sb.appendLine(leftRight(discountLabel, "-${formatMoney(orderDiscount, settings.currencySymbol)}", lineWidth))
         }
         if (transaction.tipAmount > 0.0) {
-            sb.appendLine(leftRight("Tip:", formatMoney(transaction.tipAmount, settings.currencySymbol), lineWidth))
+            sb.appendLine(leftRight(labels.tip, formatMoney(transaction.tipAmount, settings.currencySymbol), lineWidth))
         }
 
-        sb.append(escAlignCenter())
-        sb.append(escDoubleHeight(true))
-        sb.append(escBold(true))
-        sb.appendLine(leftRight("TOTAL", formatMoney(transaction.total, settings.currencySymbol), lineWidth))
-        sb.append(escBold(false))
-        sb.append(escDoubleHeight(false))
-        sb.append(escAlignLeft())
+        appendReceiptTotal(sb, labels.total, transaction.total, settings.currencySymbol, lineWidth)
 
         if (settings.receiptShowVatTable && vatRows.isNotEmpty()) {
-            sb.appendLine("TVA")
-            sb.appendLine(vatRow("Type", "Net", "TVA", "Brut"))
+            if (settings.vatIncludedInPrice) {
+                sb.appendLine(labels.vatIncludedNote)
+            }
+            sb.appendLine(labels.vatTitle)
+            sb.appendLine(vatRow(labels.vatType, labels.vatNet, labels.vatTax, labels.vatGross, lineWidth))
             vatRows.forEach { row ->
-                sb.appendLine(vatRow(row.label.take(14), twoDp(row.net), twoDp(row.tva), twoDp(row.brut)))
+                sb.appendLine(vatRow(row.label, twoDp(row.net), twoDp(row.tva), twoDp(row.brut), lineWidth))
             }
         }
 
-        sb.appendLine(leftRight("Payment:", paymentLabel(transaction.paymentMethod), lineWidth))
-        sb.appendLine(leftRight("Paid:", twoDp(transaction.total), lineWidth))
+        sb.appendLine(leftRight(labels.payment, labels.paymentMethod(transaction.paymentMethod), lineWidth))
+        sb.appendLine(leftRight(labels.paid, twoDp(transaction.total), lineWidth))
         transaction.cardReference?.takeIf { it.isNotBlank() }?.let { ref ->
             sb.appendLine(leftRight("Terminal ref:", ref.take(lineWidth - 14), lineWidth))
         }
         if (settings.receiptShowStaffLine) {
-            sb.appendLine("Staff: ${transaction.userName}")
+            sb.appendLine("${labels.staff} ${transaction.userName}")
         }
-        sb.appendLine(dateTimeFmt.format(Date(transaction.createdAt)))
-        sb.appendLine("Order #${transaction.transactionNumber}")
-        sb.appendLine("Source: POS")
+        sb.appendLine(center(dateTimeFmt.format(Date(transaction.createdAt)), lineWidth))
+        sb.appendLine(center("${labels.source} POS", lineWidth))
         transaction.notes?.lines()?.filter { it.isNotBlank() }?.forEach { line ->
             sb.appendLine(line)
         }
@@ -835,51 +817,53 @@ class BluetoothPrinterService @Inject constructor(
         } else null
         if (qrUrl != null) {
             sb.appendLine(center("-".repeat(lineWidth.coerceAtMost(32)), lineWidth))
-            sb.appendLine(center("Scan for digital receipt", lineWidth))
+            sb.appendLine(center(labels.scanDigitalReceipt, lineWidth))
         }
         return finalizePayload(sb.toString(), settings, lineWidth, qrUrl)
     }
 
-    private fun buildEndOfDayReport(settings: BusinessSettingsEntity, report: EndOfDayReport): ByteArray {
+    private fun buildEndOfDayReport(
+        settings: BusinessSettingsEntity,
+        report: EndOfDayReport,
+        lineWidth: Int = LINE_WIDTH_80
+    ): ByteArray {
         val sym = settings.currencySymbol
         val dateFmt = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
-        val divider = "=".repeat(LINE_WIDTH)
-        val dashes = "-".repeat(LINE_WIDTH)
+        val divider = "=".repeat(lineWidth.coerceAtMost(32))
+        val dashes = "-".repeat(lineWidth.coerceAtMost(32))
+        val compact = lineWidth <= LINE_WIDTH_58
         val sb = StringBuilder()
 
         sb.appendLine(divider)
-        sb.appendLine(escBold(true))
-        sb.appendLine(settings.businessName)
-        sb.appendLine(escBold(false))
+        appendCenteredLines(sb, settings.businessName, lineWidth, bold = true)
         sb.appendLine(divider)
         sb.appendLine("")
-        sb.appendLine(escBold(true))
-        sb.appendLine("Report Period")
-        sb.appendLine(escBold(false))
+        appendCenteredLines(sb, "END OF DAY", lineWidth, bold = true)
+        sb.appendLine("")
+        appendCenteredLines(sb, "Report Period", lineWidth, bold = true)
         val periodLabel = if (report.periodStart > 0) {
             "${dateFmt.format(Date(report.periodStart))} to ${dateFmt.format(Date(report.periodEnd))}"
         } else {
             dateFmt.format(Date())
         }
-        sb.appendLine(periodLabel)
+        wrapText(periodLabel, lineWidth).forEach { sb.appendLine(center(it, lineWidth)) }
         sb.appendLine("")
         sb.appendLine(dashes)
-        sb.appendLine(center("SALES SUMMARY"))
+        sb.appendLine(center("SALES SUMMARY", lineWidth))
         sb.appendLine(dashes)
-        sb.appendLine(right(formatMoney(report.subtotal, sym)))
-        sb.appendLine("Subtotal")
+        sb.appendLine(leftRight("Subtotal", formatMoney(report.subtotal, sym), lineWidth))
         sb.appendLine("")
 
-        // VAT table
-        sb.appendLine("TVA")
-        sb.appendLine(vatRow("Type", "Net", "TVA", "Brut"))
+        sb.appendLine(if (compact) "TVA" else center("TVA", lineWidth))
+        sb.appendLine(vatRow("Type", "Net", "TVA", "Brut", lineWidth))
         report.vatRows.forEach { row ->
             sb.appendLine(
                 vatRow(
                     row.label,
                     twoDp(row.net),
                     twoDp(row.tva),
-                    twoDp(row.brut)
+                    twoDp(row.brut),
+                    lineWidth
                 )
             )
         }
@@ -888,32 +872,38 @@ class BluetoothPrinterService @Inject constructor(
                 "Total",
                 twoDp(report.netTotal),
                 twoDp(report.taxTotal),
-                twoDp(report.brutTotal)
+                twoDp(report.brutTotal),
+                lineWidth
             )
         )
         sb.appendLine(dashes)
-        sb.appendLine(leftRight("TOTAL", formatMoney(report.brutTotal, sym)))
+        appendReceiptTotal(sb, "TOTAL", report.brutTotal, sym, lineWidth)
         if (report.tipsTotal > 0.0) {
-            sb.appendLine(leftRight("Tips (not taxable)", formatMoney(report.tipsTotal, sym)))
-            sb.appendLine(leftRight("GRAND TOTAL", formatMoney(report.grandTotal, sym)))
+            sb.appendLine(leftRight("Tips", formatMoney(report.tipsTotal, sym), lineWidth))
+            sb.appendLine(leftRight("GRAND TOTAL", formatMoney(report.grandTotal, sym), lineWidth))
         }
-        sb.appendLine(leftRight("Completed Orders", report.salesCount.toString()))
+        sb.appendLine(leftRight("Orders", report.salesCount.toString(), lineWidth))
         sb.appendLine("")
 
-        // Payment methods
         sb.appendLine(dashes)
-        sb.appendLine(center("PAYMENT METHODS"))
+        sb.appendLine(center("PAYMENT METHODS", lineWidth))
         sb.appendLine(dashes)
         report.paymentRows.forEach { row ->
-            sb.appendLine(payRow(row.label, "${"%.1f".format(row.percent)}%", formatMoney(row.amount, sym)))
+            sb.appendLine(
+                payRow(
+                    row.label,
+                    "${"%.1f".format(row.percent)}%",
+                    formatMoney(row.amount, sym),
+                    lineWidth
+                )
+            )
         }
         sb.appendLine(dashes)
-        sb.appendLine(leftRight("Total", formatMoney(report.paymentRows.sumOf { it.amount }, sym)))
+        sb.appendLine(leftRight("Total", formatMoney(report.paymentRows.sumOf { it.amount }, sym), lineWidth))
         sb.appendLine("")
 
-        // Order types
         sb.appendLine(dashes)
-        sb.appendLine(center("ORDER TYPES"))
+        sb.appendLine(center("ORDER TYPES", lineWidth))
         sb.appendLine(dashes)
         report.orderTypeRows.forEach { row ->
             sb.appendLine(
@@ -921,27 +911,186 @@ class BluetoothPrinterService @Inject constructor(
                     row.label,
                     row.count.toString(),
                     "${"%.1f".format(row.percent)}%",
-                    formatMoney(row.amount, sym)
+                    formatMoney(row.amount, sym),
+                    lineWidth
                 )
             )
         }
         sb.appendLine(dashes)
-        sb.appendLine(leftRight("Total", formatMoney(report.orderTypeRows.sumOf { it.amount }, sym)))
+        sb.appendLine(leftRight("Total", formatMoney(report.orderTypeRows.sumOf { it.amount }, sym), lineWidth))
+
+        if (report.productsSold.isNotEmpty()) {
+            sb.appendLine("")
+            sb.appendLine(dashes)
+            sb.appendLine(center("PRODUCTS SOLD", lineWidth))
+            sb.appendLine(dashes)
+            sb.appendLine(leftRight("Total qty", report.productsSold.sumOf { it.quantitySold }.toString(), lineWidth))
+            val nameWidth = if (compact) 22 else 30
+            report.productsSold.forEach { product ->
+                val name = product.productName.take(nameWidth).padEnd(nameWidth.coerceAtMost(lineWidth - 6))
+                sb.appendLine(name + product.quantitySold.toString().padStart(6))
+            }
+        }
         sb.appendLine("\n\n\n")
         return encodePayload(sb.toString())
     }
 
-    private fun vatRow(type: String, net: String, tva: String, brut: String): String {
-        val t = type.take(14).padEnd(14)
-        return t + net.padStart(6) + tva.padStart(6) + brut.padStart(6)
+    private fun appendReceiptStoreBlock(
+        sb: StringBuilder,
+        settings: BusinessSettingsEntity,
+        lineWidth: Int
+    ) {
+        if (settings.receiptHeader.isNotBlank()) {
+            appendHeader(sb, settings.receiptHeader, lineWidth)
+        } else {
+            appendCenteredLines(sb, settings.businessName, lineWidth, bold = true)
+            listOfNotNull(
+                settings.address.trim().takeIf { it.isNotEmpty() },
+                settings.phone.trim().takeIf { it.isNotEmpty() },
+                settings.email.trim().takeIf { it.isNotEmpty() },
+                settings.website.trim().takeIf { it.isNotEmpty() }
+            ).forEach { line ->
+                wrapText(line, lineWidth).forEach { wrapped ->
+                    sb.appendLine(center(wrapped, lineWidth))
+                }
+            }
+        }
+        if (settings.vatNumber.isNotBlank()) {
+            sb.appendLine(center(settings.vatNumber, lineWidth))
+        }
     }
 
-    private fun payRow(label: String, percent: String, amount: String): String {
+    private fun appendReceiptOrderType(sb: StringBuilder, orderType: String, lineWidth: Int) {
+        sb.append(escAlignLeft())
+        sb.append(escDoubleHeight(false))
+        appendCenteredLines(sb, orderType, lineWidth, bold = true)
+    }
+
+    private fun appendReceiptOrderNumber(
+        sb: StringBuilder,
+        orderLabel: String,
+        orderNumber: String,
+        lineWidth: Int
+    ) {
+        sb.append(escAlignLeft())
+        sb.append(escDoubleHeight(false))
+        sb.append(escBold(false))
+        val label = orderLabel.trim()
+        val number = orderNumber.trim()
+        val compact = lineWidth <= LINE_WIDTH_58
+        if (compact) {
+            wrapText(label, lineWidth).forEach { sb.appendLine(center(it, lineWidth)) }
+            sb.append(escBold(true))
+            wrapText(number, lineWidth).forEach { sb.appendLine(center(it, lineWidth)) }
+            sb.append(escBold(false))
+            return
+        }
+        val combined = "$label$number"
+        if (combined.length <= lineWidth) {
+            appendCenteredLines(sb, combined, lineWidth, bold = true)
+        } else {
+            appendCenteredLines(sb, label, lineWidth, bold = true)
+            appendCenteredLines(sb, number, lineWidth, bold = true)
+        }
+    }
+
+    private fun appendCenteredLines(
+        sb: StringBuilder,
+        text: String,
+        lineWidth: Int,
+        bold: Boolean = false
+    ) {
+        if (bold) sb.append(escBold(true))
+        wrapText(text, lineWidth).forEach { line ->
+            sb.appendLine(center(line, lineWidth))
+        }
+        if (bold) sb.append(escBold(false))
+    }
+
+    private fun wrapText(text: String, width: Int): List<String> {
+        if (text.length <= width) return listOf(text)
+        val words = text.split(' ')
+        val lines = mutableListOf<String>()
+        var current = ""
+        for (word in words) {
+            val candidate = if (current.isEmpty()) word else "$current $word"
+            if (candidate.length <= width) {
+                current = candidate
+            } else {
+                if (current.isNotEmpty()) lines.add(current)
+                current = if (word.length <= width) {
+                    word
+                } else {
+                    word.chunked(width).forEach { chunk ->
+                        if (current.isNotEmpty()) {
+                            lines.add(current)
+                            current = ""
+                        }
+                        lines.add(chunk)
+                    }
+                    ""
+                }
+            }
+        }
+        if (current.isNotEmpty()) lines.add(current)
+        return lines.ifEmpty { listOf(text.take(width)) }
+    }
+
+    private fun appendReceiptTotal(
+        sb: StringBuilder,
+        totalLabel: String,
+        total: Double,
+        currencySymbol: String,
+        lineWidth: Int
+    ) {
+        val amount = formatMoney(total, currencySymbol)
+        val compact = lineWidth <= LINE_WIDTH_58
+        sb.append(escAlignLeft())
+        sb.append(escDoubleHeight(false))
+        sb.append(escBold(true))
+        if (compact) {
+            sb.appendLine(center(totalLabel, lineWidth))
+            sb.appendLine(center(amount, lineWidth))
+        } else {
+            sb.append(escAlignCenter())
+            sb.append(escDoubleHeight(true))
+            sb.appendLine(leftRight(totalLabel, amount, lineWidth))
+            sb.append(escDoubleHeight(false))
+        }
+        sb.append(escBold(false))
+        sb.append(escAlignLeft())
+    }
+
+    private fun vatRow(type: String, net: String, tva: String, brut: String, lineWidth: Int = LINE_WIDTH_80): String {
+        val typeWidth = if (lineWidth <= LINE_WIDTH_58) 10 else 14
+        val numWidth = if (lineWidth <= LINE_WIDTH_58) 5 else 6
+        val t = type.take(typeWidth).padEnd(typeWidth)
+        return t + net.padStart(numWidth) + tva.padStart(numWidth) + brut.padStart(numWidth)
+    }
+
+    private fun payRow(
+        label: String,
+        percent: String,
+        amount: String,
+        lineWidth: Int = LINE_WIDTH_80
+    ): String {
+        if (lineWidth <= LINE_WIDTH_58) {
+            return leftRight("${label.take(12)} $percent", amount, lineWidth)
+        }
         val l = label.take(12).padEnd(12)
         return l + percent.padStart(7) + amount.padStart(13)
     }
 
-    private fun orderTypeRow(label: String, count: String, percent: String, amount: String): String {
+    private fun orderTypeRow(
+        label: String,
+        count: String,
+        percent: String,
+        amount: String,
+        lineWidth: Int = LINE_WIDTH_80
+    ): String {
+        if (lineWidth <= LINE_WIDTH_58) {
+            return leftRight("${label.take(8)} ${count}x $percent", amount, lineWidth)
+        }
         val l = label.take(9).padEnd(9)
         return l + count.padStart(3) + percent.padStart(8) + amount.padStart(12)
     }
@@ -1202,8 +1351,15 @@ class BluetoothPrinterService @Inject constructor(
         if (on) "\u001B\u0045\u0001" else "\u001B\u0045\u0000"
 
     private fun leftRight(label: String, value: String, width: Int = LINE_WIDTH_80): String {
-        val space = width - label.length - value.length
-        return if (space < 1) "$label $value" else label + " ".repeat(space) + value
+        val valueLen = value.length
+        val maxLabelLen = (width - valueLen - 1).coerceAtLeast(1)
+        val trimmedLabel = if (label.length > maxLabelLen) label.take(maxLabelLen) else label
+        val space = width - trimmedLabel.length - valueLen
+        return if (space < 1) {
+            (trimmedLabel.take((width - valueLen - 1).coerceAtLeast(1)) + " " + value).take(width)
+        } else {
+            trimmedLabel + " ".repeat(space) + value
+        }
     }
 
     private fun escAlignCenter(): String = "\u001B\u0061\u0001"

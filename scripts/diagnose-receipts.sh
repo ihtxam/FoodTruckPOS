@@ -19,6 +19,19 @@ curl -sf https://api.chaslay.com/health && echo "  api.chaslay.com OK" || echo "
 curl -sf https://pay.chaslay.com/health && echo "  pay.chaslay.com OK" || echo "  pay.chaslay.com FAIL (check Caddy TLS for pay.chaslay.com)"
 
 echo ""
+echo "=== API_KEY loaded in receipts container (restart does NOT reload env_file) ==="
+RUNNING_KEY=$(docker compose exec -T receipts printenv API_KEY 2>/dev/null | tr -d '\r' || true)
+FILE_KEY=$(grep -E '^API_KEY=' receipts.env 2>/dev/null | cut -d= -f2- | tr -d '\r"' || true)
+if [[ -z "$RUNNING_KEY" ]]; then
+  echo "  Container API_KEY is empty (check receipts.env path)"
+elif [[ "$RUNNING_KEY" == "$FILE_KEY" ]]; then
+  echo "  Container matches receipts.env"
+else
+  echo "  MISMATCH: container has a different key than receipts.env"
+  echo "  Run: docker compose up -d --force-recreate receipts"
+fi
+
+echo ""
 echo "=== Receipt publish test (needs API_KEY in backend/receipts.env) ==="
 API_KEY=$(grep -E '^API_KEY=' receipts.env 2>/dev/null | cut -d= -f2- | tr -d '\r' || true)
 if [[ -z "$API_KEY" ]]; then

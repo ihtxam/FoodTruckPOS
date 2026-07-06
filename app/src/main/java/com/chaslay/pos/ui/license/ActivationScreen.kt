@@ -16,6 +16,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -26,6 +27,86 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.chaslay.pos.R
 import com.chaslay.pos.domain.model.LicenseGateState
+
+@Composable
+fun LicenseSettingsSection(
+    viewModel: LicenseViewModel = hiltViewModel()
+) {
+    val license by viewModel.licenseState.collectAsStateWithLifecycle()
+    val form by viewModel.formState.collectAsStateWithLifecycle()
+    val dateFmt = remember { java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault()) }
+
+    Text(stringResource(R.string.license_settings_title), fontWeight = FontWeight.Bold, fontSize = 18.sp)
+    val statusText = when (license.gateState) {
+        LicenseGateState.TRIAL -> stringResource(R.string.license_status_trial, license.trialDaysRemaining)
+        LicenseGateState.ALLOWED -> {
+            val expiry = license.snapshot.expiresAt.takeIf { it > 0L }?.let { dateFmt.format(java.util.Date(it)) } ?: "-"
+            stringResource(R.string.license_status_active, expiry)
+        }
+        LicenseGateState.EXPIRED, LicenseGateState.NEEDS_ACTIVATION -> stringResource(R.string.license_status_expired)
+        LicenseGateState.LOADING -> "..."
+    }
+    Text(statusText, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text(
+        text = stringResource(R.string.license_activate_early_body),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+    LicenseActivationForm(
+        activationCode = form.activationCode,
+        deviceId = license.snapshot.deviceId,
+        isActivating = form.isActivating,
+        errorMessage = form.errorMessage,
+        onCodeChange = viewModel::updateActivationCode,
+        onActivate = viewModel::activate
+    )
+}
+
+@Composable
+private fun LicenseActivationForm(
+    activationCode: String,
+    deviceId: String,
+    isActivating: Boolean,
+    errorMessage: String?,
+    onCodeChange: (String) -> Unit,
+    onActivate: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        OutlinedTextField(
+            value = activationCode,
+            onValueChange = onCodeChange,
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text(stringResource(R.string.license_activation_code)) },
+            singleLine = true,
+            enabled = !isActivating
+        )
+        Text(
+            text = stringResource(R.string.license_device_id, deviceId.ifBlank { "..." }),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = stringResource(R.string.license_device_id_help),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        errorMessage?.let { error ->
+            Text(text = error, color = MaterialTheme.colorScheme.error)
+        }
+        Button(
+            onClick = onActivate,
+            modifier = Modifier.fillMaxWidth(),
+            enabled = activationCode.isNotBlank() && !isActivating
+        ) {
+            if (isActivating) {
+                CircularProgressIndicator(modifier = Modifier.height(20.dp))
+            } else {
+                Text(stringResource(R.string.license_activate_button))
+            }
+        }
+    }
+}
 
 @Composable
 fun ActivationScreen(
@@ -63,38 +144,14 @@ fun ActivationScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Spacer(modifier = Modifier.height(8.dp))
-        OutlinedTextField(
-            value = form.activationCode,
-            onValueChange = viewModel::updateActivationCode,
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text(stringResource(R.string.license_activation_code)) },
-            singleLine = true,
-            enabled = !form.isActivating
+        LicenseActivationForm(
+            activationCode = form.activationCode,
+            deviceId = license.snapshot.deviceId,
+            isActivating = form.isActivating,
+            errorMessage = form.errorMessage,
+            onCodeChange = viewModel::updateActivationCode,
+            onActivate = viewModel::activate
         )
-        Text(
-            text = stringResource(R.string.license_device_id, license.snapshot.deviceId.ifBlank { "…" }),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Text(
-            text = stringResource(R.string.license_device_id_help),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        form.errorMessage?.let { error ->
-            Text(text = error, color = MaterialTheme.colorScheme.error)
-        }
-        Button(
-            onClick = viewModel::activate,
-            modifier = Modifier.fillMaxWidth(),
-            enabled = form.activationCode.isNotBlank() && !form.isActivating
-        ) {
-            if (form.isActivating) {
-                CircularProgressIndicator(modifier = Modifier.height(20.dp))
-            } else {
-                Text(stringResource(R.string.license_activate_button))
-            }
-        }
     }
 }
 

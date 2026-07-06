@@ -36,7 +36,7 @@ object DatabaseModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): AppDatabase =
         Room.databaseBuilder(context, AppDatabase::class.java, "food_truck_pos.db")
-            .addCallback(DatabaseCallback())
+            .addCallback(DatabaseCallback(context))
             .fallbackToDestructiveMigration()
             .build()
 

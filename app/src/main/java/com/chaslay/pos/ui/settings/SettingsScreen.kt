@@ -60,6 +60,7 @@ import com.chaslay.pos.domain.model.CategoryPrintSetting
 import com.chaslay.pos.domain.model.PrintTarget
 import com.chaslay.pos.domain.model.SupportedCurrency
 import com.chaslay.pos.printer.DiscoveredPrinter
+import com.chaslay.pos.ui.license.LicenseSettingsSection
 import com.chaslay.pos.ui.theme.ChaslayBrand
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -114,7 +115,7 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        section.title,
+                        stringResource(section.titleRes),
                         fontWeight = if (state.selectedSection == section) FontWeight.Bold else FontWeight.Normal,
                         color = if (state.selectedSection == section) ChaslayBrand.White else ChaslayBrand.Gray400,
                         modifier = Modifier.fillMaxWidth()
@@ -306,6 +307,31 @@ fun SettingsScreen(
             onValueChange = viewModel::updateTakeawayVatRate,
             label = { Text(stringResource(R.string.takeaway_vat)) },
             modifier = Modifier.fillMaxWidth()
+        )
+        Text(stringResource(R.string.vat_pricing_mode), fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            FilterChip(
+                selected = !state.vatIncludedInPrice,
+                onClick = { viewModel.updateVatIncludedInPrice(false) },
+                label = { Text(stringResource(R.string.vat_excluded_in_price)) }
+            )
+            FilterChip(
+                selected = state.vatIncludedInPrice,
+                onClick = { viewModel.updateVatIncludedInPrice(true) },
+                label = { Text(stringResource(R.string.vat_included_in_price)) }
+            )
+        }
+        Text(
+            if (state.vatIncludedInPrice) {
+                stringResource(R.string.vat_included_hint)
+            } else {
+                stringResource(R.string.vat_excluded_hint)
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Spacer(modifier = Modifier.height(8.dp))
         if (state.posMode == PosMode.RESTAURANT) {
@@ -627,34 +653,8 @@ fun SettingsScreen(
         Text(stringResource(R.string.theme_help), style = MaterialTheme.typography.bodySmall)
         }
 
-        if (state.selectedSection == SettingsSection.DIAGNOSTICS) {
-        Text(stringResource(R.string.crash_logs), fontWeight = FontWeight.Bold, fontSize = 18.sp)
-        Text(stringResource(R.string.crash_logs_help), style = MaterialTheme.typography.bodySmall)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = viewModel::refreshCrashLogs) { Text(stringResource(R.string.refresh)) }
-            Button(onClick = viewModel::clearCrashLogs) { Text(stringResource(R.string.clear)) }
-        }
-        state.crashLogs.forEach { log ->
-            TextButton(onClick = { viewModel.selectCrashLog(log.fileName) }, modifier = Modifier.fillMaxWidth()) {
-                Text("${log.title} — ${log.preview}", fontSize = 12.sp, modifier = Modifier.fillMaxWidth())
-            }
-        }
-        if (state.crashLogContent.isNotBlank()) {
-            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-            Text(state.crashLogContent, fontSize = 11.sp)
-        }
-
-        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
-        Text(stringResource(R.string.danger_zone), fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFFDC2626))
-        Text(stringResource(R.string.delete_orders_help), style = MaterialTheme.typography.bodySmall)
-        Button(
-            onClick = viewModel::showDeleteOrdersDialog,
-            enabled = !state.isDeletingOrders,
-            colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(stringResource(R.string.delete_all_orders))
-        }
+        if (state.selectedSection == SettingsSection.LICENSE) {
+            LicenseSettingsSection()
         }
 
         state.message?.let { Text(it) }
@@ -694,28 +694,6 @@ fun SettingsScreen(
             onTestPrint = viewModel::testAddPrinterForm,
             onSave = viewModel::addPrinter,
             onDismiss = viewModel::dismissAddPrinterDialog
-        )
-    }
-
-    if (state.showDeleteOrdersDialog) {
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = viewModel::dismissDeleteOrdersDialog,
-            title = { Text(stringResource(R.string.delete_all_orders)) },
-            text = { Text(stringResource(R.string.delete_orders_confirm)) },
-            confirmButton = {
-                Button(
-                    onClick = viewModel::deleteAllOrderData,
-                    enabled = !state.isDeletingOrders,
-                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626))
-                ) {
-                    Text(stringResource(R.string.delete))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = viewModel::dismissDeleteOrdersDialog) {
-                    Text(stringResource(R.string.cancel))
-                }
-            }
         )
     }
 }

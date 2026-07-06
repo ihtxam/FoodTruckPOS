@@ -357,7 +357,9 @@ fun CheckoutScreen(
                         }
                     }
                     Spacer(modifier = Modifier.height(12.dp))
-                    SummaryLine("Subtotal", formatMoney(cart.subtotal, currencySymbol))
+                    if (!cart.vatIncludedInPrice) {
+                        SummaryLine(stringResource(R.string.subtotal), formatMoney(cart.subtotal, currencySymbol))
+                    }
                     if (cart.itemDiscountTotal > 0) {
                         SummaryLine(
                             stringResource(R.string.item_discounts),
@@ -365,10 +367,21 @@ fun CheckoutScreen(
                         )
                     }
                     val taxShare = if (equalSplitCount > 1) cart.taxTotal / equalSplitCount else cart.taxTotal
-                    SummaryLine(stringResource(R.string.tax), formatMoney(taxShare, currencySymbol))
-                    if (totals.cartDiscount > 0) SummaryLine("Discount", "-${formatMoney(totals.cartDiscount, currencySymbol)}")
-                    if (checkoutState.tipAmount > 0) SummaryLine("Tip", formatMoney(checkoutState.tipAmount, currencySymbol))
-                    if (totals.roundingAdj != 0.0) SummaryLine("Rounding", formatMoney(totals.roundingAdj, currencySymbol))
+                    val taxLabel = if (cart.vatIncludedInPrice) {
+                        stringResource(R.string.tax_included_in_total)
+                    } else {
+                        stringResource(R.string.tax)
+                    }
+                    SummaryLine(taxLabel, formatMoney(taxShare, currencySymbol))
+                    if (totals.cartDiscount > 0) {
+                        SummaryLine(stringResource(R.string.discount), "-${formatMoney(totals.cartDiscount, currencySymbol)}")
+                    }
+                    if (checkoutState.tipAmount > 0) {
+                        SummaryLine(stringResource(R.string.tip), formatMoney(checkoutState.tipAmount, currencySymbol))
+                    }
+                    if (totals.roundingAdj != 0.0) {
+                        SummaryLine(stringResource(R.string.rounding), formatMoney(totals.roundingAdj, currencySymbol))
+                    }
                     Spacer(modifier = Modifier.height(8.dp))
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("TOTAL DUE", fontWeight = FontWeight.Bold, fontSize = 16.sp)
@@ -539,8 +552,10 @@ private fun rememberCheckoutTotals(
     val netSubtotal = cart.subtotal - cart.itemDiscountTotal
     val cartDiscount = if (checkoutState.discountPercent > 0) {
         netSubtotal * (checkoutState.discountPercent / 100.0)
-    } else cart.discountValue
-    val preTipTotal = (netSubtotal + cart.taxTotal - cartDiscount).coerceAtLeast(0.0)
+    } else {
+        cart.discountValue
+    }
+    val preTipTotal = cart.merchandiseTotal(checkoutState.discountPercent)
     val shareTotal = if (equalSplitCount > 1) preTipTotal / equalSplitCount else preTipTotal
     val roundedTotal = applyCashRounding(shareTotal + checkoutState.tipAmount, checkoutState.roundingStep)
     val roundingAdj = roundedTotal - (shareTotal + checkoutState.tipAmount)

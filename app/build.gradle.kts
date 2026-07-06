@@ -12,15 +12,21 @@ android {
 
     defaultConfig {
         applicationId = "com.chaslay.pos"
-        minSdk = 26
+        minSdk = 25
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.0.1"
+
+        multiDexEnabled = true
+
+        ndk {
+            abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+        }
 
         buildConfigField("String", "LICENSE_API_BASE_URL", "\"https://api.chaslay.com/\"")
         buildConfigField("String", "TENANT_SLUG", "\"\"")
-        buildConfigField("String", "SYNC_API_KEY", "\"\"")
-        buildConfigField("int", "TRIAL_DAYS", "15")
+        buildConfigField("String", "SYNC_API_KEY", "\"ihtsham_76875hgf755rjgkjh7zrzrhvjhv\"")
+        buildConfigField("int", "TRIAL_DAYS", "7")
         buildConfigField("int", "LICENSE_RENEWAL_WARNING_DAYS", "30")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -41,6 +47,7 @@ android {
     }
 
     compileOptions {
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -62,6 +69,8 @@ android {
 }
 
 dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+    implementation("androidx.multidex:multidex:2.0.1")
     val composeBom = platform("androidx.compose:compose-bom:2024.12.01")
 
     implementation("androidx.core:core-ktx:1.15.0")
