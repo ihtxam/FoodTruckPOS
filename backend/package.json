@@ -13,7 +13,8 @@
     "seed": "node scripts/seed.js",
     "generate-code": "node scripts/generate-code.js",
     "create-tenant": "node scripts/create-tenant.js",
-    "create-merchant-user": "node scripts/create-merchant-user.js"
+    "create-merchant-user": "node scripts/create-merchant-user.js",
+    "seed-sushi-sake-menu": "node scripts/seed-sushi-sake-menu.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

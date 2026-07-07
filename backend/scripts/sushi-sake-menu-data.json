@@ -1,0 +1,731 @@
+{
+  "categories": [
+    {
+      "name": "Sushi",
+      "color": "#E53935",
+      "sort": 0
+    },
+    {
+      "name": "Maki",
+      "color": "#FB8C00",
+      "sort": 1
+    },
+    {
+      "name": "California",
+      "color": "#FDD835",
+      "sort": 2
+    },
+    {
+      "name": "Spring Rolls",
+      "color": "#43A047",
+      "sort": 3
+    },
+    {
+      "name": "Bao & Yakitori",
+      "color": "#8E24AA",
+      "sort": 4
+    },
+    {
+      "name": "Signature Roll",
+      "color": "#3949AB",
+      "sort": 5
+    },
+    {
+      "name": "Salades & Accompagnements",
+      "color": "#00897B",
+      "sort": 6
+    },
+    {
+      "name": "Poke Bowls",
+      "color": "#1E88E5",
+      "sort": 7
+    },
+    {
+      "name": "Boissons",
+      "color": "#546E7A",
+      "sort": 8
+    },
+    {
+      "name": "Boxes & Menus",
+      "color": "#6D4C41",
+      "sort": 9
+    },
+    {
+      "name": "Japo Sashimi",
+      "color": "#D81B60",
+      "sort": 10
+    },
+    {
+      "name": "Yakisoba Japonaise",
+      "color": "#FF7043",
+      "sort": 11
+    },
+    {
+      "name": "Desserts",
+      "color": "#C2185B",
+      "sort": 12
+    }
+  ],
+  "items": [
+    {
+      "cat": 0,
+      "name": "Sushi Saumon",
+      "price": 2
+    },
+    {
+      "cat": 0,
+      "name": "Sushi Thon",
+      "price": 2.5
+    },
+    {
+      "cat": 0,
+      "name": "Sushi Saumon Teriyaki",
+      "price": 2.5
+    },
+    {
+      "cat": 0,
+      "name": "Sushi Thon Teriyaki",
+      "price": 2.9
+    },
+    {
+      "cat": 0,
+      "name": "Sushi Ebi Crevette",
+      "price": 2.9
+    },
+    {
+      "cat": 0,
+      "name": "Tulipe Saumon",
+      "price": 3.2
+    },
+    {
+      "cat": 0,
+      "name": "Tulipe Cheese",
+      "price": 2.9
+    },
+    {
+      "cat": 1,
+      "name": "Maki Avocat",
+      "price": 5
+    },
+    {
+      "cat": 1,
+      "name": "Maki Concombre",
+      "price": 5
+    },
+    {
+      "cat": 1,
+      "name": "Maki Cheese Avocat",
+      "price": 5.5
+    },
+    {
+      "cat": 1,
+      "name": "Maki Cheese Concombre",
+      "price": 5.5
+    },
+    {
+      "cat": 1,
+      "name": "Maki Saumon",
+      "price": 5.9
+    },
+    {
+      "cat": 1,
+      "name": "Maki Thon",
+      "price": 6.2
+    },
+    {
+      "cat": 1,
+      "name": "Maki Veggie",
+      "price": 6.5
+    },
+    {
+      "cat": 1,
+      "name": "Maki Spicy Thon",
+      "price": 6.9
+    },
+    {
+      "cat": 1,
+      "name": "Maki Ebi Tempura",
+      "price": 6.9
+    },
+    {
+      "cat": 1,
+      "name": "Maki Crevette Tobiko",
+      "price": 6.9
+    },
+    {
+      "cat": 1,
+      "name": "Maki Thon Cuit Rosa",
+      "price": 6.9
+    },
+    {
+      "cat": 1,
+      "name": "Maki Saumon Cheese",
+      "price": 6.9
+    },
+    {
+      "cat": 1,
+      "name": "Maki Unagi",
+      "price": 6.9
+    },
+    {
+      "cat": 1,
+      "name": "Maki Poulet Curry",
+      "price": 6.9
+    },
+    {
+      "cat": 2,
+      "name": "California Saumon Avocat",
+      "price": 7.5
+    },
+    {
+      "cat": 2,
+      "name": "California Thon Avocat",
+      "price": 7.9
+    },
+    {
+      "cat": 2,
+      "name": "California Thon Cuit Rosa",
+      "price": 7.9
+    },
+    {
+      "cat": 2,
+      "name": "California Saumon Cheese",
+      "price": 8.5
+    },
+    {
+      "cat": 2,
+      "name": "California Ebi Tempura",
+      "price": 8.5
+    },
+    {
+      "cat": 2,
+      "name": "California Chicken Teriyaki",
+      "price": 9.9
+    },
+    {
+      "cat": 2,
+      "name": "California Veggie Rolls",
+      "price": 7
+    },
+    {
+      "cat": 2,
+      "name": "California Tartare Saumon",
+      "price": 8.5
+    },
+    {
+      "cat": 2,
+      "name": "California 7 Spicy",
+      "price": 9.9
+    },
+    {
+      "cat": 2,
+      "name": "California Saumon Concombre Cheese",
+      "price": 8.5
+    },
+    {
+      "cat": 2,
+      "name": "California Poulet Curry Avocat",
+      "price": 9.9
+    },
+    {
+      "cat": 2,
+      "name": "California Combo Roll",
+      "price": 9.9
+    },
+    {
+      "cat": 2,
+      "name": "California Thon Cuit Concombre",
+      "price": 8.5
+    },
+    {
+      "cat": 2,
+      "name": "California Crispy Saumon",
+      "price": 9.9
+    },
+    {
+      "cat": 2,
+      "name": "California Salmon Roll Avocat Crispy Ognion",
+      "price": 9.9
+    },
+    {
+      "cat": 2,
+      "name": "California Salmon Roll Avocat",
+      "price": 8.9
+    },
+    {
+      "cat": 2,
+      "name": "California Salmon Roll",
+      "price": 8.5
+    },
+    {
+      "cat": 2,
+      "name": "California Sake",
+      "price": 9.9
+    },
+    {
+      "cat": 2,
+      "name": "California Smoke",
+      "price": 9.9
+    },
+    {
+      "cat": 2,
+      "name": "California Crevette Tokyo",
+      "price": 8.9
+    },
+    {
+      "cat": 3,
+      "name": "Spring Saumon Avocat",
+      "price": 7.5
+    },
+    {
+      "cat": 3,
+      "name": "Spring Thon Avocat",
+      "price": 8.5
+    },
+    {
+      "cat": 3,
+      "name": "Spring Thon Cuit Rosa",
+      "price": 7.9
+    },
+    {
+      "cat": 3,
+      "name": "Spring Cheese Avocat",
+      "price": 7.5
+    },
+    {
+      "cat": 3,
+      "name": "Spring Saumon Concombre Cheese",
+      "price": 8.9
+    },
+    {
+      "cat": 3,
+      "name": "Spring Saumon Snack�",
+      "price": 8.9
+    },
+    {
+      "cat": 3,
+      "name": "Spring Chicken Pane",
+      "price": 9.9
+    },
+    {
+      "cat": 3,
+      "name": "Spring Plante",
+      "price": 8.9
+    },
+    {
+      "cat": 3,
+      "name": "Spring Concombre Cheese",
+      "price": 7.9
+    },
+    {
+      "cat": 3,
+      "name": "Spring Ebi Tempura",
+      "price": 8.9
+    },
+    {
+      "cat": 4,
+      "name": "Yakitori Poulet (2 pcs)",
+      "price": 6.9
+    },
+    {
+      "cat": 4,
+      "name": "Yakitori Boeuf & Cheese (2 pcs)",
+      "price": 6.9
+    },
+    {
+      "cat": 4,
+      "name": "Bao Poulet Japonaise (3 pcs)",
+      "price": 9.9
+    },
+    {
+      "cat": 4,
+      "name": "Bao Veggie Japonaise (3 pcs)",
+      "price": 8.5
+    },
+    {
+      "cat": 4,
+      "name": "Gyoza Poulet (4 pcs)",
+      "price": 5.9
+    },
+    {
+      "cat": 4,
+      "name": "Gyoza Veggie (4 pcs)",
+      "price": 5.9
+    },
+    {
+      "cat": 4,
+      "name": "Gyoza Crevette (4 pcs)",
+      "price": 6.5
+    },
+    {
+      "cat": 5,
+      "name": "Spicy Roll",
+      "price": 14.9
+    },
+    {
+      "cat": 5,
+      "name": "Ocean Roll",
+      "price": 14.9
+    },
+    {
+      "cat": 5,
+      "name": "Fresh Roll",
+      "price": 15.5
+    },
+    {
+      "cat": 6,
+      "name": "Salade Carottes",
+      "price": 5
+    },
+    {
+      "cat": 6,
+      "name": "Edamame",
+      "price": 5
+    },
+    {
+      "cat": 6,
+      "name": "Salade Algues",
+      "price": 5.9
+    },
+    {
+      "cat": 6,
+      "name": "Vinaigre de Riz",
+      "price": 3.5
+    },
+    {
+      "cat": 6,
+      "name": "Salade Chou",
+      "price": 5
+    },
+    {
+      "cat": 7,
+      "name": "Saumon Chirashi Bowl",
+      "price": 17.5
+    },
+    {
+      "cat": 7,
+      "name": "Chirashi Thon & Saumon",
+      "price": 18.5
+    },
+    {
+      "cat": 7,
+      "name": "Poke Vegetarien",
+      "price": 17.5
+    },
+    {
+      "cat": 7,
+      "name": "Poke Saumon Teriyaki",
+      "price": 18.5
+    },
+    {
+      "cat": 7,
+      "name": "Poke Thon Sriracha Chily",
+      "price": 19.5
+    },
+    {
+      "cat": 7,
+      "name": "Poke Saumon Snack",
+      "price": 19.5
+    },
+    {
+      "cat": 8,
+      "name": "Evian 50 cl",
+      "price": 2.5
+    },
+    {
+      "cat": 8,
+      "name": "Eau Minerale Gazeuse 50 cl",
+      "price": 2.5
+    },
+    {
+      "cat": 8,
+      "name": "Eau Minerale Sans Gaz 50 cl",
+      "price": 2.5
+    },
+    {
+      "cat": 8,
+      "name": "Coca-Cola 330 ml",
+      "price": 2.5
+    },
+    {
+      "cat": 8,
+      "name": "Coca-Cola Zero 330 ml",
+      "price": 2.5
+    },
+    {
+      "cat": 8,
+      "name": "Red Bull",
+      "price": 2.5
+    },
+    {
+      "cat": 8,
+      "name": "Fanta 33 cl",
+      "price": 2.5
+    },
+    {
+      "cat": 8,
+      "name": "Fanta Exotique 33 cl",
+      "price": 2.5
+    },
+    {
+      "cat": 8,
+      "name": "Ramune Original 200 ml",
+      "price": 3.9
+    },
+    {
+      "cat": 8,
+      "name": "Ramune Fraise 200 ml",
+      "price": 3.9
+    },
+    {
+      "cat": 8,
+      "name": "Ramune Ananas 200 ml",
+      "price": 3.9
+    },
+    {
+      "cat": 8,
+      "name": "Aloe Vera Original 500 ml",
+      "price": 3.9
+    },
+    {
+      "cat": 8,
+      "name": "Aloe Vera Mangue 500 ml",
+      "price": 3.9
+    },
+    {
+      "cat": 8,
+      "name": "Aloe Vera Lychee 500 ml",
+      "price": 3.9
+    },
+    {
+      "cat": 8,
+      "name": "Aloe Vera Pasteque 500 ml",
+      "price": 3.9
+    },
+    {
+      "cat": 8,
+      "name": "Ice Tea Peach",
+      "price": 2
+    },
+    {
+      "cat": 8,
+      "name": "Oasis Fraise et Framboise",
+      "price": 2.5
+    },
+    {
+      "cat": 8,
+      "name": "Oasis Cassis et Framboise",
+      "price": 2.5
+    },
+    {
+      "cat": 8,
+      "name": "Oasis Tropical",
+      "price": 2.5
+    },
+    {
+      "cat": 8,
+      "name": "Oishi Green Tea",
+      "price": 3.5
+    },
+    {
+      "cat": 8,
+      "name": "Oishi Black Tea",
+      "price": 3.5
+    },
+    {
+      "cat": 8,
+      "name": "Ice Mango Tea",
+      "price": 3.5
+    },
+    {
+      "cat": 8,
+      "name": "Fanta Mangue et Fruit Dragon 33 cl",
+      "price": 2.5
+    },
+    {
+      "cat": 9,
+      "name": "Gourmet Box (42 pcs)",
+      "price": 55
+    },
+    {
+      "cat": 9,
+      "name": "Master Box (12 pcs)",
+      "price": 16.9
+    },
+    {
+      "cat": 9,
+      "name": "Lunch Box (20 pcs)",
+      "price": 18.5
+    },
+    {
+      "cat": 9,
+      "name": "Salmon Box (18 pcs)",
+      "price": 18.9
+    },
+    {
+      "cat": 9,
+      "name": "Fantasy Box (24 pcs)",
+      "price": 24.9
+    },
+    {
+      "cat": 9,
+      "name": "Saumon Classique Box (18 pcs)",
+      "price": 18.9
+    },
+    {
+      "cat": 9,
+      "name": "Tasty Salmon Box (18 pcs)",
+      "price": 20.9
+    },
+    {
+      "cat": 9,
+      "name": "Smart Box (12 pcs)",
+      "price": 15.9
+    },
+    {
+      "cat": 9,
+      "name": "Ocean Delight Box (14 pcs)",
+      "price": 20.9
+    },
+    {
+      "cat": 9,
+      "name": "Super Box (12 pcs)",
+      "price": 16.9
+    },
+    {
+      "cat": 9,
+      "name": "Sushi Classique Box (10 pcs)",
+      "price": 17.5
+    },
+    {
+      "cat": 9,
+      "name": "Thon Lovers Box (18 pcs)",
+      "price": 20.9
+    },
+    {
+      "cat": 9,
+      "name": "Veggie Box (15 pcs)",
+      "price": 17.9
+    },
+    {
+      "cat": 9,
+      "name": "Sushi Twin Box (10 pcs)",
+      "price": 18.5
+    },
+    {
+      "cat": 9,
+      "name": "Bento Box (22 pcs)",
+      "price": 24.5
+    },
+    {
+      "cat": 9,
+      "name": "Party Box (14 pcs)",
+      "price": 18.9
+    },
+    {
+      "cat": 9,
+      "name": "Yummy Box (20 pcs)",
+      "price": 22.9
+    },
+    {
+      "cat": 9,
+      "name": "Paco Box (42 pcs)",
+      "price": 49.9
+    },
+    {
+      "cat": 10,
+      "name": "Sashimi Saumon (6 pcs)",
+      "price": 7.5
+    },
+    {
+      "cat": 10,
+      "name": "Sashimi Thon (6 pcs)",
+      "price": 8.5
+    },
+    {
+      "cat": 10,
+      "name": "Sashimi Saumon (12 pcs)",
+      "price": 15.9
+    },
+    {
+      "cat": 10,
+      "name": "Sashimi Thon (12 pcs)",
+      "price": 17.5
+    },
+    {
+      "cat": 10,
+      "name": "Sashimi Thon & Saumon (12 pcs)",
+      "price": 17.5
+    },
+    {
+      "cat": 10,
+      "name": "Sashimi Tataki Saumon (12 pcs)",
+      "price": 18.9
+    },
+    {
+      "cat": 10,
+      "name": "Sashimi Tataki Thon (12 pcs)",
+      "price": 19.9
+    },
+    {
+      "cat": 11,
+      "name": "Yakisoba Poulet Pane",
+      "price": 15.9
+    },
+    {
+      "cat": 11,
+      "name": "Yakisoba Brochette Poulet",
+      "price": 15.9
+    },
+    {
+      "cat": 11,
+      "name": "Yakisoba Legumes",
+      "price": 13.5
+    },
+    {
+      "cat": 11,
+      "name": "Yakisoba Crevette Tempura",
+      "price": 15.5
+    },
+    {
+      "cat": 11,
+      "name": "Yakisoba Saumon Snack�",
+      "price": 15.5
+    },
+    {
+      "cat": 12,
+      "name": "Petit Mochi Vanille",
+      "price": 2.9
+    },
+    {
+      "cat": 12,
+      "name": "Petit Mochi Coconut",
+      "price": 2.9
+    },
+    {
+      "cat": 12,
+      "name": "Petit Mochi Mangue",
+      "price": 2.9
+    },
+    {
+      "cat": 12,
+      "name": "Petit Mochi Caramel",
+      "price": 2.9
+    },
+    {
+      "cat": 12,
+      "name": "Tiramisu Classic",
+      "price": 7.5
+    },
+    {
+      "cat": 12,
+      "name": "Tiramisu Oreo",
+      "price": 7.5
+    },
+    {
+      "cat": 12,
+      "name": "Tiramisu Speculoose",
+      "price": 7.5
+    }
+  ]
+}

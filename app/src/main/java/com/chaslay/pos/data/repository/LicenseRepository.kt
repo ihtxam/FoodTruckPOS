@@ -15,6 +15,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 
@@ -27,8 +28,11 @@ class LicenseRepository @Inject constructor(
     private val trialDays: Int get() = BuildConfig.TRIAL_DAYS
     private val renewalWarningDays: Int get() = BuildConfig.LICENSE_RENEWAL_WARNING_DAYS
 
-    val uiState: Flow<LicenseUiState> = licenseManager.snapshot.map { snapshot ->
-        evaluate(snapshot)
+    val uiState: Flow<LicenseUiState> = combine(
+        licenseManager.snapshot,
+        deviceIdProvider.observeDeviceId()
+    ) { snapshot, liveDeviceId ->
+        evaluate(snapshot, liveDeviceId)
     }
 
     suspend fun ensureInitialized() {
@@ -48,6 +52,8 @@ class LicenseRepository @Inject constructor(
         val trimmed = code.trim()
         if (trimmed.isBlank()) return@withContext Result.failure(IllegalArgumentException("Enter an activation code"))
         val deviceId = deviceIdProvider.getDeviceId()
+        val tenantSlug = licenseManager.getTenantSlug().takeIf { it.isNotBlank() }
+            ?: BuildConfig.TENANT_SLUG.takeIf { it.isNotBlank() }
         runCatching {
             val response = licenseApi.activate(
                 ActivateLicenseRequest(
@@ -55,7 +61,7 @@ class LicenseRepository @Inject constructor(
                     activationCode = trimmed,
                     appVersion = BuildConfig.VERSION_NAME,
                     deviceModel = "${Build.MANUFACTURER} ${Build.MODEL}",
-                    tenantSlug = BuildConfig.TENANT_SLUG.takeIf { it.isNotBlank() }
+                    tenantSlug = tenantSlug
                 )
             )
             licenseManager.saveActivation(
@@ -67,7 +73,15 @@ class LicenseRepository @Inject constructor(
         }
     }
 
-    private fun evaluate(snapshot: LicenseSnapshot): LicenseUiState {
+    suspend fun getTenantSlug(): String {
+        return licenseManager.getTenantSlug().ifBlank { BuildConfig.TENANT_SLUG }
+    }
+
+    suspend fun setTenantSlug(slug: String) {
+        licenseManager.setTenantSlug(slug)
+    }
+
+    private fun evaluate(snapshot: LicenseSnapshot, liveDeviceId: String): LicenseUiState {
         val now = System.currentTimeMillis()
         val trialDaysRemaining = if (snapshot.trialEndsAt > now) {
             TimeUnit.MILLISECONDS.toDays(snapshot.trialEndsAt - now).toInt() + 1
@@ -87,10 +101,11 @@ class LicenseRepository @Inject constructor(
 
         return LicenseUiState(
             gateState = gateState,
-            snapshot = snapshot,
+            snapshot = snapshot.copy(deviceId = liveDeviceId.ifBlank { snapshot.deviceId }),
             trialDaysRemaining = trialDaysRemaining,
             daysUntilExpiry = daysUntilExpiry,
-            showRenewalWarning = showRenewalWarning
+            showRenewalWarning = showRenewalWarning,
+            liveDeviceId = liveDeviceId
         )
     }
 }

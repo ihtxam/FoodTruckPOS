@@ -486,7 +486,12 @@
     <string name="license_activation_code">Activation code</string>
     <string name="license_activate_button">Activate</string>
     <string name="license_device_id">Device ID: %1$s</string>
-    <string name="license_device_id_help">Send this Device ID to support when requesting an activation or renewal code.</string>
+    <string name="license_device_id_label">Device ID (tap Copy and send to support)</string>
+    <string name="license_copy_device_id">Copy</string>
+    <string name="license_copied">Copied</string>
+    <string name="license_device_id_help">Support uses this short ID to generate your activation code. Example: AB12-CD34</string>
+    <string name="license_shop_slug">Shop slug</string>
+    <string name="license_shop_slug_help">Your shop URL slug from support (e.g. sushi-sake for shop.chaslay.com/sushi-sake). Required for activation.</string>
     <string name="license_trial_banner">Trial: %1$d day(s) remaining</string>
     <string name="license_renewal_banner">Subscription renews in %1$d day(s). Contact support to renew.</string>
 </resources>

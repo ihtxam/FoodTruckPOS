@@ -40,6 +40,9 @@ docker compose exec -T api npm run migrate
 echo "=== Seed (idempotent) ==="
 docker compose exec -T api npm run seed || true
 
+echo "=== Sushi Sake shop menu (idempotent) ==="
+docker compose exec -T api npm run seed-sushi-sake-menu -- --slug=sushi-sake || true
+
 echo "=== Health checks ==="
 curl -sf http://localhost:3000/health && echo " api OK"
 curl -sf http://localhost:8080/health && echo " receipts OK"

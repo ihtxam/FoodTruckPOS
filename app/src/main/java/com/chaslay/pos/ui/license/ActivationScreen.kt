@@ -1,7 +1,11 @@
 package com.chaslay.pos.ui.license
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -12,14 +16,19 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -54,10 +63,12 @@ fun LicenseSettingsSection(
     )
     LicenseActivationForm(
         activationCode = form.activationCode,
-        deviceId = license.snapshot.deviceId,
+        deviceId = form.liveDeviceId.ifBlank { license.snapshot.deviceId },
+        tenantSlug = form.tenantSlug,
         isActivating = form.isActivating,
         errorMessage = form.errorMessage,
         onCodeChange = viewModel::updateActivationCode,
+        onTenantSlugChange = viewModel::updateTenantSlug,
         onActivate = viewModel::activate
     )
 }
@@ -66,13 +77,32 @@ fun LicenseSettingsSection(
 private fun LicenseActivationForm(
     activationCode: String,
     deviceId: String,
+    tenantSlug: String,
     isActivating: Boolean,
     errorMessage: String?,
     onCodeChange: (String) -> Unit,
+    onTenantSlugChange: (String) -> Unit,
     onActivate: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    var copiedDeviceId by remember { mutableStateOf(false) }
+
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        OutlinedTextField(
+            value = tenantSlug,
+            onValueChange = onTenantSlugChange,
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text(stringResource(R.string.license_shop_slug)) },
+            placeholder = { Text("sushi-sake") },
+            singleLine = true,
+            enabled = !isActivating
+        )
+        Text(
+            text = stringResource(R.string.license_shop_slug_help),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
         OutlinedTextField(
             value = activationCode,
             onValueChange = onCodeChange,
@@ -82,10 +112,36 @@ private fun LicenseActivationForm(
             enabled = !isActivating
         )
         Text(
-            text = stringResource(R.string.license_device_id, deviceId.ifBlank { "..." }),
+            text = stringResource(R.string.license_device_id_label),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = deviceId.ifBlank { "..." },
+                modifier = Modifier.weight(1f),
+                fontFamily = FontFamily.Monospace,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold
+            )
+            OutlinedButton(
+                onClick = {
+                    if (deviceId.isBlank()) return@OutlinedButton
+                    copyToClipboard(context, deviceId)
+                    copiedDeviceId = true
+                },
+                enabled = deviceId.isNotBlank() && !isActivating
+            ) {
+                Text(
+                    if (copiedDeviceId) stringResource(R.string.license_copied)
+                    else stringResource(R.string.license_copy_device_id)
+                )
+            }
+        }
         Text(
             text = stringResource(R.string.license_device_id_help),
             style = MaterialTheme.typography.bodySmall,
@@ -97,7 +153,7 @@ private fun LicenseActivationForm(
         Button(
             onClick = onActivate,
             modifier = Modifier.fillMaxWidth(),
-            enabled = activationCode.isNotBlank() && !isActivating
+            enabled = activationCode.isNotBlank() && tenantSlug.isNotBlank() && !isActivating
         ) {
             if (isActivating) {
                 CircularProgressIndicator(modifier = Modifier.height(20.dp))
@@ -146,13 +202,20 @@ fun ActivationScreen(
         Spacer(modifier = Modifier.height(8.dp))
         LicenseActivationForm(
             activationCode = form.activationCode,
-            deviceId = license.snapshot.deviceId,
+            deviceId = form.liveDeviceId.ifBlank { license.snapshot.deviceId },
+            tenantSlug = form.tenantSlug,
             isActivating = form.isActivating,
             errorMessage = form.errorMessage,
             onCodeChange = viewModel::updateActivationCode,
+            onTenantSlugChange = viewModel::updateTenantSlug,
             onActivate = viewModel::activate
         )
     }
+}
+
+private fun copyToClipboard(context: Context, text: String) {
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    clipboard.setPrimaryClip(ClipData.newPlainText("device_id", text))
 }
 
 @Composable
