@@ -61,7 +61,8 @@ class LicenseManager @Inject constructor(
         deviceId: String,
         expiresAt: Long,
         customerName: String?,
-        planLabel: String?
+        planLabel: String?,
+        tenantSlug: String? = null
     ) {
         val now = System.currentTimeMillis()
         context.licenseDataStore.edit { prefs ->
@@ -72,6 +73,7 @@ class LicenseManager @Inject constructor(
             prefs[lastValidatedAtKey] = now
             customerName?.let { prefs[customerNameKey] = it }
             planLabel?.let { prefs[planLabelKey] = it }
+            tenantSlug?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }?.let { prefs[tenantSlugKey] = it }
         }
     }
 

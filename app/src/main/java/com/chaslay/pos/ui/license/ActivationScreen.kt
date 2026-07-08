@@ -64,11 +64,9 @@ fun LicenseSettingsSection(
     LicenseActivationForm(
         activationCode = form.activationCode,
         deviceId = form.liveDeviceId.ifBlank { license.snapshot.deviceId },
-        tenantSlug = form.tenantSlug,
         isActivating = form.isActivating,
         errorMessage = form.errorMessage,
         onCodeChange = viewModel::updateActivationCode,
-        onTenantSlugChange = viewModel::updateTenantSlug,
         onActivate = viewModel::activate
     )
 }
@@ -77,11 +75,9 @@ fun LicenseSettingsSection(
 private fun LicenseActivationForm(
     activationCode: String,
     deviceId: String,
-    tenantSlug: String,
     isActivating: Boolean,
     errorMessage: String?,
     onCodeChange: (String) -> Unit,
-    onTenantSlugChange: (String) -> Unit,
     onActivate: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -89,20 +85,6 @@ private fun LicenseActivationForm(
     var copiedDeviceId by remember { mutableStateOf(false) }
 
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        OutlinedTextField(
-            value = tenantSlug,
-            onValueChange = onTenantSlugChange,
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text(stringResource(R.string.license_shop_slug)) },
-            placeholder = { Text("sushi-sake") },
-            singleLine = true,
-            enabled = !isActivating
-        )
-        Text(
-            text = stringResource(R.string.license_shop_slug_help),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
         OutlinedTextField(
             value = activationCode,
             onValueChange = onCodeChange,
@@ -153,7 +135,7 @@ private fun LicenseActivationForm(
         Button(
             onClick = onActivate,
             modifier = Modifier.fillMaxWidth(),
-            enabled = activationCode.isNotBlank() && tenantSlug.isNotBlank() && !isActivating
+            enabled = activationCode.isNotBlank() && !isActivating
         ) {
             if (isActivating) {
                 CircularProgressIndicator(modifier = Modifier.height(20.dp))
@@ -203,11 +185,9 @@ fun ActivationScreen(
         LicenseActivationForm(
             activationCode = form.activationCode,
             deviceId = form.liveDeviceId.ifBlank { license.snapshot.deviceId },
-            tenantSlug = form.tenantSlug,
             isActivating = form.isActivating,
             errorMessage = form.errorMessage,
             onCodeChange = viewModel::updateActivationCode,
-            onTenantSlugChange = viewModel::updateTenantSlug,
             onActivate = viewModel::activate
         )
     }

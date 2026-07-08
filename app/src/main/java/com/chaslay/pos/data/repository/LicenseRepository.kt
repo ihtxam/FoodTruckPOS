@@ -16,8 +16,9 @@ import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import retrofit2.HttpException
 
 @Singleton
 class LicenseRepository @Inject constructor(
@@ -50,35 +51,29 @@ class LicenseRepository @Inject constructor(
 
     suspend fun activate(code: String): Result<Unit> = withContext(Dispatchers.IO) {
         val trimmed = code.trim()
-        if (trimmed.isBlank()) return@withContext Result.failure(IllegalArgumentException("Enter an activation code"))
+        if (trimmed.isBlank()) {
+            return@withContext Result.failure(IllegalArgumentException("Enter an activation code"))
+        }
         val deviceId = deviceIdProvider.getDeviceId()
-        val tenantSlug = licenseManager.getTenantSlug().takeIf { it.isNotBlank() }
-            ?: BuildConfig.TENANT_SLUG.takeIf { it.isNotBlank() }
         runCatching {
             val response = licenseApi.activate(
                 ActivateLicenseRequest(
                     deviceId = deviceId,
                     activationCode = trimmed,
                     appVersion = BuildConfig.VERSION_NAME,
-                    deviceModel = "${Build.MANUFACTURER} ${Build.MODEL}",
-                    tenantSlug = tenantSlug
+                    deviceModel = "${Build.MANUFACTURER} ${Build.MODEL}"
                 )
             )
             licenseManager.saveActivation(
                 deviceId = deviceId,
                 expiresAt = response.expiresAt,
                 customerName = response.customerName,
-                planLabel = response.planLabel
+                planLabel = response.planLabel,
+                tenantSlug = response.tenantSlug ?: BuildConfig.TENANT_SLUG.takeIf { it.isNotBlank() }
             )
+        }.recoverCatching { error ->
+            throw IllegalStateException(readApiError(error), error)
         }
-    }
-
-    suspend fun getTenantSlug(): String {
-        return licenseManager.getTenantSlug().ifBlank { BuildConfig.TENANT_SLUG }
-    }
-
-    suspend fun setTenantSlug(slug: String) {
-        licenseManager.setTenantSlug(slug)
     }
 
     private fun evaluate(snapshot: LicenseSnapshot, liveDeviceId: String): LicenseUiState {
@@ -107,5 +102,18 @@ class LicenseRepository @Inject constructor(
             showRenewalWarning = showRenewalWarning,
             liveDeviceId = liveDeviceId
         )
+    }
+
+    private fun readApiError(error: Throwable): String {
+        if (error is HttpException) {
+            val raw = error.response()?.errorBody()?.string()
+            if (!raw.isNullOrBlank()) {
+                runCatching {
+                    JSONObject(raw).optString("error").takeIf { it.isNotBlank() }
+                }.getOrNull()?.let { return it }
+            }
+            return "Activation failed (HTTP ${error.code()})"
+        }
+        return error.message ?: "Activation failed. Check internet and code."
     }
 }

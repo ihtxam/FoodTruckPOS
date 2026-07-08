@@ -28,8 +28,6 @@ class LicenseViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             licenseRepository.ensureInitialized()
-            val slug = licenseRepository.getTenantSlug()
-            _formState.update { it.copy(tenantSlug = slug) }
         }
         viewModelScope.launch {
             licenseRepository.uiState.collect { state ->
@@ -49,13 +47,6 @@ class LicenseViewModel @Inject constructor(
 
     fun updateActivationCode(code: String) {
         _formState.update { it.copy(activationCode = code, errorMessage = null) }
-    }
-
-    fun updateTenantSlug(slug: String) {
-        _formState.update { it.copy(tenantSlug = slug, errorMessage = null) }
-        viewModelScope.launch {
-            licenseRepository.setTenantSlug(slug)
-        }
     }
 
     fun activate() {

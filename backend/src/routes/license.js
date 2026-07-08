@@ -4,15 +4,17 @@ import { resolveTenantId } from '../services/tenantService.js';
 
 const router = Router();
 
-async function tenantIdFromRequest(req) {
+async function tenantIdFromRequest(req, { fallbackToDefault = true } = {}) {
   if (req.tenantId) return req.tenantId;
   const slug = req.body?.tenantSlug ?? req.header('X-Tenant-Slug');
-  return resolveTenantId({ tenantSlug: slug, fallbackToDefault: true });
+  if (!slug) return fallbackToDefault ? resolveTenantId({ fallbackToDefault: true }) : null;
+  return resolveTenantId({ tenantSlug: slug, fallbackToDefault });
 }
 
 router.post('/activate', async (req, res) => {
   try {
-    const tenantId = await tenantIdFromRequest(req);
+    const slug = req.body?.tenantSlug ?? req.header('X-Tenant-Slug');
+    const tenantId = slug ? await tenantIdFromRequest(req) : null;
     const { deviceId, activationCode, appVersion, deviceModel } = req.body ?? {};
     if (!deviceId || !activationCode) {
       return res.status(400).json({ error: 'deviceId and activationCode are required' });

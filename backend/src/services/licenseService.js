@@ -49,18 +49,33 @@ export async function generateActivationCode({ tenantId, label, validDays = 365,
 export async function activateLicense({ tenantId, deviceId, activationCode, appVersion, deviceModel }) {
   const normalizedDeviceId = normalizeDeviceId(deviceId);
   const codeHash = hashCode(activationCode);
-  const codeRow = (
-    await query(
-      `SELECT * FROM activation_codes
-       WHERE tenant_id = $1 AND code_hash = $2 AND used_at IS NULL
-       LIMIT 1`,
-      [tenantId, codeHash]
-    )
-  ).rows[0];
+  let codeRow = tenantId
+    ? (
+        await query(
+          `SELECT * FROM activation_codes
+           WHERE tenant_id = $1 AND code_hash = $2 AND used_at IS NULL
+           LIMIT 1`,
+          [tenantId, codeHash]
+        )
+      ).rows[0]
+    : null;
+
+  if (!codeRow) {
+    codeRow = (
+      await query(
+        `SELECT * FROM activation_codes
+         WHERE code_hash = $1 AND used_at IS NULL
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        [codeHash]
+      )
+    ).rows[0];
+  }
 
   if (!codeRow) {
     throw new Error('Invalid or already used activation code');
   }
+  const resolvedTenantId = codeRow.tenant_id;
   if (codeRow.bound_device_id && !deviceIdsMatch(codeRow.bound_device_id, deviceId)) {
     throw new Error('This activation code is bound to another device');
   }
@@ -84,7 +99,7 @@ export async function activateLicense({ tenantId, deviceId, activationCode, appV
        expires_at = EXCLUDED.expires_at,
        activated_at = COALESCE(devices.activated_at, NOW()),
        last_seen_at = NOW()`,
-    [tenantId, normalizedDeviceId, deviceModel ?? null, appVersion, customerName, planLabel, expiresAt]
+    [resolvedTenantId, normalizedDeviceId, deviceModel ?? null, appVersion, customerName, planLabel, expiresAt]
   );
 
   await query(`UPDATE activation_codes SET used_at = NOW(), bound_device_id = $2 WHERE id = $1`, [
@@ -92,7 +107,17 @@ export async function activateLicense({ tenantId, deviceId, activationCode, appV
     normalizedDeviceId,
   ]);
 
-  return { status: 'ACTIVE', expiresAt, customerName, planLabel };
+  const tenant = (
+    await query(`SELECT slug FROM tenants WHERE id = $1 LIMIT 1`, [resolvedTenantId])
+  ).rows[0];
+
+  return {
+    status: 'ACTIVE',
+    expiresAt,
+    customerName,
+    planLabel,
+    tenantSlug: tenant?.slug ?? null,
+  };
 }
 
 export async function validateLicense({ tenantId, deviceId, appVersion }) {
