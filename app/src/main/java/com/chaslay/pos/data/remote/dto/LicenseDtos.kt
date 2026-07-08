@@ -12,8 +12,7 @@ data class ActivateLicenseResponse(
     val status: String,
     val expiresAt: Long,
     val customerName: String? = null,
-    val planLabel: String? = null,
-    val tenantSlug: String? = null
+    val planLabel: String? = null
 )
 
 data class ValidateLicenseRequest(

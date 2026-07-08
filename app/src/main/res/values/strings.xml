@@ -105,10 +105,7 @@
     <string name="sending">Sending…</string>
     <string name="skip_receipt">Skip</string>
     <string name="tap_to_pay">Tap card or phone to pay</string>
-    <string name="waiting_terminal">Waiting for terminal…</string>
-    <string name="terminal_payment_in_progress">Payment in progress</string>
-    <string name="terminal_payment_hint">Complete the payment on the Adyen terminal. If the terminal is not responding, cancel here to choose another payment method.</string>
-    <string name="cancel_payment">Cancel payment</string>
+    <string name="waiting_terminal">Waiting for terminal�</string>
 
     <!-- Settings -->
     <string name="settings">Settings</string>
@@ -235,8 +232,7 @@
     <string name="order_held">Order held</string>
     <string name="usb_printer">USB Printer</string>
     <string name="usb_printer_permission">Allow USB printer access</string>
-    <string name="usb_printer_help">Connect your POS-80 (or ESC/POS USB printer), tap Select USB device, pick the printer by name, allow access once, then Save. The connection stays authorized after replug.</string>
-    <string name="usb_printer_allowed">USB allowed</string>
+    <string name="usb_printer_help">Connect an ESC/POS USB printer, tap Select USB device, grant permission, then assign it to receipts or kitchen.</string>
     <string name="select_usb_device">Select USB device</string>
     <string name="use_for_receipts">Use for receipts</string>
     <string name="use_for_kitchen">Use for kitchen</string>
@@ -487,10 +483,7 @@
     <string name="license_activation_code">Activation code</string>
     <string name="license_activate_button">Activate</string>
     <string name="license_device_id">Device ID: %1$s</string>
-    <string name="license_device_id_label">Device ID (tap Copy and send to support)</string>
-    <string name="license_copy_device_id">Copy</string>
-    <string name="license_copied">Copied</string>
-    <string name="license_device_id_help">Send this Device ID to support when requesting an activation code. Example: AB12-CD34</string>
+    <string name="license_device_id_help">Send this Device ID to support when requesting an activation or renewal code.</string>
     <string name="license_trial_banner">Trial: %1$d day(s) remaining</string>
     <string name="license_renewal_banner">Subscription renews in %1$d day(s). Contact support to renew.</string>
 </resources>
