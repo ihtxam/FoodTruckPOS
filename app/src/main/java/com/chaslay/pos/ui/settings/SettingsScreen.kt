@@ -462,7 +462,10 @@ fun SettingsScreen(
             ) {
                 Column(modifier = Modifier.padding(12.dp)) {
                     Text(printer.name, fontWeight = FontWeight.Bold)
-                    Text("${printer.connectionType} · ${printer.address}", style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        "${printer.connectionType} · ${viewModel.displayPrinterAddress(printer)}",
+                        style = MaterialTheme.typography.bodySmall
+                    )
                     Text(
                         buildList {
                             if (printer.printOrderReceipts) add("Receipts")
@@ -516,12 +519,15 @@ fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Button(onClick = { viewModel.requestUsbPermission(device.deviceName) }) {
-                            Text(stringResource(R.string.usb_printer_permission), fontSize = 11.sp)
+                        Button(onClick = { viewModel.requestUsbPermission(device.stableAddress) }) {
+                            Text(
+                                if (device.hasPermission) stringResource(R.string.usb_printer_allowed) else stringResource(R.string.usb_printer_permission),
+                                fontSize = 11.sp
+                            )
                         }
                         Button(
-                            onClick = { viewModel.testUsbPrint(device.deviceName) },
-                            enabled = !state.isPrinterBusy
+                            onClick = { viewModel.testUsbPrint(device.stableAddress) },
+                            enabled = !state.isPrinterBusy && device.hasPermission
                         ) {
                             Text(stringResource(R.string.test_print), fontSize = 11.sp)
                         }
@@ -689,6 +695,7 @@ fun SettingsScreen(
                 }
             },
             onScanUsb = viewModel::discoverUsbDevices,
+            onRequestUsbPermission = viewModel::requestUsbPermission,
             onScanNetwork = viewModel::discoverNetworkPrinters,
             onVerifyNetwork = viewModel::verifyNetworkPrinterAddress,
             onTestPrint = viewModel::testAddPrinterForm,

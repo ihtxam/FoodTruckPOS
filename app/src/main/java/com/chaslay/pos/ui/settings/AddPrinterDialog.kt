@@ -84,6 +84,7 @@ fun AddPrinterDialog(
     statusMessage: String? = null,
     onScan: () -> Unit,
     onScanUsb: () -> Unit = {},
+    onRequestUsbPermission: (String) -> Unit = {},
     onScanNetwork: (String) -> Unit = {},
     onVerifyNetwork: (String) -> Unit = {},
     onTestPrint: (AddPrinterForm) -> Unit,
@@ -199,20 +200,32 @@ fun AddPrinterDialog(
                         }
                         if (form.connectionType == "USB") {
                             usbDevices.take(5).forEach { device ->
+                                val selected = form.address == device.stableAddress
                                 Surface(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clickable {
+                                            val printerName = device.displayName.substringBefore(" (")
+                                                .ifBlank { "USB Printer" }
                                             form = form.copy(
                                                 connectionType = "USB",
-                                                name = form.name.ifBlank { "USB Printer" },
-                                                address = device.deviceName
+                                                name = form.name.ifBlank { printerName },
+                                                address = device.stableAddress
                                             )
+                                            onRequestUsbPermission(device.stableAddress)
                                         },
                                     shape = RoundedCornerShape(10.dp),
-                                    color = Color(0xFFF8FAFC)
+                                    color = if (selected) Color(0xFFE8F5E9) else Color(0xFFF8FAFC),
+                                    border = if (selected) androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF2E7D32)) else null
                                 ) {
-                                    Text(device.displayName, modifier = Modifier.padding(12.dp), fontSize = 12.sp)
+                                    Column(modifier = Modifier.padding(12.dp)) {
+                                        Text(device.displayName, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                        Text(
+                                            if (device.hasPermission) "Access allowed" else "Tap to select, then allow USB access once",
+                                            fontSize = 11.sp,
+                                            color = if (device.hasPermission) Color(0xFF2E7D32) else Color.Gray
+                                        )
+                                    }
                                 }
                             }
                         } else if (scanResults.isNotEmpty()) {
@@ -257,14 +270,15 @@ fun AddPrinterDialog(
                             placeholder = {
                                 Text(
                                     when (form.connectionType) {
-                                        "USB" -> "USB device path"
+                                        "USB" -> "Select a USB printer above"
                                         "WIFI" -> "IP address (e.g. 192.168.1.50)"
                                         else -> "MAC address (e.g. 10:23:81:4C:5F:6F)"
                                     }
                                 )
                             },
                             modifier = Modifier.fillMaxWidth(),
-                            singleLine = true
+                            singleLine = true,
+                            readOnly = form.connectionType == "USB" && form.address.startsWith("usb:")
                         )
                         if (form.connectionType == "WIFI" && form.address.trim().isNotBlank()) {
                             OutlinedButton(
@@ -564,8 +578,13 @@ fun PrinterConfigEntity.toForm(): AddPrinterForm = AddPrinterForm(
 
 fun AddPrinterForm.normalized(): AddPrinterForm {
     val addr = address.trim()
-    val host = addr.substringBefore(':').trim()
-    val resolvedAddress = if (host.matches(IPV4_REGEX)) host else addr
+    val resolvedAddress = when (connectionType) {
+        "USB" -> addr
+        else -> {
+            val host = addr.substringBefore(':').trim()
+            if (host.matches(IPV4_REGEX)) host else addr
+        }
+    }
     val resolvedName = name.trim().ifBlank {
         when (connectionType) {
             "WIFI" -> "Wi-Fi printer ($resolvedAddress)"

@@ -276,7 +276,14 @@ class SettingsViewModel @Inject constructor(
     private fun loadSavedPrinters() {
         viewModelScope.launch {
             val printers = settingsRepository.getPrinters()
-            _uiState.update { it.copy(savedPrinters = printers) }
+            printers.filter { it.connectionType == "USB" && !it.address.startsWith("usb:") }
+                .forEach { printer ->
+                    val migrated = usbPrinterManager.normalizeStoredAddress(printer.address)
+                    if (migrated.startsWith("usb:") && migrated != printer.address) {
+                        settingsRepository.savePrinter(printer.copy(address = migrated))
+                    }
+                }
+            _uiState.update { it.copy(savedPrinters = settingsRepository.getPrinters()) }
         }
     }
 
@@ -294,11 +301,31 @@ class SettingsViewModel @Inject constructor(
                 _uiState.update { it.copy(message = "Enter a printer address") }
                 return@launch
             }
+            val address = if (resolved.connectionType == "USB") {
+                usbPrinterManager.normalizeStoredAddress(resolved.address)
+            } else {
+                resolved.address
+            }
+            if (resolved.connectionType == "USB" && !usbPrinterManager.hasPermission(address)) {
+                _uiState.update { it.copy(message = "Allow USB access first, then save again") }
+                usbPrinterManager.requestPermission(address) { granted ->
+                    viewModelScope.launch {
+                        _uiState.update {
+                            it.copy(
+                                usbDevices = usbPrinterManager.listDevices(),
+                                message = if (granted) "USB permission granted — tap Save again" else "USB permission denied"
+                            )
+                        }
+                    }
+                }
+                return@launch
+            }
+            val finalForm = resolved.copy(address = address)
             val editing = _uiState.value.editingPrinter
             val entity = if (editing != null) {
-                resolved.toEntity(editing.sortOrder).copy(id = editing.id, createdAt = editing.createdAt)
+                finalForm.toEntity(editing.sortOrder).copy(id = editing.id, createdAt = editing.createdAt)
             } else {
-                resolved.toEntity(_uiState.value.savedPrinters.size)
+                finalForm.toEntity(_uiState.value.savedPrinters.size)
             }
             settingsRepository.savePrinter(entity)
             loadSavedPrinters()
@@ -319,7 +346,10 @@ class SettingsViewModel @Inject constructor(
             _uiState.update { it.copy(isPrinterBusy = true) }
             val result = withContext(Dispatchers.IO) {
                 when (form.connectionType) {
-                    "USB" -> usbPrinterManager.sendBytes(form.address, usbPrinterManager.buildTestPayload())
+                    "USB" -> usbPrinterManager.sendBytes(
+                        usbPrinterManager.normalizeStoredAddress(form.address),
+                        usbPrinterManager.buildTestPayload()
+                    )
                     else -> {
                         val settings = buildSettingsFromState().copy(
                             printerMacAddress = form.address,
@@ -618,7 +648,7 @@ class SettingsViewModel @Inject constructor(
 
     fun assignUsbAsReceipt(device: UsbPrinterDevice) {
         _uiState.update {
-            it.copy(selectedPrinter = DiscoveredPrinter(name = device.displayName, address = device.deviceName))
+            it.copy(selectedPrinter = DiscoveredPrinter(name = device.displayName, address = device.stableAddress))
         }
         saveSettings()
         _uiState.update { it.copy(message = "USB printer set for receipts") }
@@ -626,25 +656,28 @@ class SettingsViewModel @Inject constructor(
 
     fun assignUsbAsKitchen(device: UsbPrinterDevice) {
         _uiState.update {
-            it.copy(selectedKitchenPrinter = DiscoveredPrinter(name = device.displayName, address = device.deviceName))
+            it.copy(selectedKitchenPrinter = DiscoveredPrinter(name = device.displayName, address = device.stableAddress))
         }
         saveSettings()
         _uiState.update { it.copy(message = "USB printer set for kitchen") }
     }
 
     fun discoverUsbDevices() {
-        usbPrinterManager.requestPermissionForAttachedDevices()
         val devices = usbPrinterManager.listDevices()
         _uiState.update {
             it.copy(
                 usbDevices = devices,
-                message = if (devices.isEmpty()) "No USB printers detected" else "${devices.size} USB device(s) found"
+                message = if (devices.isEmpty()) {
+                    "No USB printers detected — connect POS-80 via USB OTG"
+                } else {
+                    "${devices.size} USB printer(s) found — tap one, allow access once, then Save"
+                }
             )
         }
     }
 
-    fun requestUsbPermission(deviceName: String) {
-        usbPrinterManager.requestPermission(deviceName) { granted ->
+    fun requestUsbPermission(address: String) {
+        usbPrinterManager.requestPermission(address) { granted ->
             viewModelScope.launch {
                 _uiState.update {
                     it.copy(
@@ -681,11 +714,12 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun testUsbPrint(deviceName: String) {
+    fun testUsbPrint(address: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isPrinterBusy = true) }
+            val normalized = usbPrinterManager.normalizeStoredAddress(address)
             val result = withContext(Dispatchers.IO) {
-                usbPrinterManager.sendBytes(deviceName, usbPrinterManager.buildTestPayload())
+                usbPrinterManager.sendBytes(normalized, usbPrinterManager.buildTestPayload())
             }
             _uiState.update {
                 it.copy(
@@ -699,12 +733,23 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun displayPrinterAddress(printer: com.chaslay.pos.data.local.entity.PrinterConfigEntity): String {
+        return if (printer.connectionType == "USB") {
+            usbPrinterManager.formatAddressForDisplay(printer.address)
+        } else {
+            printer.address
+        }
+    }
+
     fun testSavedPrinter(printer: com.chaslay.pos.data.local.entity.PrinterConfigEntity) {
         viewModelScope.launch {
             _uiState.update { it.copy(isPrinterBusy = true) }
             val result = withContext(Dispatchers.IO) {
                 if (printer.connectionType == "USB") {
-                    usbPrinterManager.sendBytes(printer.address, usbPrinterManager.buildTestPayload())
+                    usbPrinterManager.sendBytes(
+                        usbPrinterManager.normalizeStoredAddress(printer.address),
+                        usbPrinterManager.buildTestPayload()
+                    )
                 } else {
                     printerService.testPrint(
                         buildSettingsFromState().copy(

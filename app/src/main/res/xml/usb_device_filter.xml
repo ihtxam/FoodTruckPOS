@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Standard USB printer class (most ESC/POS devices) -->
     <usb-device class="7" />
+    <!-- Vendor-specific interfaces used by many POS-80 / thermal printers -->
+    <usb-device class="255" />
 </resources>

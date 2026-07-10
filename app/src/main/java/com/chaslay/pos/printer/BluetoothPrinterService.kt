@@ -1392,7 +1392,7 @@ class BluetoothPrinterService @Inject constructor(
 
         fun isSimulated(address: String?): Boolean = address == SIMULATED_ADDRESS
 
-        fun isUsbAddress(address: String?): Boolean = address?.startsWith("/dev/bus/usb") == true
+        fun isUsbAddress(address: String?): Boolean = UsbPrinterManager.isUsbAddress(address)
 
         private val IPV4_REGEX =
             Regex("""^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?$""")
