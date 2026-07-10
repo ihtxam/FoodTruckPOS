@@ -31,13 +31,16 @@ class LicenseViewModel @Inject constructor(
         }
         viewModelScope.launch {
             licenseRepository.uiState.collect { state ->
-                _formState.update { it.copy(
-                    gateState = state.gateState,
-                    snapshot = state.snapshot,
-                    trialDaysRemaining = state.trialDaysRemaining,
-                    daysUntilExpiry = state.daysUntilExpiry,
-                    showRenewalWarning = state.showRenewalWarning
-                ) }
+                _formState.update {
+                    it.copy(
+                        gateState = state.gateState,
+                        snapshot = state.snapshot,
+                        trialDaysRemaining = state.trialDaysRemaining,
+                        daysUntilExpiry = state.daysUntilExpiry,
+                        showRenewalWarning = state.showRenewalWarning,
+                        liveDeviceId = state.liveDeviceId.ifBlank { state.snapshot.deviceId }
+                    )
+                }
             }
         }
     }

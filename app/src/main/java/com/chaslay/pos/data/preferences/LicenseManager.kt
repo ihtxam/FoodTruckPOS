@@ -30,6 +30,7 @@ class LicenseManager @Inject constructor(
     private val customerNameKey = stringPreferencesKey("customer_name")
     private val planLabelKey = stringPreferencesKey("plan_label")
     private val lastValidatedAtKey = longPreferencesKey("last_validated_at")
+    private val tenantSlugKey = stringPreferencesKey("tenant_slug")
 
     val snapshot: Flow<LicenseSnapshot> = context.licenseDataStore.data.map { prefs ->
         LicenseSnapshot(
@@ -60,7 +61,8 @@ class LicenseManager @Inject constructor(
         deviceId: String,
         expiresAt: Long,
         customerName: String?,
-        planLabel: String?
+        planLabel: String?,
+        tenantSlug: String? = null
     ) {
         val now = System.currentTimeMillis()
         context.licenseDataStore.edit { prefs ->
@@ -71,12 +73,21 @@ class LicenseManager @Inject constructor(
             prefs[lastValidatedAtKey] = now
             customerName?.let { prefs[customerNameKey] = it }
             planLabel?.let { prefs[planLabelKey] = it }
+            tenantSlug?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }?.let { prefs[tenantSlugKey] = it }
         }
     }
 
     suspend fun markExpired() {
         context.licenseDataStore.edit { prefs ->
             prefs[statusKey] = LicenseStatus.EXPIRED.name
+        }
+    }
+
+    suspend fun getTenantSlug(): String = context.licenseDataStore.data.map { it[tenantSlugKey].orEmpty() }.first()
+
+    suspend fun setTenantSlug(slug: String) {
+        context.licenseDataStore.edit { prefs ->
+            prefs[tenantSlugKey] = slug.trim().lowercase()
         }
     }
 }

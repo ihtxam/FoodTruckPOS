@@ -15,8 +15,10 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import retrofit2.HttpException
 
 @Singleton
 class LicenseRepository @Inject constructor(
@@ -27,8 +29,11 @@ class LicenseRepository @Inject constructor(
     private val trialDays: Int get() = BuildConfig.TRIAL_DAYS
     private val renewalWarningDays: Int get() = BuildConfig.LICENSE_RENEWAL_WARNING_DAYS
 
-    val uiState: Flow<LicenseUiState> = licenseManager.snapshot.map { snapshot ->
-        evaluate(snapshot)
+    val uiState: Flow<LicenseUiState> = combine(
+        licenseManager.snapshot,
+        deviceIdProvider.observeDeviceId()
+    ) { snapshot, liveDeviceId ->
+        evaluate(snapshot, liveDeviceId)
     }
 
     suspend fun ensureInitialized() {
@@ -46,7 +51,9 @@ class LicenseRepository @Inject constructor(
 
     suspend fun activate(code: String): Result<Unit> = withContext(Dispatchers.IO) {
         val trimmed = code.trim()
-        if (trimmed.isBlank()) return@withContext Result.failure(IllegalArgumentException("Enter an activation code"))
+        if (trimmed.isBlank()) {
+            return@withContext Result.failure(IllegalArgumentException("Enter an activation code"))
+        }
         val deviceId = deviceIdProvider.getDeviceId()
         runCatching {
             val response = licenseApi.activate(
@@ -54,20 +61,22 @@ class LicenseRepository @Inject constructor(
                     deviceId = deviceId,
                     activationCode = trimmed,
                     appVersion = BuildConfig.VERSION_NAME,
-                    deviceModel = "${Build.MANUFACTURER} ${Build.MODEL}",
-                    tenantSlug = BuildConfig.TENANT_SLUG.takeIf { it.isNotBlank() }
+                    deviceModel = "${Build.MANUFACTURER} ${Build.MODEL}"
                 )
             )
             licenseManager.saveActivation(
                 deviceId = deviceId,
                 expiresAt = response.expiresAt,
                 customerName = response.customerName,
-                planLabel = response.planLabel
+                planLabel = response.planLabel,
+                tenantSlug = response.tenantSlug ?: BuildConfig.TENANT_SLUG.takeIf { it.isNotBlank() }
             )
+        }.recoverCatching { error ->
+            throw IllegalStateException(readApiError(error), error)
         }
     }
 
-    private fun evaluate(snapshot: LicenseSnapshot): LicenseUiState {
+    private fun evaluate(snapshot: LicenseSnapshot, liveDeviceId: String): LicenseUiState {
         val now = System.currentTimeMillis()
         val trialDaysRemaining = if (snapshot.trialEndsAt > now) {
             TimeUnit.MILLISECONDS.toDays(snapshot.trialEndsAt - now).toInt() + 1
@@ -87,10 +96,24 @@ class LicenseRepository @Inject constructor(
 
         return LicenseUiState(
             gateState = gateState,
-            snapshot = snapshot,
+            snapshot = snapshot.copy(deviceId = liveDeviceId.ifBlank { snapshot.deviceId }),
             trialDaysRemaining = trialDaysRemaining,
             daysUntilExpiry = daysUntilExpiry,
-            showRenewalWarning = showRenewalWarning
+            showRenewalWarning = showRenewalWarning,
+            liveDeviceId = liveDeviceId
         )
+    }
+
+    private fun readApiError(error: Throwable): String {
+        if (error is HttpException) {
+            val raw = error.response()?.errorBody()?.string()
+            if (!raw.isNullOrBlank()) {
+                runCatching {
+                    JSONObject(raw).optString("error").takeIf { it.isNotBlank() }
+                }.getOrNull()?.let { return it }
+            }
+            return "Activation failed (HTTP ${error.code()})"
+        }
+        return error.message ?: "Activation failed. Check internet and code."
     }
 }
