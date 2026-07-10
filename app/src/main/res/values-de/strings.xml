@@ -221,6 +221,7 @@
     <string name="order_held">Bestellung gehalten</string>
     <string name="usb_printer">USB-Drucker</string>
     <string name="usb_printer_permission">USB-Druckerzugriff zulassen</string>
+    <string name="usb_printer_allowed">Berechtigung erteilt</string>
     <string name="usb_printer_help">Schließen Sie einen ESC/POS-USB-Drucker an, tippen Sie auf USB-Gerät auswählen, erteilen Sie die Berechtigung und weisen Sie es dann Belegen oder der Küche zu.</string>
     <string name="select_usb_device">USB-Gerät auswählen</string>
     <string name="use_for_receipts">Verwendung für Belege</string>

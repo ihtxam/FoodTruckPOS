@@ -222,6 +222,7 @@
     <string name="order_held">Pour tenu.</string>
     <string name="usb_printer">Imprimante USB</string>
     <string name="usb_printer_permission">Autoriser l\'accès à l\'imprimante USB</string>
+    <string name="usb_printer_allowed">Autorisation accordée</string>
     <string name="usb_printer_help">Connectez une imprimante USB ESC/pos, appuyez sur Sélectionner un périphérique USB, accordez l\'autorisation, puis attribuez-la aux reçus ou à la cuisine.</string>
     <string name="select_usb_device">Sélectionner un périphérique USB</string>
     <string name="use_for_receipts">Utiliser pour les reçus</string>

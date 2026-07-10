@@ -232,6 +232,7 @@
     <string name="order_held">Order held</string>
     <string name="usb_printer">USB Printer</string>
     <string name="usb_printer_permission">Allow USB printer access</string>
+    <string name="usb_printer_allowed">Permission granted</string>
     <string name="usb_printer_help">Connect an ESC/POS USB printer, tap Select USB device, grant permission, then assign it to receipts or kitchen.</string>
     <string name="select_usb_device">Select USB device</string>
     <string name="use_for_receipts">Use for receipts</string>
