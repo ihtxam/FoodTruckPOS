@@ -130,7 +130,10 @@ import com.chaslay.pos.data.local.entity.CustomerEntity
 import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.ShoppingBag
+import androidx.compose.material.icons.filled.PointOfSale
+import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.TableRestaurant
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -225,11 +228,6 @@ fun PosScreen(
             onNextSplitBill = { viewModel.navigateSplitBill(1) },
             onScanBarcode = { showBarcodeScanner = true }
         )
-        if (state.waitingForTerminalPayment) {
-            TerminalPaymentProgressDialog(
-                onCancel = viewModel::cancelTerminalPayment
-            )
-        }
         if (state.showOrderComplete && state.completedTransaction != null) {
             OrderCompleteDialog(
                 transaction = state.completedTransaction!!,
@@ -325,6 +323,7 @@ fun PosScreen(
             userAccess = userAccess,
             selectedTab = mainTab,
             isRestaurantMode = isRestaurantMode,
+            showTabs = false,
             onTabSelected = { tab ->
                 when (tab) {
                     PosMainTab.ORDERS -> mainTab = PosMainTab.ORDERS
@@ -336,26 +335,48 @@ fun PosScreen(
         )
         LicenseRenewalBanner(licenseState)
 
-        when (mainTab) {
-            PosMainTab.TABLES -> {
-                OdooTablesScreen(
-                    tables = state.tables,
-                    currencySymbol = state.currencySymbol,
-                    activeTableName = state.activeTableName,
-                    modifier = Modifier.weight(1f),
-                    onSelectTable = { tableId ->
-                        viewModel.openTable(tableId)
-                        mainTab = PosMainTab.REGISTER
-                    },
-                    onWalkIn = {
-                        viewModel.switchToWalkIn()
-                        mainTab = PosMainTab.REGISTER
-                    }
-                )
-            }
-            PosMainTab.REGISTER -> {
-                Row(modifier = Modifier.weight(1f)) {
-                    VectronOrderPanel(
+        Row(modifier = Modifier.weight(1f)) {
+            val orderingItemsForRail = state.cart.items.filter { !it.sentToKitchen }
+            CartActionSidebar(
+                isRestaurantMode = isRestaurantMode,
+                isTableMode = isRestaurantMode && state.activeTableName != null,
+                activeTableName = state.activeTableName,
+                activeCourse = state.cart.activeCourse,
+                activeCourseHasItems = state.cart.items.any { it.courseNumber == state.cart.activeCourse },
+                hasUnsentItems = orderingItemsForRail.isNotEmpty(),
+                unsentCourseCount = orderingItemsForRail.map { it.courseNumber }.distinct().size,
+                selectedTab = mainTab,
+                onTabSelected = { mainTab = it },
+                onPickup = viewModel::showPickupOrderDialog,
+                onDelivery = viewModel::showDeliveryOrderDialog,
+                onNewOrder = viewModel::showNewOrderDialog,
+                onHold = { viewModel.holdOrder(false) },
+                onHoldAndSend = { viewModel.holdOrder(true) },
+                onAddCourse = viewModel::addCourse,
+                onSendActiveCourse = viewModel::sendActiveCourseToKitchen,
+                onSendAllCourses = viewModel::sendAllCoursesToKitchen,
+                onKitchenMessage = viewModel::showKitchenMessageDialog
+            )
+            when (mainTab) {
+                PosMainTab.TABLES -> {
+                    OdooTablesScreen(
+                        tables = state.tables,
+                        currencySymbol = state.currencySymbol,
+                        activeTableName = state.activeTableName,
+                        modifier = Modifier.weight(1f).fillMaxHeight(),
+                        onSelectTable = { tableId ->
+                            viewModel.openTable(tableId)
+                            mainTab = PosMainTab.REGISTER
+                        },
+                        onWalkIn = {
+                            viewModel.switchToWalkIn()
+                            mainTab = PosMainTab.REGISTER
+                        }
+                    )
+                }
+                PosMainTab.REGISTER -> {
+                    Row(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                        VectronOrderPanel(
                         cart = state.cart,
                         currencySymbol = state.currencySymbol,
                         roundingStep = state.settings.roundingStep.takeIf { it > 0.0 } ?: 0.05,
@@ -393,8 +414,10 @@ fun PosScreen(
                         onPickup = viewModel::showPickupOrderDialog,
                         onDelivery = viewModel::showDeliveryOrderDialog,
                         isRestaurantMode = isRestaurantMode,
+                        selectedTab = mainTab,
+                        onTabSelected = { mainTab = it },
                         modifier = Modifier
-                            .width(400.dp)
+                            .width(304.dp)
                             .fillMaxHeight()
                     )
 
@@ -424,11 +447,12 @@ fun PosScreen(
                     )
                 }
             }
-            PosMainTab.ORDERS -> {
-                PosOrdersTabContent(
-                    modifier = Modifier.weight(1f),
-                    onResumeOrder = { mainTab = PosMainTab.REGISTER }
-                )
+                PosMainTab.ORDERS -> {
+                    PosOrdersTabContent(
+                        modifier = Modifier.weight(1f).fillMaxHeight(),
+                        onResumeOrder = { mainTab = PosMainTab.REGISTER }
+                    )
+                }
             }
         }
     }
@@ -616,6 +640,7 @@ private fun OdooPosNavBar(
     userAccess: UserAccess,
     selectedTab: PosMainTab,
     isRestaurantMode: Boolean,
+    showTabs: Boolean,
     onTabSelected: (PosMainTab) -> Unit,
     onNavigate: (String) -> Unit,
     onLogout: () -> Unit
@@ -630,23 +655,25 @@ private fun OdooPosNavBar(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            if (isRestaurantMode) {
+            if (showTabs) {
+                if (isRestaurantMode) {
+                    OdooNavTab(
+                        label = stringResource(R.string.tables),
+                        selected = selectedTab == PosMainTab.TABLES,
+                        onClick = { onTabSelected(PosMainTab.TABLES) }
+                    )
+                }
                 OdooNavTab(
-                    label = stringResource(R.string.tables),
-                    selected = selectedTab == PosMainTab.TABLES,
-                    onClick = { onTabSelected(PosMainTab.TABLES) }
+                    label = stringResource(R.string.pos_register),
+                    selected = selectedTab == PosMainTab.REGISTER,
+                    onClick = { onTabSelected(PosMainTab.REGISTER) }
+                )
+                OdooNavTab(
+                    label = stringResource(R.string.pos_orders),
+                    selected = selectedTab == PosMainTab.ORDERS,
+                    onClick = { onTabSelected(PosMainTab.ORDERS) }
                 )
             }
-            OdooNavTab(
-                label = stringResource(R.string.pos_register),
-                selected = selectedTab == PosMainTab.REGISTER,
-                onClick = { onTabSelected(PosMainTab.REGISTER) }
-            )
-            OdooNavTab(
-                label = stringResource(R.string.pos_orders),
-                selected = selectedTab == PosMainTab.ORDERS,
-                onClick = { onTabSelected(PosMainTab.ORDERS) }
-            )
         }
         Text(
             businessName,
@@ -927,6 +954,8 @@ private fun VectronOrderPanel(
     onPickup: () -> Unit,
     onDelivery: () -> Unit,
     isRestaurantMode: Boolean,
+    selectedTab: PosMainTab,
+    onTabSelected: (PosMainTab) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val isTableMode = isRestaurantMode && activeTableName != null
@@ -971,24 +1000,6 @@ private fun VectronOrderPanel(
             .background(vc.panelDark)
             .padding(6.dp)
     ) {
-        CartActionSidebar(
-            isRestaurantMode = isRestaurantMode,
-            isTableMode = isTableMode,
-            activeTableName = activeTableName,
-            activeCourse = cart.activeCourse,
-            activeCourseHasItems = cart.items.any { it.courseNumber == cart.activeCourse },
-            hasUnsentItems = orderingItems.isNotEmpty(),
-            unsentCourseCount = unsentCourses.size,
-            onPickup = onPickup,
-            onDelivery = onDelivery,
-            onNewOrder = onNewOrder,
-            onHold = onHoldOrder,
-            onHoldAndSend = onHoldAndSend,
-            onAddCourse = onAddCourse,
-            onSendActiveCourse = onSendActiveCourse,
-            onSendAllCourses = onSendAllCourses,
-            onKitchenMessage = onKitchenMessage
-        )
         Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
         Row(
             modifier = Modifier
@@ -1337,6 +1348,8 @@ private fun CartActionSidebar(
     activeCourseHasItems: Boolean,
     hasUnsentItems: Boolean,
     unsentCourseCount: Int,
+    selectedTab: PosMainTab,
+    onTabSelected: (PosMainTab) -> Unit,
     onPickup: () -> Unit,
     onDelivery: () -> Unit,
     onNewOrder: () -> Unit,
@@ -1377,6 +1390,30 @@ private fun CartActionSidebar(
             shortLabel = stringResource(R.string.new_short),
             color = Color(0xFF8B0000),
             onClick = onNewOrder
+        )
+        HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp), color = vc.textSecondary.copy(alpha = 0.3f))
+        if (isRestaurantMode) {
+            CartTabButton(
+                label = stringResource(R.string.tables),
+                icon = Icons.Default.TableRestaurant,
+                baseColor = Color(0xFF00796B),
+                selected = selectedTab == PosMainTab.TABLES,
+                onClick = { onTabSelected(PosMainTab.TABLES) }
+            )
+        }
+        CartTabButton(
+            label = stringResource(R.string.pos_register),
+            icon = Icons.Default.PointOfSale,
+            baseColor = Color(0xFF37474F),
+            selected = selectedTab == PosMainTab.REGISTER,
+            onClick = { onTabSelected(PosMainTab.REGISTER) }
+        )
+        CartTabButton(
+            label = stringResource(R.string.pos_orders),
+            icon = Icons.Default.ReceiptLong,
+            baseColor = Color(0xFFEF6C00),
+            selected = selectedTab == PosMainTab.ORDERS,
+            onClick = { onTabSelected(PosMainTab.ORDERS) }
         )
         HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp), color = vc.textSecondary.copy(alpha = 0.3f))
         CartSidebarButton(
@@ -1429,6 +1466,40 @@ private fun CartActionSidebar(
                 modifier = Modifier.padding(top = 4.dp)
             )
         }
+    }
+}
+
+@Composable
+private fun CartTabButton(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    baseColor: Color,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    val bg = if (selected) baseColor else baseColor.copy(alpha = 0.35f)
+    val contentColor = Color.White
+    val borderWidth = if (selected) 2.dp else 0.dp
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(bg)
+            .border(borderWidth, Color.White, RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .padding(vertical = 10.dp, horizontal = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Icon(icon, contentDescription = label, tint = contentColor, modifier = Modifier.size(26.dp))
+        Text(
+            text = label,
+            color = contentColor,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 11.sp,
+            textAlign = TextAlign.Center,
+            maxLines = 1
+        )
     }
 }
 
@@ -2322,35 +2393,6 @@ private fun DiscountDialog(
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
-        }
-    )
-}
-
-@Composable
-private fun TerminalPaymentProgressDialog(
-    onCancel: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = {},
-        title = { Text(stringResource(R.string.terminal_payment_in_progress)) },
-        text = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                Text(
-                    stringResource(R.string.terminal_payment_hint),
-                    textAlign = TextAlign.Center
-                )
-                CircularProgressIndicator()
-            }
-        },
-        confirmButton = {},
-        dismissButton = {
-            TextButton(onClick = onCancel) {
-                Text(stringResource(R.string.cancel_payment))
-            }
         }
     )
 }

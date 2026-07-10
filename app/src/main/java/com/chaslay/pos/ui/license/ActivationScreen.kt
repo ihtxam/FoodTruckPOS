@@ -1,11 +1,7 @@
 package com.chaslay.pos.ui.license
 
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,19 +12,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -63,7 +54,7 @@ fun LicenseSettingsSection(
     )
     LicenseActivationForm(
         activationCode = form.activationCode,
-        deviceId = form.liveDeviceId.ifBlank { license.snapshot.deviceId },
+        deviceId = license.snapshot.deviceId,
         isActivating = form.isActivating,
         errorMessage = form.errorMessage,
         onCodeChange = viewModel::updateActivationCode,
@@ -81,9 +72,6 @@ private fun LicenseActivationForm(
     onActivate: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val context = LocalContext.current
-    var copiedDeviceId by remember { mutableStateOf(false) }
-
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         OutlinedTextField(
             value = activationCode,
@@ -94,36 +82,10 @@ private fun LicenseActivationForm(
             enabled = !isActivating
         )
         Text(
-            text = stringResource(R.string.license_device_id_label),
+            text = stringResource(R.string.license_device_id, deviceId.ifBlank { "..." }),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = deviceId.ifBlank { "..." },
-                modifier = Modifier.weight(1f),
-                fontFamily = FontFamily.Monospace,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold
-            )
-            OutlinedButton(
-                onClick = {
-                    if (deviceId.isBlank()) return@OutlinedButton
-                    copyToClipboard(context, deviceId)
-                    copiedDeviceId = true
-                },
-                enabled = deviceId.isNotBlank() && !isActivating
-            ) {
-                Text(
-                    if (copiedDeviceId) stringResource(R.string.license_copied)
-                    else stringResource(R.string.license_copy_device_id)
-                )
-            }
-        }
         Text(
             text = stringResource(R.string.license_device_id_help),
             style = MaterialTheme.typography.bodySmall,
@@ -184,18 +146,13 @@ fun ActivationScreen(
         Spacer(modifier = Modifier.height(8.dp))
         LicenseActivationForm(
             activationCode = form.activationCode,
-            deviceId = form.liveDeviceId.ifBlank { license.snapshot.deviceId },
+            deviceId = license.snapshot.deviceId,
             isActivating = form.isActivating,
             errorMessage = form.errorMessage,
             onCodeChange = viewModel::updateActivationCode,
             onActivate = viewModel::activate
         )
     }
-}
-
-private fun copyToClipboard(context: Context, text: String) {
-    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    clipboard.setPrimaryClip(ClipData.newPlainText("device_id", text))
 }
 
 @Composable

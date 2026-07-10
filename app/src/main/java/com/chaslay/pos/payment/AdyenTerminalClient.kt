@@ -5,17 +5,15 @@ import com.chaslay.pos.data.local.entity.BusinessSettingsEntity
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import java.io.IOException
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-import java.util.TimeZone
+import java.time.OffsetDateTime
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.Call
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -45,39 +43,13 @@ class AdyenTerminalClient @Inject constructor() {
 
     private val gson = Gson()
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
-    private val timestampFormatter = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US).apply {
-        timeZone = TimeZone.getTimeZone("UTC")
-    }
+    private val timestampFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXXX")
 
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(160, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
         .build()
-
-    @Volatile
-    private var activePaymentCall: Call? = null
-
-    fun cancelActivePaymentRequest() {
-        activePaymentCall?.cancel()
-    }
-
-    suspend fun abortTerminalPayment(settings: BusinessSettingsEntity) = withContext(Dispatchers.IO) {
-        if (validateSettings(settings) != null) return@withContext
-        val apiKey = settings.adyenApiKey.trim()
-        val live = settings.adyenLiveEnvironment
-        val saleId = settings.adyenClientId.trim().ifBlank { "ChaslayPOS" }
-        val terminalId = normalizeTerminalId(settings.adyenTerminalId)
-        val merchantAccount = settings.adyenMerchantAccount.trim()
-        val body = buildAbortRequestBody(saleId, terminalId).toRequestBody(jsonMediaType)
-        val url = if (settings.adyenUseLegacyEndpoint) {
-            legacySyncUrl(live)
-        } else {
-            cloudDeviceSyncUrl(live, settings.adyenLiveRegion, merchantAccount, terminalId)
-        }
-        runCatching { postAbortSync(apiKey, url, body) }
-            .onFailure { error -> Log.w(TAG, "Adyen abort request failed", error) }
-    }
 
     suspend fun testConnection(settings: BusinessSettingsEntity): AdyenConnectionTestResult =
         withContext(Dispatchers.IO) {
@@ -213,27 +185,6 @@ class AdyenTerminalClient @Inject constructor() {
         }
     }
 
-    private fun buildAbortRequestBody(saleId: String, poiId: String): String {
-        val serviceId = generateServiceId()
-        val payload = mapOf(
-            "SaleToPOIRequest" to mapOf(
-                "MessageHeader" to mapOf(
-                    "ProtocolVersion" to "3.0",
-                    "MessageClass" to "Service",
-                    "MessageCategory" to "Abort",
-                    "MessageType" to "Request",
-                    "ServiceID" to serviceId,
-                    "SaleID" to saleId,
-                    "POIID" to poiId
-                ),
-                "AbortRequest" to mapOf(
-                    "AbortReason" to "MerchantAbort"
-                )
-            )
-        )
-        return gson.toJson(payload)
-    }
-
     private fun buildDiagnosisRequestBody(saleId: String, poiId: String): String {
         val serviceId = generateServiceId()
         val payload = mapOf(
@@ -260,22 +211,9 @@ class AdyenTerminalClient @Inject constructor() {
         currencyCode: String,
         settings: BusinessSettingsEntity
     ): AdyenTerminalResponse = withContext(Dispatchers.IO) {
-        runCatching {
-            sendPaymentRequestInternal(amount, currencyCode, settings)
-        }.getOrElse { error ->
-            Log.e(TAG, "Adyen payment request failed", error)
-            AdyenTerminalResponse.Error(error.message ?: "Adyen terminal payment failed")
-        }
-    }
-
-    private fun sendPaymentRequestInternal(
-        amount: Double,
-        currencyCode: String,
-        settings: BusinessSettingsEntity
-    ): AdyenTerminalResponse {
         val validation = validateSettings(settings)
         if (validation != null) {
-            return AdyenTerminalResponse.Error(validation)
+            return@withContext AdyenTerminalResponse.Error(validation)
         }
 
         val merchantAccount = settings.adyenMerchantAccount.trim()
@@ -295,7 +233,7 @@ class AdyenTerminalClient @Inject constructor() {
         if (settings.adyenUseLegacyEndpoint) {
             val legacyUrl = legacySyncUrl(live)
             Log.d(TAG, "Sending Adyen payment via legacy endpoint $legacyUrl")
-            return postSync(apiKey, legacyUrl, body, triedLegacy = true)
+            return@withContext postSync(apiKey, legacyUrl, body, triedLegacy = true)
         }
 
         val cloudUrl = cloudDeviceSyncUrl(live, settings.adyenLiveRegion, merchantAccount, terminalId)
@@ -305,9 +243,9 @@ class AdyenTerminalClient @Inject constructor() {
         if (cloudResult is AdyenTerminalResponse.Error && shouldRetryLegacy(cloudResult)) {
             val legacyUrl = legacySyncUrl(live)
             Log.d(TAG, "Cloud Device API failed, retrying legacy endpoint $legacyUrl")
-            return postSync(apiKey, legacyUrl, body, triedLegacy = true)
+            return@withContext postSync(apiKey, legacyUrl, body, triedLegacy = true)
         }
-        return cloudResult
+        cloudResult
     }
 
     suspend fun sendDisplayReceipt(
@@ -451,10 +389,8 @@ class AdyenTerminalClient @Inject constructor() {
             .header("Content-Type", "application/json")
             .build()
 
-        val call = httpClient.newCall(request)
-        activePaymentCall = call
         return try {
-            call.execute().use { response ->
+            httpClient.newCall(request).execute().use { response ->
                 val responseBody = response.body?.string().orEmpty()
                 Log.d(TAG, "Adyen response HTTP ${response.code} from $url: ${responseBody.take(500)}")
 
@@ -467,32 +403,9 @@ class AdyenTerminalClient @Inject constructor() {
                 parsePaymentResponse(responseBody)
             }
         } catch (e: IOException) {
-            if (call.isCanceled()) {
-                Log.d(TAG, "Adyen payment request cancelled")
-                AdyenTerminalResponse.Cancelled()
-            } else {
-                Log.e(TAG, "Adyen terminal network error", e)
-                AdyenTerminalResponse.Error("Network error: ${e.message ?: "Could not reach Adyen"}")
-            }
-        } finally {
-            if (activePaymentCall == call) {
-                activePaymentCall = null
-            }
+            Log.e(TAG, "Adyen terminal network error", e)
+            AdyenTerminalResponse.Error("Network error: ${e.message ?: "Could not reach Adyen"}")
         }
-    }
-
-    private fun postAbortSync(
-        apiKey: String,
-        url: String,
-        body: okhttp3.RequestBody
-    ) {
-        val request = Request.Builder()
-            .url(url)
-            .post(body)
-            .header("X-API-Key", apiKey)
-            .header("Content-Type", "application/json")
-            .build()
-        httpClient.newCall(request).execute().close()
     }
 
     private fun formatHttpError(code: Int, apiError: AdyenApiError?, triedLegacy: Boolean): String {
@@ -557,21 +470,10 @@ class AdyenTerminalClient @Inject constructor() {
 
         return runCatching {
             val root = gson.fromJson(body, JsonObject::class.java)
-            val saleToPoi = root.getAsJsonObject("SaleToPOIResponse")
+            val paymentResponse = root
+                .getAsJsonObject("SaleToPOIResponse")
+                ?.getAsJsonObject("PaymentResponse")
                 ?: return AdyenTerminalResponse.Error("Unexpected Adyen response format.")
-            val paymentResponse = saleToPoi.getAsJsonObject("PaymentResponse")
-            if (paymentResponse == null) {
-                Log.w(TAG, "Non-payment Adyen response: ${body.take(500)}")
-                val message = when {
-                    saleToPoi.has("EventNotification") ->
-                        "Terminal is busy or updating. Cancel and try again, or use another payment method."
-                    saleToPoi.has("ReversalResponse") ->
-                        "Terminal returned an unexpected reversal response."
-                    else ->
-                        "Terminal is not ready for payment. It may be updating, offline, or busy."
-                }
-                return AdyenTerminalResponse.Error(message)
-            }
 
             val responseNode = paymentResponse.getAsJsonObject("Response")
                 ?: return AdyenTerminalResponse.Error("Missing payment response from terminal.")
@@ -616,8 +518,8 @@ class AdyenTerminalClient @Inject constructor() {
     ): String {
         val serviceId = generateServiceId()
         val transactionId = UUID.randomUUID().toString().replace("-", "").take(16)
-        val timestamp = timestampFormatter.format(Date())
-        val requestedAmount = kotlin.math.round(amount * 100.0) / 100.0
+        val timestamp = OffsetDateTime.now(ZoneOffset.UTC).format(timestampFormatter)
+        val requestedAmount = "%.2f".format(amount).toDouble()
 
         val payload = mapOf(
             "SaleToPOIRequest" to mapOf(

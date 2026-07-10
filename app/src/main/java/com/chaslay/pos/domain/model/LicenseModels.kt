@@ -31,7 +31,6 @@ data class LicenseUiState(
     val trialDaysRemaining: Int = 0,
     val daysUntilExpiry: Int? = null,
     val showRenewalWarning: Boolean = false,
-    val liveDeviceId: String = "",
     val activationCode: String = "",
     val isActivating: Boolean = false,
     val errorMessage: String? = null
