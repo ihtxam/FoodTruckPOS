@@ -180,18 +180,19 @@ router.post('/tenants/:tenantId/codes', async (req, res) => {
     if (!tenant) return res.status(404).json({ error: 'Tenant not found' });
 
     const { label, validDays, deviceId } = req.body ?? {};
+    const boundDeviceId = deviceId != null && String(deviceId).trim() ? String(deviceId).trim() : null;
     const code = await generateActivationCode({
       tenantId: tenant.id,
       label: label ?? 'Annual license',
       validDays: Number(validDays ?? 365),
-      boundDeviceId: deviceId ?? null,
+      boundDeviceId,
     });
 
     res.status(201).json({
       code,
       tenantSlug: tenant.slug,
       validDays: Number(validDays ?? 365),
-      boundDeviceId: deviceId ?? null,
+      boundDeviceId,
     });
   } catch (err) {
     res.status(400).json({ error: err.message ?? 'Generate code failed' });

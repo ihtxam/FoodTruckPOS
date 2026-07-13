@@ -50,7 +50,7 @@ class LicenseRepository @Inject constructor(
     }
 
     suspend fun activate(code: String): Result<Unit> = withContext(Dispatchers.IO) {
-        val trimmed = code.trim()
+        val trimmed = code.trim().uppercase().replace("[^A-Z0-9-]".toRegex(), "")
         if (trimmed.isBlank()) {
             return@withContext Result.failure(IllegalArgumentException("Enter an activation code"))
         }

@@ -9,6 +9,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
+import java.security.MessageDigest
 import kotlin.random.Random
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -27,7 +28,7 @@ class DeviceIdProvider @Inject constructor(
         if (!existing.isNullOrBlank()) {
             val clean = existing.trim().uppercase().replace("[^A-Z0-9]".toRegex(), "")
             if (clean.length == 8) return formatDeviceId(existing)
-            val id = generateShortDeviceId()
+            val id = deriveShortDeviceId(existing)
             context.deviceDataStore.edit { prefs -> prefs[deviceIdKey] = id }
             return id
         }
@@ -53,6 +54,20 @@ class DeviceIdProvider @Inject constructor(
         val body = buildString {
             repeat(8) {
                 append(chars[Random.nextInt(chars.length)])
+            }
+        }
+        return "${body.substring(0, 4)}-${body.substring(4, 8)}"
+    }
+
+    /** Same algorithm as backend — legacy UUID migrates to a stable short ID. */
+    private fun deriveShortDeviceId(raw: String): String {
+        val clean = raw.trim().uppercase().replace("[^A-Z0-9]".toRegex(), "")
+        if (clean.length == 8) return formatDeviceId(raw)
+        val hash = MessageDigest.getInstance("SHA-256").digest(clean.toByteArray(Charsets.UTF_8))
+        val chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+        val body = buildString {
+            for (i in 0 until 8) {
+                append(chars[(hash[i].toInt() and 0xff) % chars.length])
             }
         }
         return "${body.substring(0, 4)}-${body.substring(4, 8)}"

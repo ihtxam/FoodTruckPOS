@@ -16,12 +16,28 @@ export function normalizeDeviceId(deviceId) {
   return deviceId.trim().toUpperCase();
 }
 
+/** Stable short ID derived from a legacy UUID / long device id (matches Android POS). */
+export function deriveShortDeviceId(raw) {
+  const clean = String(raw ?? '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (clean.length === 8) return normalizeDeviceId(clean);
+  const hash = crypto.createHash('sha256').update(clean).digest();
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let body = '';
+  for (let i = 0; i < 8; i += 1) {
+    body += chars[hash[i] % chars.length];
+  }
+  return `${body.slice(0, 4)}-${body.slice(4, 8)}`;
+}
+
 function deviceIdsMatch(stored, incoming) {
-  if (!stored) return true;
+  if (!stored || !String(stored).trim()) return true;
   const a = normalizeDeviceId(stored);
   const b = normalizeDeviceId(incoming);
   if (a === b) return true;
-  return stored.trim().toUpperCase() === incoming.trim().toUpperCase();
+  if (stored.trim().toUpperCase() === incoming.trim().toUpperCase()) return true;
+  if (deriveShortDeviceId(stored) === b) return true;
+  if (deriveShortDeviceId(incoming) === a) return true;
+  return deriveShortDeviceId(stored) === deriveShortDeviceId(incoming);
 }
 
 export function normalizeCode(code) {
@@ -33,11 +49,20 @@ export function formatCodeForDisplay(raw) {
   return clean.match(/.{1,4}/g)?.join('-') ?? clean;
 }
 
+function normalizeBoundDeviceId(boundDeviceId) {
+  const trimmed = String(boundDeviceId ?? '').trim();
+  if (!trimmed) return null;
+  const clean = trimmed.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (clean.length === 8) return normalizeDeviceId(trimmed);
+  if (clean.length > 8) return deriveShortDeviceId(trimmed);
+  return normalizeDeviceId(trimmed);
+}
+
 export async function generateActivationCode({ tenantId, label, validDays = 365, boundDeviceId = null }) {
   const raw = crypto.randomBytes(5).toString('hex').toUpperCase();
   const code = formatCodeForDisplay(raw);
   const codeHash = hashCode(code);
-  const boundId = boundDeviceId ? normalizeDeviceId(boundDeviceId) : null;
+  const boundId = normalizeBoundDeviceId(boundDeviceId);
   await query(
     `INSERT INTO activation_codes (tenant_id, code_hash, label, valid_days, bound_device_id)
      VALUES ($1, $2, $3, $4, $5)`,
@@ -73,11 +98,15 @@ export async function activateLicense({ tenantId, deviceId, activationCode, appV
   }
 
   if (!codeRow) {
-    throw new Error('Invalid or already used activation code');
+    throw new Error('Invalid or already used activation code. Generate a fresh code in admin and try again.');
   }
   const resolvedTenantId = codeRow.tenant_id;
   if (codeRow.bound_device_id && !deviceIdsMatch(codeRow.bound_device_id, deviceId)) {
-    throw new Error('This activation code is bound to another device');
+    const expected = normalizeBoundDeviceId(codeRow.bound_device_id) || codeRow.bound_device_id;
+    throw new Error(
+      `This code is for device ${expected}, but this tablet sent ${normalizedDeviceId}. ` +
+        'Generate a new code with Device ID blank, or paste the exact Device ID from the tablet.'
+    );
   }
   if (codeRow.expires_at && new Date(codeRow.expires_at).getTime() < Date.now()) {
     throw new Error('Activation code has expired');

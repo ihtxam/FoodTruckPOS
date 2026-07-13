@@ -44,7 +44,7 @@ function showMsg(el, text, ok) {
 }
 
 function fmtDate(v) {
-  if (!v) return 'ù';
+  if (!v) return '?';
   const d = typeof v === 'number' ? new Date(v) : new Date(v);
   return d.toLocaleString();
 }
@@ -155,7 +155,7 @@ function bootApp() {
 
 async function renderView() {
   const root = document.getElementById('appContent');
-  root.innerHTML = '<p class="muted">Loadingù</p>';
+  root.innerHTML = '<p class="muted">Loading?</p>';
   try {
     if (currentUser.role === 'SUPERADMIN') {
       if (currentView === 'dashboard') root.innerHTML = await superDashboardHtml();
@@ -220,7 +220,7 @@ async function superOrdersHtml() {
   const { orders } = await api('/orders?limit=100');
   if (!orders.length) return '<div class="panel"><p class="muted">No orders yet.</p></div>';
   return `<div class="panel"><table><thead><tr><th>Order</th><th>Tenant</th><th>Customer</th><th>Total</th><th>Status</th><th>When</th></tr></thead><tbody>
-    ${orders.map((o) => `<tr><td>${esc(o.orderNumber)}</td><td>${esc(o.tenantName)}</td><td>${esc(o.customerName || 'ù')}</td><td>${fmtMoney(o.total)}</td><td>${esc(o.status)}</td><td>${fmtDate(o.createdAt)}</td></tr>`).join('')}
+    ${orders.map((o) => `<tr><td>${esc(o.orderNumber)}</td><td>${esc(o.tenantName)}</td><td>${esc(o.customerName || '?')}</td><td>${fmtMoney(o.total)}</td><td>${esc(o.status)}</td><td>${fmtDate(o.createdAt)}</td></tr>`).join('')}
   </tbody></table></div>`;
 }
 
@@ -234,7 +234,7 @@ async function merchantDashboardHtml() {
   ].map(([lbl, num]) => `<div class="stat"><div class="num">${num}</div><div class="lbl">${lbl}</div></div>`).join('');
   return `<div class="stats">${cards}</div>
     <div class="panel"><p>Edit your menu, online orders, and shop hours here. POS tablets sync menu when online.</p>
-    <p>Advanced features (table plan, KDS, kiosk) will be added in the web panel first ù see ROADMAP.</p></div>`;
+    <p>Advanced features (table plan, KDS, kiosk) will be added in the web panel first ? see ROADMAP.</p></div>`;
 }
 
 async function merchantMenuHtml() {
@@ -266,7 +266,7 @@ async function merchantMenuHtml() {
       <div class="grid2">
         <label>Name<input id="prodName" /></label>
         <label>Price<input id="prodPrice" type="number" step="0.05" value="0" /></label>
-        <label>Category<select id="prodCat"><option value="">ù</option>${catOpts}</select></label>
+        <label>Category<select id="prodCat"><option value="">?</option>${catOpts}</select></label>
         <label>Tax %<input id="prodTax" type="number" step="0.1" value="0" /></label>
       </div>
       <button class="btn small" id="addProdBtn">Add product</button>
@@ -284,7 +284,7 @@ async function merchantOrdersHtml() {
   return `<div class="panel"><table><thead><tr><th>Order</th><th>Customer</th><th>Total</th><th>Status</th><th>When</th><th></th></tr></thead><tbody>
     ${orders.map((o) => `<tr>
       <td>${esc(o.orderNumber)}</td>
-      <td>${esc(o.customerName || 'ù')}<br/><span class="mono">${esc(o.customerPhone || '')}</span></td>
+      <td>${esc(o.customerName || '?')}<br/><span class="mono">${esc(o.customerPhone || '')}</span></td>
       <td>${fmtMoney(o.total)}</td>
       <td><span class="pill">${esc(o.status)}</span></td>
       <td>${fmtDate(o.createdAt)}</td>
@@ -312,12 +312,12 @@ async function merchantSettingsHtml() {
       <button class="btn small" id="saveHoursBtn" style="margin-top:12px">Save hours</button>
     </div>
     <div class="panel"><h3>Delivery zones</h3>
-      <p class="muted">JSON array ù e.g. [{"name":"Zone 1","fee":5,"minOrder":20}]</p>
+      <p class="muted">JSON array ? e.g. [{"name":"Zone 1","fee":5,"minOrder":20}]</p>
       <textarea class="code" id="deliveryZones">${esc(JSON.stringify(settings.deliveryZones || [], null, 2))}</textarea>
       <button class="btn small" id="saveZonesBtn" style="margin-top:12px">Save delivery zones</button>
     </div>
     <div class="panel"><h3>Order settings</h3>
-      <p class="muted">JSON ù e.g. {"minPrepMinutes":15,"acceptOnlineOrders":true}</p>
+      <p class="muted">JSON ? e.g. {"minPrepMinutes":15,"acceptOnlineOrders":true}</p>
       <textarea class="code" id="orderSettings">${esc(JSON.stringify(settings.orderSettings || {}, null, 2))}</textarea>
       <button class="btn small" id="saveOrderSettingsBtn" style="margin-top:12px">Save order settings</button>
     </div>
@@ -457,7 +457,7 @@ async function openTenantModal(tenantId) {
 
 async function renderTenantDetail() {
   const root = document.getElementById('tenantDetail');
-  root.innerHTML = '<p class="muted">Loadingù</p>';
+  root.innerHTML = '<p class="muted">Loading?</p>';
   const [{ tenant }, { devices }, { codes }, { users }] = await Promise.all([
     api(`/tenants/${currentTenantId}`),
     api(`/tenants/${currentTenantId}/devices`),
@@ -491,17 +491,17 @@ async function renderTenantDetail() {
       </tbody></table>` : '<p class="muted">No merchant logins yet.</p>'}
     </div>
     <div class="panel"><h3>Generate activation code</h3>
-      <p class="muted">Leave Device ID blank unless you want the code to work on one tablet only. Ask the merchant for their short Device ID from the POS (e.g. AB12-CD34).</p>
+      <p class="muted">Leave Device ID blank for a code that works on any tablet. Only fill Device ID if this code must work on one specific tablet.</p>
       <div class="grid2">
         <label>Label<input id="codeLabel" value="Annual license" /></label>
         <label>Valid days<input id="codeDays" type="number" value="365" /></label>
-        <label>Device ID (optional)<input id="codeDeviceId" placeholder="AB12-CD34" /></label>
+        <label class="full">Device ID (optional)<input id="codeDeviceId" placeholder="Leave blank for any device" autocomplete="off" /></label>
       </div>
       <button class="btn small" id="genCodeBtn">Generate code</button>
       <div id="genCodeMsg" class="msg hidden"></div>
       ${lastGeneratedCode ? `
         <div class="code-result">
-          <p><strong>Activation code ù send this to the merchant:</strong></p>
+          <p><strong>Activation code ? send this to the merchant:</strong></p>
           <div class="row code-row">
             <span class="mono code-display">${esc(lastGeneratedCode)}</span>
             <button type="button" class="btn small" id="copyLastCodeBtn">Copy code</button>
@@ -517,7 +517,7 @@ async function renderTenantDetail() {
     </div>
     <div class="panel"><h3>Activation codes</h3>
       ${codes.length ? `<table><thead><tr><th>Label</th><th>Days</th><th>Bound device</th><th>Used</th></tr></thead><tbody>
-        ${codes.map((c) => `<tr><td>${esc(c.label)}</td><td>${c.validDays}</td><td class="mono">${esc(c.boundDeviceId || 'ù')}</td><td>${c.isUsed ? 'Yes' : 'No'}</td></tr>`).join('')}
+        ${codes.map((c) => `<tr><td>${esc(c.label)}</td><td>${c.validDays}</td><td class="mono">${esc(c.boundDeviceId || '?')}</td><td>${c.isUsed ? 'Yes' : 'No'}</td></tr>`).join('')}
       </tbody></table>` : '<p class="muted">No codes.</p>'}
     </div>`;
 
@@ -559,13 +559,17 @@ async function renderTenantDetail() {
   document.getElementById('genCodeBtn').onclick = async () => {
     const msg = document.getElementById('genCodeMsg');
     try {
+      const deviceIdInput = document.getElementById('codeDeviceId');
+      const boundDeviceId = deviceIdInput.value.trim() || null;
       const data = await api(`/tenants/${currentTenantId}/codes`, { method: 'POST', body: JSON.stringify({
         label: document.getElementById('codeLabel').value.trim(),
         validDays: Number(document.getElementById('codeDays').value || 365),
-        deviceId: document.getElementById('codeDeviceId').value.trim() || null,
+        deviceId: boundDeviceId,
       }) });
       lastGeneratedCode = data.code;
-      showMsg(msg, 'Code generated. Copy it below and send it to the merchant.', true);
+      deviceIdInput.value = '';
+      const bindNote = data.boundDeviceId ? ` Bound to ${data.boundDeviceId}.` : ' Works on any device.';
+      showMsg(msg, `Code generated.${bindNote} Copy it below and send it to the merchant.`, true);
       await renderTenantDetail();
     } catch (e) { showMsg(msg, e.message, false); }
   };
