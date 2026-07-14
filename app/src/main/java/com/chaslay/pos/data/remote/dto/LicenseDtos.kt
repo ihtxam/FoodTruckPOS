@@ -1,30 +1,32 @@
 package com.chaslay.pos.data.remote.dto
 
+import com.google.gson.annotations.SerializedName
+
 data class ActivateLicenseRequest(
-    val deviceId: String,
-    val activationCode: String,
-    val appVersion: String,
-    val deviceModel: String? = null,
-    val tenantSlug: String? = null
+    @SerializedName("deviceId") val deviceId: String,
+    @SerializedName("activationCode") val activationCode: String,
+    @SerializedName("appVersion") val appVersion: String,
+    @SerializedName("deviceModel") val deviceModel: String? = null,
+    @SerializedName("tenantSlug") val tenantSlug: String? = null
 )
 
 data class ActivateLicenseResponse(
-    val status: String,
-    val expiresAt: Long,
-    val customerName: String? = null,
-    val planLabel: String? = null,
-    val tenantSlug: String? = null
+    @SerializedName("status") val status: String,
+    @SerializedName("expiresAt") val expiresAt: Long,
+    @SerializedName("customerName") val customerName: String? = null,
+    @SerializedName("planLabel") val planLabel: String? = null,
+    @SerializedName("tenantSlug") val tenantSlug: String? = null
 )
 
 data class ValidateLicenseRequest(
-    val deviceId: String,
-    val appVersion: String,
-    val tenantSlug: String? = null
+    @SerializedName("deviceId") val deviceId: String,
+    @SerializedName("appVersion") val appVersion: String,
+    @SerializedName("tenantSlug") val tenantSlug: String? = null
 )
 
 data class ValidateLicenseResponse(
-    val status: String,
-    val expiresAt: Long,
-    val customerName: String? = null,
-    val planLabel: String? = null
+    @SerializedName("status") val status: String,
+    @SerializedName("expiresAt") val expiresAt: Long,
+    @SerializedName("customerName") val customerName: String? = null,
+    @SerializedName("planLabel") val planLabel: String? = null
 )

@@ -54,7 +54,10 @@ class LicenseRepository @Inject constructor(
         if (trimmed.isBlank()) {
             return@withContext Result.failure(IllegalArgumentException("Enter an activation code"))
         }
-        val deviceId = deviceIdProvider.getDeviceId()
+        val deviceId = deviceIdProvider.getDeviceId().trim()
+        if (deviceId.isBlank()) {
+            return@withContext Result.failure(IllegalStateException("Device ID not ready. Restart the app and try again."))
+        }
         runCatching {
             val response = licenseApi.activate(
                 ActivateLicenseRequest(
