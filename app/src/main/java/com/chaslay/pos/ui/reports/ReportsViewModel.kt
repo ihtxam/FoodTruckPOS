@@ -26,7 +26,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
-enum class ReportRange { TODAY, YESTERDAY, LAST_WEEK, LAST_MONTH }
+enum class ReportRange { TODAY, YESTERDAY, LAST_WEEK, LAST_MONTH, LAST_3_MONTHS }
 
 data class SalesReportSnapshot(
     val grossSales: Double = 0.0,
@@ -36,8 +36,12 @@ data class SalesReportSnapshot(
     val cancelledCount: Int = 0,
     val cancelledTotal: Double = 0.0,
     val totalTips: Double = 0.0,
+    val totalDiscount: Double = 0.0,
+    val totalRefunded: Double = 0.0,
     val cashTotal: Double = 0.0,
+    val cashCount: Int = 0,
     val cardTotal: Double = 0.0,
+    val cardCount: Int = 0,
     val taxTotal: Double = 0.0,
     val dineInVatRate: Double = 8.1,
     val takeawayVatRate: Double = 2.6,
@@ -109,8 +113,12 @@ class ReportsViewModel @Inject constructor(
                 cancelledCount = cancelled.size,
                 cancelledTotal = cancelledTotal,
                 totalTips = roundMoney(completed.sumOf { it.tipAmount }),
+                totalDiscount = roundMoney(completed.sumOf { it.discountAmount }),
+                totalRefunded = roundMoney(completed.sumOf { it.refundAmount }),
                 cashTotal = roundMoney(completed.filter { it.paymentMethod == PaymentMethod.CASH }.sumOf { it.total }),
+                cashCount = completed.count { it.paymentMethod == PaymentMethod.CASH },
                 cardTotal = roundMoney(completed.filter { it.paymentMethod != PaymentMethod.CASH }.sumOf { it.total }),
+                cardCount = completed.count { it.paymentMethod != PaymentMethod.CASH },
                 taxTotal = taxTotal,
                 dineInVatRate = settings.dineInVatRate,
                 takeawayVatRate = settings.takeawayVatRate,
@@ -124,7 +132,7 @@ class ReportsViewModel @Inject constructor(
                 salesReport = salesReport,
                 selectedRange = range,
                 endOfDayReport = transactionRepository.getEndOfDayReport(start, end),
-                topProducts = transactionRepository.getTopProducts(),
+                topProducts = transactionRepository.getProductsSold(start, end),
                 userPerformance = transactionRepository.getUserPerformance()
             )
         }
@@ -141,6 +149,7 @@ class ReportsViewModel @Inject constructor(
             }
             ReportRange.LAST_WEEK -> startCal.add(java.util.Calendar.DAY_OF_YEAR, -7)
             ReportRange.LAST_MONTH -> startCal.add(java.util.Calendar.MONTH, -1)
+            ReportRange.LAST_3_MONTHS -> startCal.add(java.util.Calendar.MONTH, -3)
         }
         return dayStart(startCal) to dayEnd(endCal)
     }

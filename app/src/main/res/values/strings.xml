@@ -216,6 +216,14 @@
     <string name="low_stock_threshold">Low stock alert</string>
     <string name="stock_left">%1$d left</string>
     <string name="continue_action">Continue</string>
+    <string name="snackbar_pickup_asap">Takeaway %1$s — ASAP / Now</string>
+    <string name="snackbar_pickup_scheduled">Takeaway %1$s scheduled</string>
+    <string name="snackbar_delivery_asap">Delivery: %1$s — ASAP / Now</string>
+    <string name="snackbar_delivery_scheduled">Delivery: %1$s scheduled</string>
+    <string name="snackbar_switched_takeaway">Switched to takeaway</string>
+    <string name="order_items_count">%1$d items</string>
+    <string name="time_just_now">Just now</string>
+    <string name="time_min_ago">%1$d min</string>
     <string name="new_contact">New contact</string>
     <string name="split_by_items">Split by items</string>
     <string name="split_equal">Split equally</string>
@@ -404,6 +412,7 @@
     <string name="month">Month</string>
     <string name="last_week">Last Week</string>
     <string name="last_month">Last Month</string>
+    <string name="last_3_months">Last 3 Months</string>
     <string name="gross_sales">Gross Sales</string>
     <string name="net_sales">Net Sales</string>
     <string name="cancelled_orders">Cancelled Orders</string>

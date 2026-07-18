@@ -124,7 +124,7 @@
     <string name="order_number">Bestellnr.</string>
     <string name="pickup_asap">So schnell wie möglich (jetzt)</string>
     <string name="asap_now">So schnell wie möglich / jetzt</string>
-    <string name="schedule_later">Zeitbeschranken</string>
+    <string name="schedule_later">Später planen</string>
     <string name="pickup_time">Abholzeit (HH:mm)</string>
     <string name="client_name">Auftraggebername</string>
     <string name="zip_code">PLZ</string>
@@ -200,11 +200,19 @@
     <string name="open_hours_display">Öffnen Sie %1$s – %2$s</string>
     <string name="morning">Früh</string>
     <string name="afternoon">Mittag</string>
-    <string name="evening">Ab</string>
+    <string name="evening">Abend</string>
     <string name="stock_quantity">Lagerbestand</string>
     <string name="low_stock_threshold">Lagerwarnung</string>
     <string name="stock_left">%1$d links</string>
     <string name="continue_action">Weiter</string>
+    <string name="snackbar_pickup_asap">Abholung %1$s — Sofort / Jetzt</string>
+    <string name="snackbar_pickup_scheduled">Abholung %1$s geplant</string>
+    <string name="snackbar_delivery_asap">Lieferung: %1$s — Sofort / Jetzt</string>
+    <string name="snackbar_delivery_scheduled">Lieferung: %1$s geplant</string>
+    <string name="snackbar_switched_takeaway">Auf Mitnahme umgestellt</string>
+    <string name="order_items_count">%1$d Artikel</string>
+    <string name="time_just_now">Gerade eben</string>
+    <string name="time_min_ago">%1$d Min.</string>
     <string name="new_contact">Neuer Kontakt</string>
     <string name="split_by_items">Nach Artikeln aufteilen</string>
     <string name="split_equal">Gleichmäßig aufteilen</string>
@@ -377,6 +385,7 @@
     <string name="month">Monat</string>
     <string name="last_week">Letzte Woche</string>
     <string name="last_month">Letzten Monat</string>
+    <string name="last_3_months">Letzte 3 Monate</string>
     <string name="gross_sales">Bruttoumsatz</string>
     <string name="net_sales">Verkäufe</string>
     <string name="cancelled_orders">Abgebrochene Aufträge</string>

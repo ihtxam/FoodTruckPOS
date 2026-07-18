@@ -31,16 +31,15 @@ import androidx.compose.material.icons.outlined.TrendingUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
+import com.chaslay.pos.R
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -65,20 +64,13 @@ private object DashColors {
 
 private val MonoFont = FontFamily.Monospace
 
-private enum class SalesRange(val label: String) {
-    Today("TODAY"),
-    Yesterday("YESTERDAY"),
-    LastWeek("LAST WEEK"),
-    LastMonth("LAST MONTH"),
-    Last3Months("LAST 3 MONTHS"),
-}
-
 private data class BreakdownRow(val label: String, val count: Int, val total: Double)
 private data class TaxRow(val orderTypeLabel: String, val rate: Double, val net: Double, val tax: Double, val gross: Double)
 private data class TopProduct(val name: String, val category: String?, val qty: Int, val revenue: Double)
 
 private data class SalesReportData(
     val totalSales: Double,
+    val netSales: Double,
     val completedOrders: Int,
     val averageOrderValue: Double,
     val totalTips: Double,
@@ -91,175 +83,54 @@ private data class SalesReportData(
     val topProducts: List<TopProduct>,
 )
 
-private fun dummyReport(range: SalesRange): SalesReportData = when (range) {
-    SalesRange.Today -> SalesReportData(
-        totalSales = 2148.60,
-        completedOrders = 47,
-        averageOrderValue = 45.72,
-        totalTips = 128.40,
-        totalDiscount = 42.10,
-        totalRefunded = 18.50,
-        paymentRows = listOf(
-            BreakdownRow("Cash", 21, 892.30),
-            BreakdownRow("Card", 22, 1156.80),
-            BreakdownRow("TWINT", 4, 99.50),
-        ),
-        orderTypeRows = listOf(
-            BreakdownRow("Takeaway", 28, 1128.40),
-            BreakdownRow("Dine-in", 14, 812.20),
-            BreakdownRow("Delivery", 5, 208.00),
-        ),
-        orderSourceRows = listOf(
-            BreakdownRow("In-store", 40, 1876.10),
-            BreakdownRow("Online shop", 7, 272.50),
-        ),
-        taxRows = listOf(
-            TaxRow("Takeaway", 2.6, 1099.80, 28.60, 1128.40),
-            TaxRow("Dine-in", 8.1, 751.32, 60.88, 812.20),
-            TaxRow("Delivery", 2.6, 202.72, 5.28, 208.00),
-        ),
-        topProducts = listOf(
-            TopProduct("Sushi Saumon", "Sushi", 42, 336.00),
-            TopProduct("Tulipe Saumon", "Signature Roll", 28, 224.00),
-            TopProduct("Sushi Thon", "Sushi", 21, 168.00),
-            TopProduct("Sushi Ebi Crevette", "Sushi", 18, 144.00),
-            TopProduct("Bao Poulet", "Bao & Yakitori", 15, 90.00),
-        ),
-    )
-    SalesRange.Yesterday -> SalesReportData(
-        totalSales = 1893.20,
-        completedOrders = 41,
-        averageOrderValue = 46.18,
-        totalTips = 101.10,
-        totalDiscount = 28.00,
-        totalRefunded = 0.0,
-        paymentRows = listOf(
-            BreakdownRow("Cash", 19, 780.20),
-            BreakdownRow("Card", 20, 998.00),
-            BreakdownRow("TWINT", 2, 115.00),
-        ),
-        orderTypeRows = listOf(
-            BreakdownRow("Takeaway", 25, 1042.10),
-            BreakdownRow("Dine-in", 12, 640.90),
-            BreakdownRow("Delivery", 4, 210.20),
-        ),
-        orderSourceRows = listOf(
-            BreakdownRow("In-store", 36, 1720.10),
-            BreakdownRow("Online shop", 5, 173.10),
-        ),
-        taxRows = listOf(
-            TaxRow("Takeaway", 2.6, 1015.68, 26.42, 1042.10),
-            TaxRow("Dine-in", 8.1, 592.87, 48.03, 640.90),
-        ),
-        topProducts = listOf(
-            TopProduct("Sushi Saumon", "Sushi", 38, 304.00),
-            TopProduct("Sushi Thon", "Sushi", 22, 176.00),
-            TopProduct("Tulipe Cheese", "Signature Roll", 14, 112.00),
-        ),
-    )
-    SalesRange.LastWeek -> SalesReportData(
-        totalSales = 14380.90,
-        completedOrders = 312,
-        averageOrderValue = 46.09,
-        totalTips = 682.30,
-        totalDiscount = 218.00,
-        totalRefunded = 82.20,
-        paymentRows = listOf(
-            BreakdownRow("Cash", 148, 6180.20),
-            BreakdownRow("Card", 145, 7532.10),
-            BreakdownRow("TWINT", 19, 668.60),
-        ),
-        orderTypeRows = listOf(
-            BreakdownRow("Takeaway", 198, 8410.20),
-            BreakdownRow("Dine-in", 88, 4820.30),
-            BreakdownRow("Delivery", 26, 1150.40),
-        ),
-        orderSourceRows = listOf(
-            BreakdownRow("In-store", 265, 12240.30),
-            BreakdownRow("Online shop", 47, 2140.60),
-        ),
-        taxRows = listOf(
-            TaxRow("Takeaway", 2.6, 8197.55, 212.65, 8410.20),
-            TaxRow("Dine-in", 8.1, 4459.35, 360.95, 4820.30),
-            TaxRow("Delivery", 2.6, 1121.28, 29.12, 1150.40),
-        ),
-        topProducts = listOf(
-            TopProduct("Sushi Saumon", "Sushi", 280, 2240.00),
-            TopProduct("Sushi Thon", "Sushi", 165, 1320.00),
-            TopProduct("Tulipe Saumon", "Signature Roll", 142, 1136.00),
-            TopProduct("Sushi Ebi Crevette", "Sushi", 118, 944.00),
-        ),
-    )
-    SalesRange.LastMonth -> SalesReportData(
-        totalSales = 58720.40,
-        completedOrders = 1284,
-        averageOrderValue = 45.73,
-        totalTips = 2841.10,
-        totalDiscount = 942.30,
-        totalRefunded = 218.50,
-        paymentRows = listOf(
-            BreakdownRow("Cash", 612, 25120.10),
-            BreakdownRow("Card", 592, 30840.50),
-            BreakdownRow("TWINT", 80, 2759.80),
-        ),
-        orderTypeRows = listOf(
-            BreakdownRow("Takeaway", 820, 34410.20),
-            BreakdownRow("Dine-in", 356, 19680.60),
-            BreakdownRow("Delivery", 108, 4629.60),
-        ),
-        orderSourceRows = listOf(
-            BreakdownRow("In-store", 1091, 50120.10),
-            BreakdownRow("Online shop", 193, 8600.30),
-        ),
-        taxRows = listOf(
-            TaxRow("Takeaway", 2.6, 33538.55, 871.65, 34410.20),
-            TaxRow("Dine-in", 8.1, 18208.86, 1471.74, 19680.60),
-        ),
-        topProducts = listOf(
-            TopProduct("Sushi Saumon", "Sushi", 1120, 8960.00),
-            TopProduct("Sushi Thon", "Sushi", 680, 5440.00),
-        ),
-    )
-    SalesRange.Last3Months -> SalesReportData(
-        totalSales = 178320.80,
-        completedOrders = 3912,
-        averageOrderValue = 45.58,
-        totalTips = 8540.20,
-        totalDiscount = 2820.10,
-        totalRefunded = 684.90,
-        paymentRows = listOf(
-            BreakdownRow("Cash", 1860, 76210.30),
-            BreakdownRow("Card", 1810, 93520.10),
-            BreakdownRow("TWINT", 242, 8590.40),
-        ),
-        orderTypeRows = listOf(
-            BreakdownRow("Takeaway", 2510, 104210.60),
-            BreakdownRow("Dine-in", 1080, 59810.20),
-            BreakdownRow("Delivery", 322, 14300.00),
-        ),
-        orderSourceRows = listOf(
-            BreakdownRow("In-store", 3320, 152410.20),
-            BreakdownRow("Online shop", 592, 25910.60),
-        ),
-        taxRows = listOf(
-            TaxRow("Takeaway", 2.6, 101569.71, 2640.89, 104210.60),
-        ),
-        topProducts = listOf(
-            TopProduct("Sushi Saumon", "Sushi", 3410, 27280.00),
-        ),
+private fun toSalesReportData(state: ReportsUiState): SalesReportData {
+    val sales = state.salesReport
+    val eod = state.endOfDayReport
+    val paymentRows = eod.paymentRows
+        .filter { it.amount > 0.0 }
+        .map { row ->
+            val count = when (row.label) {
+                "Cash" -> sales.cashCount
+                "Card" -> sales.cardCount
+                else -> 0
+            }
+            BreakdownRow(row.label, count, row.amount)
+        }
+    return SalesReportData(
+        totalSales = sales.grossSales,
+        netSales = sales.netSales,
+        completedOrders = sales.orderCount,
+        averageOrderValue = sales.averageTicket,
+        totalTips = sales.totalTips,
+        totalDiscount = sales.totalDiscount,
+        totalRefunded = sales.totalRefunded,
+        paymentRows = paymentRows,
+        orderTypeRows = eod.orderTypeRows.map { BreakdownRow(it.label, it.count, it.amount) },
+        orderSourceRows = emptyList(),
+        taxRows = eod.vatRows.map { TaxRow(it.label, it.rate, it.net, it.tva, it.brut) },
+        topProducts = eod.productsSold.map { TopProduct(it.productName, null, it.quantitySold, it.revenue) },
     )
 }
 
 @Composable
-fun SalesReportV5Screen(modifier: Modifier = Modifier) {
-    var range by remember { mutableStateOf(SalesRange.Today) }
-    val report = remember(range) { dummyReport(range) }
-    val currencySymbol = "CHF"
+fun SalesReportV5Screen(
+    state: ReportsUiState,
+    currencySymbol: String,
+    onRangeSelected: (ReportRange) -> Unit,
+    onRefresh: () -> Unit,
+    onPrint: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val report = remember(state.salesReport, state.endOfDayReport, state.selectedRange) {
+        toSalesReportData(state)
+    }
 
     Column(modifier = modifier.fillMaxSize()) {
         Header(
-            currentRange = range,
-            onSelectRange = { range = it },
+            currentRange = state.selectedRange,
+            onSelectRange = onRangeSelected,
+            onRefresh = onRefresh,
+            onPrint = onPrint,
         )
         Body(report = report, sym = currencySymbol)
     }
@@ -267,9 +138,18 @@ fun SalesReportV5Screen(modifier: Modifier = Modifier) {
 
 @Composable
 private fun Header(
-    currentRange: SalesRange,
-    onSelectRange: (SalesRange) -> Unit,
+    currentRange: ReportRange,
+    onSelectRange: (ReportRange) -> Unit,
+    onRefresh: () -> Unit,
+    onPrint: () -> Unit,
 ) {
+    val ranges = listOf(
+        ReportRange.TODAY to stringResource(R.string.today).uppercase(Locale.getDefault()),
+        ReportRange.YESTERDAY to stringResource(R.string.yesterday).uppercase(Locale.getDefault()),
+        ReportRange.LAST_WEEK to stringResource(R.string.last_week).uppercase(Locale.getDefault()),
+        ReportRange.LAST_MONTH to stringResource(R.string.last_month).uppercase(Locale.getDefault()),
+        ReportRange.LAST_3_MONTHS to stringResource(R.string.last_3_months).uppercase(Locale.getDefault()),
+    )
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -277,7 +157,7 @@ private fun Header(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            "Sales Report",
+            stringResource(R.string.sales_report),
             color = DashColors.TextPrimary,
             fontSize = 22.sp,
             fontWeight = FontWeight.ExtraBold,
@@ -287,8 +167,8 @@ private fun Header(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             modifier = Modifier.weight(1f),
         ) {
-            SalesRange.entries.forEach { r ->
-                val active = r == currentRange
+            ranges.forEach { (range, label) ->
+                val active = range == currentRange
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(10.dp))
@@ -298,11 +178,11 @@ private fun Header(
                             if (active) DashColors.Accent else DashColors.HairlineLight,
                             RoundedCornerShape(10.dp),
                         )
-                        .clickable { onSelectRange(r) }
+                        .clickable { onSelectRange(range) }
                         .padding(horizontal = 12.dp, vertical = 8.dp),
                 ) {
                     Text(
-                        r.label,
+                        label,
                         color = if (active) DashColors.OnAccent else DashColors.TextSecondary,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.ExtraBold,
@@ -314,14 +194,14 @@ private fun Header(
             modifier = Modifier
                 .clip(RoundedCornerShape(10.dp))
                 .background(DashColors.Accent)
-                .clickable { }
+                .clickable(onClick = onPrint)
                 .padding(horizontal = 14.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(Icons.Outlined.Print, contentDescription = null, tint = DashColors.OnAccent, modifier = Modifier.size(15.dp))
             Spacer(Modifier.size(6.dp))
             Text(
-                "PRINT",
+                stringResource(R.string.print_report).uppercase(Locale.getDefault()),
                 color = DashColors.OnAccent,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.ExtraBold,
@@ -334,7 +214,7 @@ private fun Header(
                 .size(38.dp)
                 .clip(CircleShape)
                 .background(DashColors.SurfaceDeeper)
-                .clickable { },
+                .clickable(onClick = onRefresh),
             contentAlignment = Alignment.Center,
         ) {
             Icon(Icons.Outlined.Refresh, contentDescription = null, tint = DashColors.TextSecondary, modifier = Modifier.size(18.dp))
@@ -400,7 +280,6 @@ private fun Body(report: SalesReportData, sym: String) {
 
 @Composable
 private fun KpiGrid(report: SalesReportData, sym: String) {
-    val netSales = report.totalSales - report.totalRefunded
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
             KpiCard(
@@ -454,7 +333,7 @@ private fun KpiGrid(report: SalesReportData, sym: String) {
                 icon = Icons.Outlined.AttachMoney,
                 accent = DashColors.Success,
                 label = "NET SALES",
-                value = money(sym, netSales),
+                value = money(sym, report.netSales),
             )
         }
     }
@@ -550,14 +429,16 @@ private fun BreakdownCard(
                         fontWeight = FontWeight.ExtraBold,
                     )
                     Spacer(Modifier.size(10.dp))
-                    Text(
-                        "${row.count}×",
-                        color = DashColors.TextSecondary,
-                        fontSize = 11.5.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        fontFamily = MonoFont,
-                    )
-                    Spacer(Modifier.size(10.dp))
+                    if (row.count > 0) {
+                        Text(
+                            "${row.count}×",
+                            color = DashColors.TextSecondary,
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            fontFamily = MonoFont,
+                        )
+                        Spacer(Modifier.size(10.dp))
+                    }
                     Text(
                         money(sym, row.total),
                         color = DashColors.TextPrimary,

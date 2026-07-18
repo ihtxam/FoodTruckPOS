@@ -181,7 +181,7 @@
     <string name="save_hold_order">Enregistrer / Maintenir</string>
     <string name="save_hold_short">Sauvegarder</string>
     <string name="takeout">Vente à emporter</string>
-    <string name="choose_customer">choisir Client</string>
+    <string name="choose_customer">Choisir un client</string>
     <string name="add_customer">Ajouter client</string>
     <string name="cart_order_menu">Options commande</string>
     <string name="print_kitchen_ticket">Imprimer ticket cuisine</string>
@@ -206,6 +206,14 @@
     <string name="low_stock_threshold">Alerte stock faible</string>
     <string name="stock_left">%1$d gauche</string>
     <string name="continue_action">Continuer</string>
+    <string name="snackbar_pickup_asap">À emporter %1$s — Dès que possible / Maintenant</string>
+    <string name="snackbar_pickup_scheduled">À emporter %1$s planifié</string>
+    <string name="snackbar_delivery_asap">Livraison : %1$s — Dès que possible / Maintenant</string>
+    <string name="snackbar_delivery_scheduled">Livraison : %1$s planifiée</string>
+    <string name="snackbar_switched_takeaway">Passé en à emporter</string>
+    <string name="order_items_count">%1$d articles</string>
+    <string name="time_just_now">À l\'instant</string>
+    <string name="time_min_ago">%1$d min</string>
     <string name="new_contact">Nouveau contact</string>
     <string name="split_by_items">Diviser par éléments</string>
     <string name="split_equal">Répartir également</string>
@@ -378,6 +386,7 @@
     <string name="month">Mois</string>
     <string name="last_week">Semaine dernière</string>
     <string name="last_month">Le mois dernier</string>
+    <string name="last_3_months">3 derniers mois</string>
     <string name="gross_sales">Ventes brutes</string>
     <string name="net_sales">Ventes Nettes</string>
     <string name="cancelled_orders">Ordres annulées</string>

@@ -59,7 +59,14 @@ fun ReportsScreen(viewModel: ReportsViewModel = hiltViewModel()) {
 
         when (tab) {
             0 -> EndOfDayTab(state.endOfDayReport, currency, viewModel::printEndOfDayReport)
-            1 -> SalesReportV5Screen(modifier = Modifier.weight(1f))
+            1 -> SalesReportV5Screen(
+                state = state,
+                currencySymbol = currency,
+                onRangeSelected = viewModel::selectRange,
+                onRefresh = viewModel::refresh,
+                onPrint = viewModel::printSalesReport,
+                modifier = Modifier.weight(1f)
+            )
             2 -> ProductSalesTab(state.topProducts, currency)
             3 -> UserPerformanceTab(state.userPerformance, currency)
         }
