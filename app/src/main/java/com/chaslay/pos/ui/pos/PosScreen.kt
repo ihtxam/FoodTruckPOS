@@ -347,8 +347,14 @@ fun PosScreen(
                 unsentCourseCount = orderingItemsForRail.map { it.courseNumber }.distinct().size,
                 selectedTab = mainTab,
                 onTabSelected = { mainTab = it },
-                onPickup = viewModel::showPickupOrderDialog,
-                onDelivery = viewModel::showDeliveryOrderDialog,
+                onPickup = {
+                    mainTab = PosMainTab.REGISTER
+                    viewModel.showPickupOrderDialog()
+                },
+                onDelivery = {
+                    mainTab = PosMainTab.REGISTER
+                    viewModel.showDeliveryOrderDialog()
+                },
                 onNewOrder = viewModel::showNewOrderDialog,
                 onHold = { viewModel.holdOrder(false) },
                 onHoldAndSend = { viewModel.holdOrder(true) },
@@ -1183,17 +1189,17 @@ private fun FulfillmentInfoBar(cart: com.chaslay.pos.domain.model.CartSummary) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color(0xFFE8F4FD), RoundedCornerShape(6.dp))
+            .background(Color(0xFFF5F5F5), RoundedCornerShape(6.dp))
             .padding(horizontal = 10.dp, vertical = 6.dp)
     ) {
         if (isDelivery) {
             Text(
                 stringResource(R.string.delivery),
-                color = Color(0xFFE67E22),
+                color = Color(0xFF111111),
                 fontWeight = FontWeight.Bold,
                 fontSize = 11.sp
             )
-            Text(deliveryName.orEmpty(), color = Color(0xFF333333), fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+            Text(deliveryName.orEmpty(), color = Color(0xFF111111), fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
             listOfNotNull(cart.deliveryAddress, cart.deliveryZip)
                 .filter { it.isNotBlank() }
                 .joinToString(", ")
@@ -1203,29 +1209,35 @@ private fun FulfillmentInfoBar(cart: com.chaslay.pos.domain.model.CartSummary) {
                 Text(it, color = Color(0xFF555555), fontSize = 11.sp)
             }
             Text(
-                formatScheduledTime(cart.pickupTimeMs),
-                color = Color(0xFF1565C0),
+                formatScheduledTimeLabel(cart.pickupTimeMs),
+                color = Color(0xFF333333),
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Medium
             )
         } else {
             Text(
                 stringResource(R.string.takeout),
-                color = Color(0xFF1565C0),
+                color = Color(0xFF111111),
                 fontWeight = FontWeight.Bold,
                 fontSize = 11.sp
             )
             cart.orderNumber?.let {
-                Text("#$it", color = Color(0xFF333333), fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                Text("#$it", color = Color(0xFF111111), fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
             }
             Text(
-                formatScheduledTime(cart.pickupTimeMs),
-                color = Color(0xFF1565C0),
+                formatScheduledTimeLabel(cart.pickupTimeMs),
+                color = Color(0xFF333333),
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Medium
             )
         }
     }
+}
+
+@Composable
+private fun formatScheduledTimeLabel(timeMs: Long?): String {
+    if (timeMs == null) return stringResource(R.string.asap_now)
+    return SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date(timeMs))
 }
 
 @Composable
@@ -2601,6 +2613,16 @@ private fun TakeoutScheduleDialog(
     val openLabel = formatTime24h(openHour, openMinute)
     val closeLabel = formatTime24h(closeHour, closeMinute)
     val dateFormat = remember { SimpleDateFormat("MM/dd/yyyy", Locale.getDefault()) }
+    val takeoutChipColors = FilterChipDefaults.filterChipColors(
+        containerColor = Color(0xFFE8E8E8),
+        labelColor = Color(0xFF333333),
+        selectedContainerColor = Color(0xFF111111),
+        selectedLabelColor = Color.White
+    )
+    val takeoutButtonColors = ButtonDefaults.buttonColors(
+        containerColor = Color(0xFF111111),
+        contentColor = Color.White
+    )
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -2625,10 +2647,10 @@ private fun TakeoutScheduleDialog(
                         title,
                         fontWeight = FontWeight.Bold,
                         fontSize = 22.sp,
-                        color = Color(0xFF333333)
+                        color = Color(0xFF111111)
                     )
                     IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, contentDescription = stringResource(R.string.cancel))
+                        Icon(Icons.Default.Close, contentDescription = stringResource(R.string.cancel), tint = Color(0xFF111111))
                     }
                 }
                 Text(
@@ -2646,15 +2668,13 @@ private fun TakeoutScheduleDialog(
                             selected = asapSelected,
                             onClick = { asapSelected = true },
                             label = { Text(stringResource(R.string.asap_now)) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = Color(0xFF714B67),
-                                selectedLabelColor = Color.White
-                            )
+                            colors = takeoutChipColors
                         )
                         FilterChip(
                             selected = !asapSelected,
                             onClick = { asapSelected = false },
-                            label = { Text(stringResource(R.string.schedule_later)) }
+                            label = { Text(stringResource(R.string.schedule_later)) },
+                            colors = takeoutChipColors
                         )
                     }
                 }
@@ -2672,10 +2692,7 @@ private fun TakeoutScheduleDialog(
                             selected = selected,
                             onClick = { selectedDateMillis = dateMillis },
                             label = { Text(dateFormat.format(dateMillis), fontSize = 12.sp) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = Color(0xFF714B67),
-                                selectedLabelColor = Color.White
-                            )
+                            colors = takeoutChipColors
                         )
                     }
                 }
@@ -2710,11 +2727,7 @@ private fun TakeoutScheduleDialog(
                                     label = {
                                         Text(formatTime24h(slot.first, slot.second), fontSize = 12.sp)
                                     },
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        containerColor = Color(0xFFDFF2E1),
-                                        selectedContainerColor = Color(0xFF714B67),
-                                        selectedLabelColor = Color.White
-                                    )
+                                    colors = takeoutChipColors
                                 )
                             }
                         }
@@ -2740,7 +2753,7 @@ private fun TakeoutScheduleDialog(
                         .padding(16.dp)
                         .height(48.dp)
                         .fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF714B67))
+                    colors = takeoutButtonColors
                 ) {
                     Text(stringResource(R.string.continue_action))
                 }
@@ -2751,7 +2764,7 @@ private fun TakeoutScheduleDialog(
                             .padding(16.dp)
                             .height(48.dp)
                             .fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF714B67))
+                        colors = takeoutButtonColors
                     ) {
                         Text(stringResource(R.string.continue_action))
                     }
@@ -2772,6 +2785,10 @@ private fun ChooseCustomerDialog(
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var showCreateDialog by remember { mutableStateOf(false) }
+    val takeoutButtonColors = ButtonDefaults.buttonColors(
+        containerColor = Color(0xFF111111),
+        contentColor = Color.White
+    )
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -2795,7 +2812,7 @@ private fun ChooseCustomerDialog(
                 ) {
                     Button(
                         onClick = { showCreateDialog = true },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF714B67))
+                        colors = takeoutButtonColors
                     ) {
                         Icon(Icons.Default.PersonAdd, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(6.dp))
@@ -2806,7 +2823,8 @@ private fun ChooseCustomerDialog(
                         modifier = Modifier.weight(1f),
                         textAlign = TextAlign.Center,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 18.sp
+                        fontSize = 18.sp,
+                        color = Color(0xFF111111)
                     )
                     OutlinedTextField(
                         value = searchQuery,
@@ -2836,7 +2854,7 @@ private fun ChooseCustomerDialog(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(customer.name, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                Text(customer.name, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color(0xFF111111))
                                 customer.address?.takeIf { it.isNotBlank() }?.let {
                                     Text(it, fontSize = 12.sp, color = Color(0xFF666666))
                                 }
@@ -2866,7 +2884,8 @@ private fun ChooseCustomerDialog(
                         .fillMaxWidth()
                         .padding(12.dp)
                         .height(48.dp),
-                    shape = RoundedCornerShape(8.dp)
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF111111))
                 ) {
                     Text(stringResource(R.string.discard))
                 }
@@ -2932,11 +2951,6 @@ private fun nextSevenDays(): List<Long> {
 
 private fun formatTime24h(hour: Int, minute: Int): String =
     String.format(Locale.getDefault(), "%02d:%02d", hour, minute)
-
-private fun formatScheduledTime(timeMs: Long?): String {
-    if (timeMs == null) return "ASAP / NOW"
-    return SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date(timeMs))
-}
 
 private fun groupedPickupSlots(
     dateMillis: Long,

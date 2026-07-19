@@ -14,8 +14,8 @@ android {
         applicationId = "com.chaslay.pos"
         minSdk = 25
         targetSdk = 35
-        versionCode = 7
-        versionName = "1.0.6"
+        versionCode = 8
+        versionName = "1.0.7"
 
         multiDexEnabled = true
 
@@ -26,7 +26,7 @@ android {
         buildConfigField("String", "LICENSE_API_BASE_URL", "\"https://api.chaslay.com/\"")
         buildConfigField("String", "TENANT_SLUG", "\"sushi-sake\"")
         buildConfigField("String", "SYNC_API_KEY", "\"ihtsham_76875hgf755rjgkjh7zrzrhvjhv\"")
-        buildConfigField("int", "TRIAL_DAYS", "7")
+        buildConfigField("int", "TRIAL_DAYS", "15")
         buildConfigField("int", "LICENSE_RENEWAL_WARNING_DAYS", "30")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

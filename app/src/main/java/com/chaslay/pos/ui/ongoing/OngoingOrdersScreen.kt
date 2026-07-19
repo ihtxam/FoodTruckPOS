@@ -224,9 +224,9 @@ private fun OngoingOrderCardView(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("${order.itemCount} items", color = Color(0xFFAAAAAA), fontSize = 11.sp)
+                    Text(stringResource(R.string.order_items_count, order.itemCount), color = Color(0xFFAAAAAA), fontSize = 11.sp)
                     Text(
-                        formatElapsed(order.updatedAt),
+                        formatElapsedLabel(order.updatedAt),
                         color = Color(0xFFE74C3C),
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -269,11 +269,12 @@ private fun OngoingActionIcon(
 private fun formatMoney(amount: Double, symbol: String): String =
     String.format(Locale.getDefault(), "%s %.2f", symbol, amount)
 
-private fun formatElapsed(updatedAt: Long): String {
+@Composable
+private fun formatElapsedLabel(updatedAt: Long): String {
     val minutes = ((System.currentTimeMillis() - updatedAt) / 60_000).toInt().coerceAtLeast(0)
     return when {
-        minutes < 1 -> "Just now"
-        minutes < 60 -> "${minutes} min"
+        minutes < 1 -> stringResource(R.string.time_just_now)
+        minutes < 60 -> stringResource(R.string.time_min_ago, minutes)
         else -> "${minutes / 60}h ${minutes % 60}m"
     }
 }

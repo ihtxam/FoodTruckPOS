@@ -4,6 +4,7 @@ import android.app.Activity
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.chaslay.pos.R
 import com.chaslay.pos.data.local.entity.BusinessSettingsEntity
 import com.chaslay.pos.data.local.entity.CustomerEntity
 import com.chaslay.pos.data.local.entity.CategoryEntity
@@ -1378,7 +1379,7 @@ class PosViewModel @Inject constructor(
                 cartManager.setPickupOrder(suggestOrderNumber(), null)
                 items.forEach { cartManager.addItem(it) }
                 refreshTables()
-                updateExtras { it.copy(snackbarMessage = "Switched to takeaway") }
+                updateExtras { it.copy(snackbarMessage = appContext.getString(R.string.snackbar_switched_takeaway)) }
             }
             return
         }
@@ -1394,7 +1395,7 @@ class PosViewModel @Inject constructor(
             }
             ServiceType.DINE_IN -> {
                 setServiceType(ServiceType.TAKEAWAY)
-                updateExtras { it.copy(snackbarMessage = "Switched to takeaway") }
+                updateExtras { it.copy(snackbarMessage = appContext.getString(R.string.snackbar_switched_takeaway)) }
             }
         }
     }
@@ -2045,9 +2046,9 @@ class PosViewModel @Inject constructor(
                 it.copy(
                     showPickupDialog = false,
                     snackbarMessage = if (pickupTimeMs == null) {
-                        "Takeaway $orderNumber — ASAP / NOW"
+                        appContext.getString(R.string.snackbar_pickup_asap, orderNumber)
                     } else {
-                        "Takeaway $orderNumber scheduled"
+                        appContext.getString(R.string.snackbar_pickup_scheduled, orderNumber)
                     }
                 )
             }
@@ -2136,9 +2137,9 @@ class PosViewModel @Inject constructor(
                     showDeliveryTimeDialog = false,
                     pendingDeliveryCustomer = null,
                     snackbarMessage = if (deliveryTimeMs == null) {
-                        "Delivery: ${customer.name} — ASAP / NOW"
+                        appContext.getString(R.string.snackbar_delivery_asap, customer.name)
                     } else {
-                        "Delivery: ${customer.name} scheduled"
+                        appContext.getString(R.string.snackbar_delivery_scheduled, customer.name)
                     }
                 )
             }
