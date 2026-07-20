@@ -84,6 +84,17 @@ class AuthRepository @Inject constructor(
     companion object {
         /** Cloud merchant users are stored locally above seeded staff IDs. */
         private const val CLOUD_USER_ID_BASE = 100_000L
+
+        /** Maps server UUID to a stable local Room user id. */
+        fun cloudUserLocalId(cloudUserId: String): Long {
+            val uuid = runCatching { UUID.fromString(cloudUserId.trim()) }.getOrNull()
+            val bucket = if (uuid != null) {
+                uuid.mostSignificantBits xor uuid.leastSignificantBits
+            } else {
+                cloudUserId.hashCode().toLong()
+            }
+            return CLOUD_USER_ID_BASE + (bucket and 0x1FFFFFFFFFFFFFFFL) % 50_000_000L
+        }
     }
 
     suspend fun loginWithPin(pin: String): AuthSession? {
@@ -138,10 +149,14 @@ class AuthRepository @Inject constructor(
                 permissions = PosPermission.encode(permissions),
                 isSystem = true
             )
-            val localId = CLOUD_USER_ID_BASE + cloudUser.id
-            val existing = userDao.getById(localId)
+            val localId = cloudUserLocalId(cloudUser.id)
+            val existingByEmail = userDao.getByEmail(cloudUser.email.trim())
+            val existing = when {
+                existingByEmail != null && existingByEmail.id >= CLOUD_USER_ID_BASE -> existingByEmail
+                else -> userDao.getById(localId)
+            }
             val user = UserEntity(
-                id = localId,
+                id = existing?.id ?: localId,
                 name = cloudUser.name.ifBlank { cloudUser.email },
                 email = cloudUser.email.trim().lowercase(Locale.getDefault()),
                 pinHash = existing?.pinHash,

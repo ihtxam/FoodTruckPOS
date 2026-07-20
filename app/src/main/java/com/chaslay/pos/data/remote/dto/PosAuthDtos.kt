@@ -13,7 +13,7 @@ data class PosLoginResponse(
 )
 
 data class PosLoginUserDto(
-    @SerializedName("id") val id: Long,
+    @SerializedName("id") val id: String,
     @SerializedName("email") val email: String,
     @SerializedName("name") val name: String,
     @SerializedName("role") val role: String,
