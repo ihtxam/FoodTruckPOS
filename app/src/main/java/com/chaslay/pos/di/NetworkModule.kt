@@ -2,6 +2,7 @@ package com.chaslay.pos.di
 
 import com.chaslay.pos.BuildConfig
 import com.chaslay.pos.data.remote.LicenseApi
+import com.chaslay.pos.data.remote.PosAuthApi
 import com.chaslay.pos.data.remote.SyncApi
 import dagger.Module
 import dagger.Provides
@@ -48,6 +49,10 @@ object NetworkModule {
     @Provides
     @Singleton
     fun provideLicenseApi(retrofit: Retrofit): LicenseApi = retrofit.create(LicenseApi::class.java)
+
+    @Provides
+    @Singleton
+    fun providePosAuthApi(retrofit: Retrofit): PosAuthApi = retrofit.create(PosAuthApi::class.java)
 
     @Provides
     @Singleton

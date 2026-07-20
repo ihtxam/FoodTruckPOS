@@ -2024,20 +2024,28 @@ class PosViewModel @Inject constructor(
     }
 
     fun showPickupOrderDialog() {
-        updateExtras {
-            it.copy(
-                showPickupDialog = true,
-                suggestedOrderNumber = suggestOrderNumber()
-            )
+        viewModelScope.launch {
+            val parked = parkCartIfNeeded()
+            updateExtras {
+                it.copy(
+                    showPickupDialog = true,
+                    suggestedOrderNumber = suggestOrderNumber(),
+                    snackbarMessage = if (parked) {
+                        appContext.getString(R.string.snackbar_cart_parked_for_new_order)
+                    } else {
+                        it.snackbarMessage
+                    }
+                )
+            }
         }
     }
 
     fun dismissPickupDialog() = updateExtras { it.copy(showPickupDialog = false) }
 
     fun confirmPickup(pickupTimeMs: Long?) {
-        val orderNumber = suggestOrderNumber()
-        cartManager.setPickupOrder(orderNumber, pickupTimeMs)
         viewModelScope.launch {
+            val orderNumber = suggestOrderNumber()
+            cartManager.setPickupOrder(orderNumber, pickupTimeMs)
             val cart = cartManager.snapshot()
             if (pickupTimeMs != null && !isRestaurantMode() && !cart.isEmpty) {
                 printFulfillmentSlip("SCHEDULED TAKEAWAY", pickupTimeMs)
@@ -2057,12 +2065,18 @@ class PosViewModel @Inject constructor(
 
     fun showDeliveryOrderDialog() {
         viewModelScope.launch {
+            val parked = parkCartIfNeeded()
             val customers = customerRepository.getAll()
             updateExtras {
                 it.copy(
                     showDeliveryDialog = true,
                     deliveryCustomers = customers,
-                    suggestedOrderNumber = suggestOrderNumber()
+                    suggestedOrderNumber = suggestOrderNumber(),
+                    snackbarMessage = if (parked) {
+                        appContext.getString(R.string.snackbar_cart_parked_for_new_order)
+                    } else {
+                        it.snackbarMessage
+                    }
                 )
             }
         }
@@ -2118,16 +2132,16 @@ class PosViewModel @Inject constructor(
 
     fun confirmDeliveryTime(deliveryTimeMs: Long?) {
         val customer = _uiExtras.value.pendingDeliveryCustomer ?: return
-        val orderNumber = suggestOrderNumber().replace("P-", "D-")
-        cartManager.setDeliveryOrder(
-            name = customer.name,
-            address = customer.address.orEmpty(),
-            zip = customer.zip.orEmpty(),
-            phone = customer.phone.orEmpty(),
-            orderNumber = orderNumber,
-            deliveryTimeMs = deliveryTimeMs
-        )
         viewModelScope.launch {
+            val orderNumber = suggestOrderNumber().replace("P-", "D-")
+            cartManager.setDeliveryOrder(
+                name = customer.name,
+                address = customer.address.orEmpty(),
+                zip = customer.zip.orEmpty(),
+                phone = customer.phone.orEmpty(),
+                orderNumber = orderNumber,
+                deliveryTimeMs = deliveryTimeMs
+            )
             val cart = cartManager.snapshot()
             if (!cart.isEmpty) {
                 printDeliverySlip(customer, deliveryTimeMs)
@@ -2329,6 +2343,32 @@ class PosViewModel @Inject constructor(
             tableOrderMutex.withLock { flushTableOrderSync() }
             onReady()
         }
+    }
+
+    /** Saves the active cart to held/table orders before starting takeaway or delivery. */
+    private suspend fun parkCartIfNeeded(): Boolean {
+        val snapshot = cartManager.snapshot()
+        if (snapshot.isEmpty) return false
+
+        val userId = sessionManager.currentUserId.first() ?: 0L
+        val userName = sessionManager.currentUserName.first() ?: "Cashier"
+
+        if (snapshot.tableId != null) {
+            tableOrderMutex.withLock {
+                flushTableOrderSync()
+                cartManager.snapshot().tableOrderId?.let { tableOrderRepository.holdOrder(it) }
+            }
+        } else {
+            heldOrderRepository.createHeldOrder(
+                cart = snapshot,
+                sendToKitchen = false,
+                userId = userId,
+                userName = userName
+            )
+        }
+        cartManager.clear()
+        refreshTables()
+        return true
     }
 
     private suspend fun flushTableOrderSync(): String? {

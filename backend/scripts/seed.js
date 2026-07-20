@@ -1,10 +1,12 @@
 import dotenv from 'dotenv';
 import { pool } from '../src/db.js';
 import { clearTenantCache, generateTenantApiKey } from '../src/services/tenantService.js';
+import { ensureSuperadminPasswordFromEnv } from '../src/services/platformSettingsService.js';
 
 dotenv.config();
 
 async function main() {
+  await ensureSuperadminPasswordFromEnv();
   const slug = process.env.DEFAULT_TENANT_SLUG || 'demo';
   const apiKey = process.env.API_KEY || generateTenantApiKey();
   const tenant = (

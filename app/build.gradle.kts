@@ -14,8 +14,8 @@ android {
         applicationId = "com.chaslay.pos"
         minSdk = 25
         targetSdk = 35
-        versionCode = 8
-        versionName = "1.0.7"
+        versionCode = 12
+        versionName = "1.0.11"
 
         multiDexEnabled = true
 
@@ -24,7 +24,7 @@ android {
         }
 
         buildConfigField("String", "LICENSE_API_BASE_URL", "\"https://api.chaslay.com/\"")
-        buildConfigField("String", "TENANT_SLUG", "\"sushi-sake\"")
+        buildConfigField("String", "TENANT_SLUG", "\"\"")
         buildConfigField("String", "SYNC_API_KEY", "\"ihtsham_76875hgf755rjgkjh7zrzrhvjhv\"")
         buildConfigField("int", "TRIAL_DAYS", "15")
         buildConfigField("int", "LICENSE_RENEWAL_WARNING_DAYS", "30")

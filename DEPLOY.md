@@ -1,4 +1,4 @@
-# Chaslay POS ù deploy checklist
+# Chaslay POS ? deploy checklist
 
 Server IP: **116.202.26.15**
 
@@ -35,19 +35,19 @@ nano backend/receipts.env
 bash scripts/deploy-hetzner.sh
 ```
 
-### WinSCP ó where files live on the server
+### WinSCP ? where files live on the server
 
 After `git clone`, everything is under **`/root/FoodTruckPOS/`**:
 
 | What | Path on server |
 |------|----------------|
-| Main API secrets | `/root/FoodTruckPOS/backend/.env` |
-| Receipts + SMTP | `/root/FoodTruckPOS/backend/receipts.env` |
+| Main API secrets | `/root/chaslay-secrets/backend.env` (symlinked from `backend/.env`) |
+| Receipts + SMTP | `/root/chaslay-secrets/receipts.env` |
 | Receipts code | `/root/FoodTruckPOS/backend/receipts/` |
 | Docker stack | `/root/FoodTruckPOS/backend/docker-compose.yml` |
 | Deploy script | `/root/FoodTruckPOS/scripts/deploy-hetzner.sh` |
 
-There is **no** separate `server/` folder anymore ó receipts live inside `backend/`.
+There is **no** separate `server/` folder anymore ? receipts live inside `backend/`.
 
 If you only uploaded `backend/` before, run on the server (SSH):
 
@@ -63,7 +63,7 @@ Then create `backend/receipts.env` from `backend/receipts.env.example` and run:
 bash /root/FoodTruckPOS/scripts/deploy-hetzner.sh
 ```
 
-**Do not commit `.env` files to GitHub** ó they contain passwords. Keep secrets on the server only, or use [GitHub Actions secrets](https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions) for deploy keys (not app config).
+**Do not commit `.env` files to GitHub** ? they contain passwords. Keep secrets on the server only, or use [GitHub Actions secrets](https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions) for deploy keys (not app config).
 
 ---
 
@@ -102,8 +102,9 @@ ssh root@116.202.26.15
 cd ChaslayPOS   # or git clone https://github.com/ihtxam/ChaslayPOS.git
 git pull
 cd backend
-cp .env.example .env   # skip if .env already exists
-nano .env              # set secrets (see below)
+# NEVER run: cp .env.example .env  (that wipes your secrets)
+# Secrets live at /root/chaslay-secrets/backend.env ? see scripts/deploy-hetzner.sh
+nano /root/chaslay-secrets/backend.env   # only if you need to change secrets
 docker compose up -d --build
 docker compose exec api npm run migrate
 docker compose exec api npm run seed
@@ -116,11 +117,18 @@ docker compose exec api npm run seed
 | `POSTGRES_PASSWORD` | Long random password |
 | `API_KEY` | Global fallback key; also assigned to `demo` tenant on seed |
 | `LICENSE_SECRET` | Min 32 chars |
-| `SUPERADMIN_PASSWORD` | Login for https://admin.chaslay.com |
+| `SUPERADMIN_PASSWORD` | Set once in `/root/chaslay-secrets/backend.env`; stored in Postgres and survives redeploys |
 
 `Caddyfile` is already set for `api.chaslay.com`, `shop.chaslay.com`, `admin.chaslay.com`.
 
-**Superadmin panel:** https://admin.chaslay.com (password = `SUPERADMIN_PASSWORD` in `.env`)
+**Superadmin panel:** https://admin.chaslay.com (password saved in database after first login)
+
+**Reset superadmin password anytime:**
+
+```bash
+cd /root/FoodTruckPOS/backend
+docker compose exec api npm run set-superadmin-password -- 'YourNewPassword123'
+```
 
 After changing `.env`, restart: `docker compose up -d --build`
 
@@ -141,7 +149,7 @@ docker compose exec api npm run create-merchant-user -- \
 ```
 
 Merchants can manage:
-- Menu (categories & products) ù syncs to POS when online
+- Menu (categories & products) ? syncs to POS when online
 - Online orders & status
 - Opening hours, delivery zones, order settings
 

@@ -35,7 +35,7 @@ router.post('/auth/login', async (req, res) => {
       const result = await loginWithEmail(email.trim(), password ?? '');
       return res.json(result);
     }
-    const result = loginSuperadmin(password ?? '');
+    const result = await loginSuperadmin(password ?? '');
     return res.json(result);
   } catch (err) {
     return res.status(401).json({ error: err.message ?? 'Login failed' });

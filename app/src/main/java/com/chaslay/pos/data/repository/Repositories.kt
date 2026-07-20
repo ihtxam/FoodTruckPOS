@@ -5,6 +5,7 @@ import com.chaslay.pos.data.local.dao.CategoryDao
 import com.chaslay.pos.data.local.dao.ProductDao
 import com.chaslay.pos.data.local.dao.ProductVariantDao
 import com.chaslay.pos.data.local.dao.TransactionDao
+import com.chaslay.pos.BuildConfig
 import com.chaslay.pos.data.local.dao.UserDao
 import com.chaslay.pos.data.local.entity.BusinessSettingsEntity
 import com.chaslay.pos.data.local.entity.CategoryEntity
@@ -47,7 +48,13 @@ import com.chaslay.pos.domain.model.TableWithOrderInfo
 import com.chaslay.pos.domain.model.resolveVatRate
 import com.chaslay.pos.domain.model.SyncStatus
 import com.chaslay.pos.domain.model.UserPerformanceReport
-import com.chaslay.pos.domain.model.UserRole
+import com.chaslay.pos.data.preferences.LicenseManager
+import com.chaslay.pos.data.remote.PosAuthApi
+import com.chaslay.pos.data.remote.dto.PosLoginRequest
+import com.chaslay.pos.domain.model.LoginResult
+import com.chaslay.pos.domain.model.PosPermission
+import org.json.JSONObject
+import java.io.IOException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -65,12 +72,19 @@ import javax.inject.Singleton
 @Singleton
 class AuthRepository @Inject constructor(
     private val userDao: UserDao,
-    private val roleDao: com.chaslay.pos.data.local.dao.RoleDao
+    private val roleDao: com.chaslay.pos.data.local.dao.RoleDao,
+    private val posAuthApi: PosAuthApi,
+    private val licenseManager: LicenseManager
 ) {
     data class AuthSession(
         val user: UserEntity,
         val role: com.chaslay.pos.data.local.entity.RoleEntity
     )
+
+    companion object {
+        /** Cloud merchant users are stored locally above seeded staff IDs. */
+        private const val CLOUD_USER_ID_BASE = 100_000L
+    }
 
     suspend fun loginWithPin(pin: String): AuthSession? {
         val hash = hash(pin)
@@ -79,13 +93,89 @@ class AuthRepository @Inject constructor(
         return AuthSession(user, role)
     }
 
-    suspend fun loginWithEmail(email: String, password: String): AuthSession? {
-        val user = userDao.getByEmail(email) ?: return null
+    suspend fun loginWithEmail(email: String, password: String): LoginResult {
+        loginLocalWithEmail(email, password)?.let { session ->
+            return LoginResult.Success(session, needsPinSetup = session.user.pinHash.isNullOrBlank())
+        }
+        return loginCloudWithEmail(email, password)
+    }
+
+    private suspend fun loginLocalWithEmail(email: String, password: String): AuthSession? {
+        val user = userDao.getByEmail(email.trim()) ?: return null
         if (!user.isActive) return null
         val hash = hash(password)
         if (user.passwordHash != hash) return null
         val role = roleDao.getById(user.roleId) ?: return null
         return AuthSession(user, role)
+    }
+
+    private suspend fun resolveTenantSlugForLogin(): String? {
+        val fromLicense = licenseManager.getTenantSlug().trim()
+        if (fromLicense.isNotEmpty()) return fromLicense
+        val fromBuild = BuildConfig.TENANT_SLUG.trim()
+        return fromBuild.takeIf { it.isNotEmpty() }
+    }
+
+    private suspend fun loginCloudWithEmail(email: String, password: String): LoginResult {
+        return try {
+            val response = posAuthApi.login(
+                PosLoginRequest(
+                    email = email.trim(),
+                    password = password,
+                    tenantSlug = resolveTenantSlugForLogin()
+                )
+            )
+            if (!response.isSuccessful) {
+                return LoginResult.Failure(readPosAuthError(response.code(), response.errorBody()?.string()))
+            }
+            val cloudUser = response.body()?.user
+                ?: return LoginResult.Failure("Invalid credentials")
+            cloudUser.tenantSlug?.trim()?.takeIf { it.isNotEmpty() }?.let { licenseManager.setTenantSlug(it) }
+            val permissions = PosPermission.all()
+            val role = com.chaslay.pos.data.local.entity.RoleEntity(
+                id = 1L,
+                name = "Merchant",
+                permissions = PosPermission.encode(permissions),
+                isSystem = true
+            )
+            val localId = CLOUD_USER_ID_BASE + cloudUser.id
+            val existing = userDao.getById(localId)
+            val user = UserEntity(
+                id = localId,
+                name = cloudUser.name.ifBlank { cloudUser.email },
+                email = cloudUser.email.trim().lowercase(Locale.getDefault()),
+                pinHash = existing?.pinHash,
+                passwordHash = hash(password),
+                roleId = role.id,
+                isActive = true,
+                biometricEnabled = existing?.biometricEnabled ?: false,
+                createdAt = existing?.createdAt ?: System.currentTimeMillis()
+            )
+            if (existing == null) {
+                userDao.insert(user)
+            } else {
+                userDao.update(user)
+            }
+            val session = AuthSession(user, role)
+            LoginResult.Success(session, needsPinSetup = user.pinHash.isNullOrBlank())
+        } catch (_: IOException) {
+            LoginResult.Failure("No internet connection. Connect to Wi‑Fi and try again.")
+        } catch (e: Exception) {
+            LoginResult.Failure(e.message ?: "Login failed")
+        }
+    }
+
+    private fun readPosAuthError(code: Int, raw: String?): String {
+        if (!raw.isNullOrBlank()) {
+            runCatching {
+                JSONObject(raw).optString("error").takeIf { it.isNotBlank() }
+            }.getOrNull()?.let { return it }
+        }
+        return when (code) {
+            401 -> "Invalid email or password"
+            404 -> "Login service not available. Update the server."
+            else -> "Login failed (HTTP $code)"
+        }
     }
 
     suspend fun getUser(id: Long): UserEntity? = userDao.getById(id)
@@ -596,6 +686,47 @@ class TransactionRepository @Inject constructor(
             reason = reason,
             cancelledAt = System.currentTimeMillis()
         )
+    }
+
+    /** Permanently removes an order and its line items from local history and reports. */
+    suspend fun deleteOrderPermanently(transactionId: String) {
+        deleteOrdersByIds(collectOrderDeleteIds(transactionId))
+    }
+
+    suspend fun countOrdersInRange(startMs: Long, endMs: Long): Int =
+        transactionDao.getAllInRange(startMs, endMs).size
+
+    /** Permanently removes every order in the date range from history and reports. */
+    suspend fun deleteOrdersInRange(startMs: Long, endMs: Long): Int {
+        val orders = transactionDao.getAllInRange(startMs, endMs)
+        val idsToDelete = linkedSetOf<String>()
+        orders.forEach { tx ->
+            idsToDelete.addAll(collectRelatedOrderIds(tx))
+        }
+        deleteOrdersByIds(idsToDelete)
+        return idsToDelete.size
+    }
+
+    private suspend fun collectOrderDeleteIds(transactionId: String): Set<String> {
+        val tx = transactionDao.getById(transactionId) ?: return emptySet()
+        return collectRelatedOrderIds(tx)
+    }
+
+    private suspend fun collectRelatedOrderIds(tx: TransactionEntity): Set<String> {
+        val masterKey = tx.masterOrderId ?: tx.id
+        val related = transactionDao.getByMasterOrderId(masterKey)
+        return if (related.isNotEmpty()) {
+            related.map { it.id }.toSet() + masterKey
+        } else {
+            setOf(tx.id)
+        }
+    }
+
+    private suspend fun deleteOrdersByIds(ids: Set<String>) {
+        ids.forEach { id ->
+            transactionDao.deleteItemsForTransaction(id)
+            transactionDao.deleteTransaction(id)
+        }
     }
 
     /** Records a cancelled open order in sales history (kitchen sent or receipt printed). */

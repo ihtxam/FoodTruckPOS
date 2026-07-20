@@ -8,6 +8,9 @@
     <string name="email_login">Email Login</string>
     <string name="biometric_login">Use Biometric</string>
     <string name="enter_pin">Enter PIN</string>
+    <string name="setup_pin_title">Create your PIN</string>
+    <string name="setup_pin_enter">Choose a 4-digit PIN for daily login on this tablet</string>
+    <string name="setup_pin_confirm">Enter the same PIN again to confirm</string>
     <string name="login_enter_pin_to_continue">Enter your PIN to sign in or switch staff</string>
     <string name="email">Email</string>
     <string name="password">Password</string>
@@ -438,6 +441,11 @@
     <string name="delete_all_orders">Delete All Orders Data</string>
     <string name="delete_orders_help">Permanently removes all sales history, table orders and held orders. Products and settings are kept.</string>
     <string name="delete_orders_confirm">This will permanently delete ALL orders and sales history. This cannot be undone. Continue?</string>
+    <string name="delete_order_permanently">Delete order permanently</string>
+    <string name="delete_order_confirm">Delete order #%1$s permanently? It will be removed from all reports and cannot be recovered.</string>
+    <string name="delete_orders_in_range">Delete all in date range</string>
+    <string name="delete_orders_in_range_confirm">Permanently delete all %1$d orders from %2$s? They will be removed from all reports and cannot be recovered.</string>
+    <string name="snackbar_cart_parked_for_new_order">Current order saved — starting a new order</string>
     <string name="print_test_page">Print Test Page</string>
     <string name="discard_changes">Discard Changes</string>
     <string name="delete">Delete</string>

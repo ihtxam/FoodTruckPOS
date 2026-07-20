@@ -1,6 +1,13 @@
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { query } from '../db.js';
+import { resolveTenantId } from './tenantService.js';
+import {
+  getPlatformSetting,
+  setSuperadminPassword,
+  SUPERADMIN_HASH_KEY,
+  verifySuperadminPassword,
+} from './platformSettingsService.js';
 
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -94,6 +101,34 @@ export function formatSessionUser(userRow) {
   };
 }
 
+export async function loginPosMerchant(email, password, tenantSlug) {
+  const user = await findAdminUserByEmail(email);
+  if (!user || user.role !== 'MERCHANT') throw new Error('Invalid email or password');
+
+  if (tenantSlug) {
+    const tenantId = await resolveTenantId({ tenantSlug, fallbackToDefault: false });
+    if (!tenantId || user.tenant_id !== tenantId) throw new Error('Invalid email or password');
+  }
+
+  const ok = await verifyPassword(password, user.password_hash);
+  if (!ok) throw new Error('Invalid email or password');
+
+  if (!user.tenant_id) throw new Error('Merchant account is not linked to a shop');
+
+  await touchLastLogin(user.id);
+
+  return {
+    user: {
+      id: user.id,
+      email: user.email,
+      name: user.name ?? user.email,
+      role: user.role,
+      tenantSlug: user.tenant_slug,
+      tenantName: user.tenant_name,
+    },
+  };
+}
+
 export async function loginWithEmail(email, password) {
   const user = await findAdminUserByEmail(email);
   if (!user) throw new Error('Invalid email or password');
@@ -123,13 +158,14 @@ export async function loginWithEmail(email, password) {
   };
 }
 
-export function loginSuperadmin(password) {
-  const expected = process.env.SUPERADMIN_PASSWORD;
-  if (!expected) {
-    throw new Error('Superadmin is not configured. Set SUPERADMIN_PASSWORD in .env');
-  }
-  if (password !== expected) {
+export async function loginSuperadmin(password) {
+  const ok = await verifySuperadminPassword(password);
+  if (!ok) {
     throw new Error('Invalid password');
+  }
+  const hash = await getPlatformSetting(SUPERADMIN_HASH_KEY);
+  if (!hash) {
+    await setSuperadminPassword(password);
   }
   const token = signSession({
     sub: 'superadmin',

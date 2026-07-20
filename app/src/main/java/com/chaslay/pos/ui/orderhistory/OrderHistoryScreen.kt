@@ -3,6 +3,8 @@ package com.chaslay.pos.ui.orderhistory
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -133,12 +135,14 @@ fun OrderHistoryScreen(
             canCancel = order.paymentStatus == PaymentStatus.COMPLETED,
             canRefund = order.paymentStatus == PaymentStatus.COMPLETED ||
                 order.paymentStatus == PaymentStatus.PARTIALLY_REFUNDED,
+            canDelete = state.deleteModeUnlocked && state.isAdminUser,
             onDismiss = viewModel::closeOrderDetail,
             onPrint = viewModel::printSelectedOrder,
             onPrintAllSplits = viewModel::printAllSplitOrders,
             onPrintSplit = viewModel::printSplitOrder,
             onCancel = viewModel::showCancelDialog,
-            onRefund = viewModel::showRefundDialog
+            onRefund = viewModel::showRefundDialog,
+            onDelete = { viewModel.requestDeleteOrder(order) }
         )
     }
 
@@ -156,6 +160,57 @@ fun OrderHistoryScreen(
             currencySymbol = state.currencySymbol,
             onDismiss = viewModel::dismissRefundDialog,
             onConfirm = { amount, full -> viewModel.refundSelectedOrder(amount, full) }
+        )
+    }
+
+    if (state.showDeleteDialog && state.pendingDeleteOrder != null) {
+        AlertDialog(
+            onDismissRequest = viewModel::dismissDeleteDialog,
+            title = { Text(stringResource(R.string.delete_order_permanently)) },
+            text = {
+                Text(
+                    stringResource(
+                        R.string.delete_order_confirm,
+                        shortOrderId(state.pendingDeleteOrder!!.transactionNumber)
+                    )
+                )
+            },
+            confirmButton = {
+                Button(onClick = viewModel::confirmDeleteOrder) {
+                    Text(stringResource(R.string.delete))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::dismissDeleteDialog) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        )
+    }
+
+    if (state.showBulkDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = viewModel::dismissBulkDeleteDialog,
+            title = { Text(stringResource(R.string.delete_orders_in_range)) },
+            text = {
+                Text(
+                    stringResource(
+                        R.string.delete_orders_in_range_confirm,
+                        state.bulkDeleteCount,
+                        state.dateRangeLabel
+                    )
+                )
+            },
+            confirmButton = {
+                Button(onClick = viewModel::confirmBulkDelete) {
+                    Text(stringResource(R.string.delete))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::dismissBulkDeleteDialog) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
         )
     }
 
@@ -243,6 +298,24 @@ private fun OrderHistoryContent(
                 onPayment = viewModel::setPaymentFilter
             )
 
+            if (state.deleteModeUnlocked && state.isAdminUser) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = viewModel::requestBulkDelete) {
+                        Text(
+                            stringResource(R.string.delete_orders_in_range),
+                            color = Color(0xFFDC2626),
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+            }
+
             Spacer(modifier = Modifier.height(8.dp))
 
             Surface(
@@ -252,7 +325,7 @@ private fun OrderHistoryContent(
                 shadowElevation = 1.dp
             ) {
                 Column(modifier = Modifier.fillMaxSize()) {
-                    RecordsTableHeader()
+                    RecordsTableHeader(onAdminUnlockTap = viewModel::onAdminUnlockTap)
                     HorizontalDivider(color = Color(0xFFE5E7EB))
                     if (state.orders.isEmpty()) {
                         Box(
@@ -271,7 +344,9 @@ private fun OrderHistoryContent(
                                     tableLabel = order.tableId?.let { state.tableNames[it] },
                                     isSplit = isSplit,
                                     currencySymbol = state.currencySymbol,
-                                    onClick = { viewModel.openOrder(order) }
+                                    canDelete = state.deleteModeUnlocked && state.isAdminUser,
+                                    onClick = { viewModel.openOrder(order) },
+                                    onDeleteRequest = { viewModel.requestDeleteOrder(order) }
                                 )
                                 HorizontalDivider(color = Color(0xFFF3F4F6))
                             }
@@ -437,7 +512,7 @@ private fun RecordsTabChip(
 }
 
 @Composable
-private fun RecordsTableHeader() {
+private fun RecordsTableHeader(onAdminUnlockTap: () -> Unit = {}) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -445,7 +520,15 @@ private fun RecordsTableHeader() {
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        HeaderCell("#", 28.dp)
+        Text(
+            "#",
+            modifier = Modifier
+                .width(28.dp)
+                .clickable(onClick = onAdminUnlockTap),
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            color = TextMuted
+        )
         HeaderCell("ORDER", 88.dp)
         HeaderCell("TIME", 72.dp)
         HeaderCell("TABLE", 100.dp)
@@ -462,6 +545,7 @@ private fun HeaderCell(text: String, width: Dp) {
     Text(text, modifier = Modifier.width(width), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TextMuted)
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun RecordsTableRow(
     index: Int,
@@ -469,7 +553,9 @@ private fun RecordsTableRow(
     tableLabel: String?,
     isSplit: Boolean,
     currencySymbol: String,
-    onClick: () -> Unit
+    canDelete: Boolean,
+    onClick: () -> Unit,
+    onDeleteRequest: () -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -480,12 +566,26 @@ private fun RecordsTableRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         CellText(index.toString(), 28.dp, fontWeight = FontWeight.SemiBold)
-        Row(modifier = Modifier.width(88.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier
+                .width(88.dp)
+                .then(
+                    if (canDelete) {
+                        Modifier.combinedClickable(
+                            onClick = onDeleteRequest,
+                            onLongClick = onDeleteRequest
+                        )
+                    } else {
+                        Modifier
+                    }
+                ),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Text(
                 shortOrderId(order.transactionNumber),
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
-                color = TextPrimary,
+                color = if (canDelete) Color(0xFFDC2626) else TextPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -497,7 +597,15 @@ private fun RecordsTableRow(
         CellText(
             SimpleDateFormat("dd/MM HH:mm", Locale.getDefault()).format(Date(order.createdAt)),
             72.dp,
-            color = TextMuted
+            color = if (canDelete) Color(0xFFDC2626) else TextMuted,
+            modifier = if (canDelete) {
+                Modifier.combinedClickable(
+                    onClick = onDeleteRequest,
+                    onLongClick = onDeleteRequest
+                )
+            } else {
+                Modifier
+            }
         )
         CellText(tableLabel ?: "—", 100.dp, color = TextMuted)
         Box(modifier = Modifier.width(72.dp)) {
@@ -523,11 +631,12 @@ private fun CellText(
     text: String,
     width: Dp,
     color: Color = TextPrimary,
-    fontWeight: FontWeight = FontWeight.Normal
+    fontWeight: FontWeight = FontWeight.Normal,
+    modifier: Modifier = Modifier
 ) {
     Text(
         text,
-        modifier = Modifier.width(width),
+        modifier = modifier.width(width),
         fontSize = 12.sp,
         color = color,
         fontWeight = fontWeight,
@@ -604,12 +713,14 @@ private fun OrderDetailDialog(
     currencySymbol: String,
     canCancel: Boolean,
     canRefund: Boolean,
+    canDelete: Boolean,
     onDismiss: () -> Unit,
     onPrint: () -> Unit,
     onPrintAllSplits: () -> Unit,
     onPrintSplit: (String) -> Unit,
     onCancel: () -> Unit,
-    onRefund: () -> Unit
+    onRefund: () -> Unit,
+    onDelete: () -> Unit
 ) {
     val isSplit = splitOrders.size > 1
     AlertDialog(
@@ -708,6 +819,11 @@ private fun OrderDetailDialog(
         },
         confirmButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (canDelete) {
+                    TextButton(onClick = onDelete) {
+                        Text(stringResource(R.string.delete_order_permanently), color = Color(0xFFDC2626))
+                    }
+                }
                 if (canCancel) {
                     TextButton(onClick = onCancel) { Text(stringResource(R.string.cancel_order)) }
                 }

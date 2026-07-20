@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.chaslay.pos.data.local.dao.RestaurantTableDao
 import com.chaslay.pos.data.local.entity.TransactionEntity
 import com.chaslay.pos.data.local.entity.TransactionItemEntity
+import com.chaslay.pos.data.preferences.SessionManager
 import com.chaslay.pos.data.repository.HeldOrderRepository
 import com.chaslay.pos.data.repository.TransactionRepository
 import com.chaslay.pos.domain.model.PaymentMethod
@@ -14,6 +15,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -43,6 +45,12 @@ data class OrderHistoryUiState(
     val cancelReasons: List<String> = emptyList(),
     val showCancelDialog: Boolean = false,
     val showRefundDialog: Boolean = false,
+    val showDeleteDialog: Boolean = false,
+    val showBulkDeleteDialog: Boolean = false,
+    val bulkDeleteCount: Int = 0,
+    val pendingDeleteOrder: TransactionEntity? = null,
+    val isAdminUser: Boolean = false,
+    val deleteModeUnlocked: Boolean = false,
     val message: String? = null
 )
 
@@ -52,19 +60,41 @@ class OrderHistoryViewModel @Inject constructor(
     private val heldOrderRepository: HeldOrderRepository,
     private val settingsRepository: com.chaslay.pos.data.repository.SettingsRepository,
     private val printerService: com.chaslay.pos.printer.BluetoothPrinterService,
-    private val tableDao: RestaurantTableDao
+    private val tableDao: RestaurantTableDao,
+    private val sessionManager: SessionManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(OrderHistoryUiState())
     val uiState: StateFlow<OrderHistoryUiState> = _uiState.asStateFlow()
+
+    private var unlockTapCount = 0
+    private var lastUnlockTapMs = 0L
 
     init {
         viewModelScope.launch {
             val reasons = heldOrderRepository.getCancelReasons().map { it.label }
             val settings = settingsRepository.getSettings()
             val currency = settings.currencySymbol.ifBlank { "CHF" }
-            _uiState.value = _uiState.value.copy(cancelReasons = reasons, currencySymbol = currency)
+            val access = sessionManager.currentUserAccess.first()
+            _uiState.value = _uiState.value.copy(
+                cancelReasons = reasons,
+                currencySymbol = currency,
+                isAdminUser = access?.canAccessSettings() == true
+            )
             refresh()
+        }
+    }
+
+    /** Hidden admin gesture: tap the # column header 5 times quickly. */
+    fun onAdminUnlockTap() {
+        if (!_uiState.value.isAdminUser || _uiState.value.deleteModeUnlocked) return
+        val now = System.currentTimeMillis()
+        if (now - lastUnlockTapMs > 2500L) unlockTapCount = 0
+        lastUnlockTapMs = now
+        unlockTapCount++
+        if (unlockTapCount >= 5) {
+            unlockTapCount = 0
+            _uiState.value = _uiState.value.copy(deleteModeUnlocked = true)
         }
     }
 
@@ -205,6 +235,74 @@ class OrderHistoryViewModel @Inject constructor(
                 selectedOrder = null,
                 selectedItems = emptyList(),
                 message = if (fullRefund) "Full refund processed" else "Partial refund processed"
+            )
+            refresh()
+        }
+    }
+
+    fun requestDeleteOrder(order: TransactionEntity) {
+        if (!_uiState.value.isAdminUser || !_uiState.value.deleteModeUnlocked) return
+        _uiState.value = _uiState.value.copy(
+            pendingDeleteOrder = order,
+            showDeleteDialog = true
+        )
+    }
+
+    fun requestBulkDelete() {
+        if (!_uiState.value.isAdminUser || !_uiState.value.deleteModeUnlocked) return
+        viewModelScope.launch {
+            val (start, end) = dateBounds(_uiState.value.dateFilter)
+            val count = transactionRepository.countOrdersInRange(start, end)
+            _uiState.value = _uiState.value.copy(
+                showBulkDeleteDialog = true,
+                bulkDeleteCount = count
+            )
+        }
+    }
+
+    fun dismissBulkDeleteDialog() {
+        _uiState.value = _uiState.value.copy(
+            showBulkDeleteDialog = false,
+            bulkDeleteCount = 0
+        )
+    }
+
+    fun confirmBulkDelete() {
+        viewModelScope.launch {
+            val (start, end) = dateBounds(_uiState.value.dateFilter)
+            val deleted = transactionRepository.deleteOrdersInRange(start, end)
+            _uiState.value = _uiState.value.copy(
+                showBulkDeleteDialog = false,
+                bulkDeleteCount = 0,
+                selectedOrder = null,
+                selectedItems = emptyList(),
+                splitOrders = emptyList(),
+                splitItemsByOrderId = emptyMap(),
+                message = "Deleted $deleted orders permanently"
+            )
+            refresh()
+        }
+    }
+
+    fun dismissDeleteDialog() {
+        _uiState.value = _uiState.value.copy(
+            showDeleteDialog = false,
+            pendingDeleteOrder = null
+        )
+    }
+
+    fun confirmDeleteOrder() {
+        val order = _uiState.value.pendingDeleteOrder ?: return
+        viewModelScope.launch {
+            transactionRepository.deleteOrderPermanently(order.id)
+            _uiState.value = _uiState.value.copy(
+                showDeleteDialog = false,
+                pendingDeleteOrder = null,
+                selectedOrder = null,
+                selectedItems = emptyList(),
+                splitOrders = emptyList(),
+                splitItemsByOrderId = emptyMap(),
+                message = "Order deleted permanently"
             )
             refresh()
         }

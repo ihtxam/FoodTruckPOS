@@ -6,6 +6,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 import licenseRoutes from './routes/license.js';
+import posAuthRoutes from './routes/posAuth.js';
 import syncRoutes from './routes/sync.js';
 import ordersRoutes from './routes/orders.js';
 import shopRoutes from './routes/shop.js';
@@ -14,6 +15,7 @@ import merchantRoutes from './routes/merchant.js';
 import { requireApiKey } from './middleware/auth.js';
 import { proxyReceiptsRoutes } from './middleware/receiptsProxy.js';
 import { registerShopSiteRoutes, registerAdminSiteRoutes } from './middleware/shopSite.js';
+import { ensureSuperadminPasswordFromEnv } from './services/platformSettingsService.js';
 
 dotenv.config();
 
@@ -32,11 +34,14 @@ app.get('/health', (_req, res) => {
   res.json({ ok: true, service: 'chaslay-api', time: Date.now() });
 });
 
-/** Digital receipts — proxy to receipts container (POST from POS lands here too). */
+/** Digital receipts  proxy to receipts container (POST from POS lands here too). */
 app.use(proxyReceiptsRoutes);
 
 /** Android POS licensing */
 app.use('/v1/license', licenseRoutes);
+
+/** Android POS merchant login (cloud) */
+app.use('/v1/pos/auth', posAuthRoutes);
 
 /** POS sync  tenant resolved from X-Api-Key */
 app.use('/v1/sync', requireApiKey, syncRoutes);
@@ -67,6 +72,11 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
-app.listen(port, '0.0.0.0', () => {
+app.listen(port, '0.0.0.0', async () => {
   console.log(`Chaslay API listening on :${port}`);
+  try {
+    await ensureSuperadminPasswordFromEnv();
+  } catch (err) {
+    console.error('[platform] Could not sync superadmin password:', err.message ?? err);
+  }
 });

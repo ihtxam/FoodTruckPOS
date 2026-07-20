@@ -60,7 +60,7 @@ interface UserDao {
     @Query("SELECT * FROM users WHERE id = :id LIMIT 1")
     suspend fun getById(id: Long): UserEntity?
 
-    @Query("SELECT * FROM users WHERE email = :email AND isActive = 1 LIMIT 1")
+    @Query("SELECT * FROM users WHERE LOWER(email) = LOWER(:email) AND isActive = 1 LIMIT 1")
     suspend fun getByEmail(email: String): UserEntity?
 
     @Query("SELECT * FROM users WHERE pinHash IS NOT NULL AND isActive = 1")
@@ -305,6 +305,12 @@ interface TransactionDao {
         """
     )
     suspend fun refundTransaction(id: String, status: PaymentStatus, refundAmount: Double)
+
+    @Query("DELETE FROM transaction_items WHERE transactionId = :transactionId")
+    suspend fun deleteItemsForTransaction(transactionId: String)
+
+    @Query("DELETE FROM transactions WHERE id = :transactionId")
+    suspend fun deleteTransaction(transactionId: String)
 
     @Query("DELETE FROM transaction_items")
     suspend fun deleteAllItems()

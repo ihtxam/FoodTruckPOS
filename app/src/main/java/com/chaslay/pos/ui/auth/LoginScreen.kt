@@ -79,6 +79,20 @@ fun LoginScreen(
         return
     }
 
+    if (state.pinSetupUserName != null) {
+        PinSetupScreen(
+            userName = state.pinSetupUserName!!,
+            step = state.pinSetupStep,
+            pinLength = state.pinSetupLength,
+            errorMessage = state.errorMessage,
+            onDigit = viewModel::onPinSetupDigit,
+            onBackspace = viewModel::onPinSetupBackspace,
+            onClear = viewModel::onPinSetupClear,
+            onCancel = viewModel::cancelPinSetup
+        )
+        return
+    }
+
     LaunchedEffect(state.errorMessage, showEmailLogin) {
         if (!showEmailLogin && state.errorMessage != null) {
             delay(400)
@@ -426,6 +440,80 @@ private fun QuickAction(
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 14.sp
             )
+        }
+    }
+}
+
+@Composable
+private fun PinSetupScreen(
+    userName: String,
+    step: PinSetupStep,
+    pinLength: Int,
+    errorMessage: String?,
+    onDigit: (String) -> Unit,
+    onBackspace: () -> Unit,
+    onClear: () -> Unit,
+    onCancel: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(ChaslayBrand.Black)
+            .padding(24.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier
+                .widthIn(max = 420.dp)
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(24.dp))
+                .background(ChaslayBrand.Black)
+                .border(1.dp, ChaslayBrand.Gray800, RoundedCornerShape(24.dp))
+                .padding(horizontal = 28.dp, vertical = 32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = stringResource(R.string.setup_pin_title),
+                color = ChaslayBrand.White,
+                fontWeight = FontWeight.Bold,
+                fontSize = 20.sp,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = userName,
+                color = ChaslayBrand.Gray400,
+                fontSize = 14.sp
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = if (step == PinSetupStep.ENTER) {
+                    stringResource(R.string.setup_pin_enter)
+                } else {
+                    stringResource(R.string.setup_pin_confirm)
+                },
+                color = ChaslayBrand.Gray200,
+                fontSize = 14.sp,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(20.dp))
+            PinDotsDisplay(pinLength = pinLength, maxLength = PIN_MAX_LENGTH)
+            Spacer(modifier = Modifier.height(28.dp))
+            PinLoginKeypad(
+                onDigit = onDigit,
+                onBackspace = onBackspace,
+                onClear = onClear,
+                onEnter = {},
+                enterEnabled = false
+            )
+            errorMessage?.let {
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(it, color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center, fontSize = 14.sp)
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            TextButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.cancel), color = ChaslayBrand.Gray200)
+            }
         }
     }
 }
