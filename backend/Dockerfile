@@ -1,16 +1,20 @@
-FROM node:20-alpine
-
+FROM node:22-bookworm-slim AS base
 WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 make g++ \
+    && rm -rf /var/lib/apt/lists/*
 
-COPY package.json package-lock.json* ./
-RUN npm install --omit=dev
+FROM base AS deps
+COPY package.json ./
+RUN npm install --omit=dev=false
 
-COPY sql ./sql
-COPY scripts ./scripts
-COPY public ./public
-COPY src ./src
-
+FROM base AS runner
+WORKDIR /app
 ENV NODE_ENV=production
-EXPOSE 3000
+COPY --from=deps /app/node_modules ./node_modules
+COPY package.json tsconfig.json drizzle.config.ts ./
+COPY src ./src
+COPY drizzle ./drizzle
 
-CMD ["node", "src/index.js"]
+EXPOSE 3000
+CMD ["npx", "tsx", "src/index.ts"]

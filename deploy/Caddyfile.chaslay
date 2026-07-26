@@ -1,0 +1,76 @@
+{
+	email admin@chaslay.com
+}
+
+# Chaslay production — ManuPOS stack + Android /v1 API
+api.chaslay.com {
+	encode gzip zstd
+
+	handle /health {
+		reverse_proxy api:3000
+	}
+
+	handle /v1/receipts* {
+		reverse_proxy api:3000
+	}
+
+	handle /v1/* {
+		reverse_proxy api:3000
+	}
+
+	handle /api/* {
+		reverse_proxy api:3000
+	}
+
+	handle /receipt/* {
+		reverse_proxy dashboard:80
+	}
+
+	handle {
+		reverse_proxy api:3000
+	}
+}
+
+admin.chaslay.com {
+	encode gzip zstd
+
+	handle /api/* {
+		reverse_proxy api:3000
+	}
+
+	handle /v1/* {
+		reverse_proxy api:3000
+	}
+
+	handle {
+		reverse_proxy dashboard:80
+	}
+}
+
+shop.chaslay.com {
+	encode gzip zstd
+
+	handle /api/* {
+		reverse_proxy api:3000
+	}
+
+	handle {
+		reverse_proxy dashboard:80
+	}
+}
+
+pay.chaslay.com {
+	encode gzip zstd
+
+	handle /api/* {
+		reverse_proxy api:3000
+	}
+
+	handle /receipt/* {
+		reverse_proxy dashboard:80
+	}
+
+	handle {
+		reverse_proxy dashboard:80
+	}
+}

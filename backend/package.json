@@ -1,28 +1,59 @@
 {
-  "name": "ChaslayPOS-api",
+  "name": "pos-saas-backend",
   "version": "1.0.0",
-  "private": true,
-  "type": "module",
-  "engines": {
-    "node": ">=20"
-  },
+  "description": "Modern POS SaaS Platform Backend",
+  "main": "src/index.ts",
   "scripts": {
-    "start": "node src/index.js",
-    "dev": "node --watch src/index.js",
-    "migrate": "node scripts/migrate.js",
-    "seed": "node scripts/seed.js",
-    "generate-code": "node scripts/generate-code.js",
-    "create-tenant": "node scripts/create-tenant.js",
-    "create-merchant-user": "node scripts/create-merchant-user.js",
-    "set-superadmin-password": "node scripts/set-superadmin-password.js"
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc && tsc-alias",
+    "start": "node dist/index.js",
+    "start:prod": "tsx src/index.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
+    "db:seed": "tsx src/db/seed.ts",
+    "lint": "eslint src/**/*.ts",
+    "type-check": "tsc --noEmit"
   },
+  "keywords": [
+    "pos",
+    "saas",
+    "payment",
+    "licensing"
+  ],
+  "author": "",
+  "license": "ISC",
   "dependencies": {
+    "@adyen/api-library": "^14.4.0",
+    "@sendgrid/mail": "^8.1.0",
+    "bcrypt": "^5.1.1",
     "cors": "^2.8.5",
-    "dotenv": "^16.4.7",
-    "express": "^4.21.2",
-    "helmet": "^8.0.0",
-    "pg": "^8.13.1",
-    "uuid": "^11.0.5",
-    "bcryptjs": "^2.4.3"
+    "dotenv": "^16.6.1",
+    "drizzle-orm": "^0.44.7",
+    "express": "^4.22.1",
+    "express-jwt": "^8.5.1",
+    "jsonwebtoken": "^9.0.3",
+    "multer": "^2.2.0",
+    "pg": "^8.12.0",
+    "redis": "^4.7.0",
+    "uuid": "^9.0.1",
+    "xlsx": "^0.18.5",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/bcrypt": "^5.0.2",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.25",
+    "@types/jsonwebtoken": "^9.0.7",
+    "@types/multer": "^2.2.0",
+    "@types/node": "^22.19.3",
+    "@types/pg": "^8.11.10",
+    "@types/uuid": "^9.0.8",
+    "drizzle-kit": "^0.31.8",
+    "eslint": "^9.39.2",
+    "tsc-alias": "^1.8.10",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
   }
 }
