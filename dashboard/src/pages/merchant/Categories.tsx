@@ -2,12 +2,14 @@ import { FormEvent, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
+import { DragHandle, SortableContainer, SortableRow } from '@/components/SortableList';
 
 interface Category {
   id: string;
   name: string;
   description?: string | null;
   color?: string | null;
+  sortOrder?: number;
 }
 
 export default function Categories() {
@@ -17,6 +19,7 @@ export default function Categories() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [saving, setSaving] = useState(false);
+  const [reordering, setReordering] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const load = async () => {
@@ -31,7 +34,7 @@ export default function Categories() {
   };
 
   useEffect(() => {
-    load();
+    void load();
   }, []);
 
   const reset = () => {
@@ -78,26 +81,43 @@ export default function Categories() {
     }
   };
 
+  const onReorder = async (next: Category[]) => {
+    const prev = categories;
+    setCategories(next);
+    setReordering(true);
+    try {
+      const res = await api.put('/merchant/categories/reorder', {
+        orderedIds: next.map((c) => c.id),
+      });
+      setCategories(res.data.categories || next);
+    } catch (error: any) {
+      setCategories(prev);
+      toast.error(error.response?.data?.error || 'Failed to save order');
+    } finally {
+      setReordering(false);
+    }
+  };
+
   if (loading) return <div className="text-center py-12">Loading categories...</div>;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div className="card">
-        <h1 className="text-2xl font-bold mb-2">{t('categories')}</h1>
-        <p className="text-gray-600 mb-4">
-          {editingId ? 'Edit category' : 'Manage product categories (also importable via Excel).'}
+        <h1 className="page-title mb-1">{t('categories')}</h1>
+        <p className="page-sub mb-3">
+          {editingId ? t('editCategory') : t('manageCategories')}
         </p>
-        <form onSubmit={onSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <form onSubmit={onSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
           <input
             className="input"
-            placeholder="Name"
+            placeholder={t('name')}
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
           />
           <input
             className="input"
-            placeholder="Description"
+            placeholder={t('description')}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
           />
@@ -114,46 +134,65 @@ export default function Categories() {
         </form>
       </div>
 
-      <div className="card overflow-x-auto">
+      <div className="card overflow-x-auto !p-0">
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left border-b">
-              <th className="py-2">Name</th>
-              <th className="py-2">Description</th>
-              <th className="py-2"></th>
+            <tr className="text-left border-b border-[var(--border)]">
+              <th className="py-2 px-2 w-10" />
+              <th className="py-2 px-2">{t('name')}</th>
+              <th className="py-2 px-2">{t('description')}</th>
+              <th className="py-2 px-2" />
             </tr>
           </thead>
-          <tbody>
+          <SortableContainer
+            as="tbody"
+            items={categories}
+            onReorder={onReorder}
+            disabled={reordering}
+          >
             {categories.length === 0 && (
               <tr>
-                <td colSpan={3} className="py-6 text-gray-500">
-                  No categories yet.
+                <td colSpan={4} className="py-6 px-3 muted">
+                  {t('noCategoriesYet')}
                 </td>
               </tr>
             )}
             {categories.map((category) => (
-              <tr key={category.id} className="border-b last:border-0">
-                <td className="py-3 font-medium">{category.name}</td>
-                <td className="py-3">{category.description || '—'}</td>
-                <td className="py-3 text-right space-x-3">
-                  <button
-                    type="button"
-                    className="text-blue-600 hover:underline"
-                    onClick={() => startEdit(category)}
-                  >
-                    {t('edit')}
-                  </button>
-                  <button
-                    type="button"
-                    className="text-red-600 hover:underline"
-                    onClick={() => onDelete(category.id)}
-                  >
-                    {t('delete')}
-                  </button>
-                </td>
-              </tr>
+              <SortableRow
+                key={category.id}
+                id={category.id}
+                as="tr"
+                className="border-b border-[var(--border)] last:border-0 bg-[var(--bg-elevated)]"
+                disabled={reordering}
+              >
+                {({ attributes, listeners }) => (
+                  <>
+                    <td className="py-2.5 px-2">
+                      <DragHandle attributes={attributes} listeners={listeners} />
+                    </td>
+                    <td className="py-2.5 px-2 font-medium">{category.name}</td>
+                    <td className="py-2.5 px-2 muted">{category.description || '—'}</td>
+                    <td className="py-2.5 px-2 text-right space-x-3 whitespace-nowrap">
+                      <button
+                        type="button"
+                        className="text-sm text-sky-700 hover:underline dark:text-sky-300"
+                        onClick={() => startEdit(category)}
+                      >
+                        {t('edit')}
+                      </button>
+                      <button
+                        type="button"
+                        className="text-sm text-[var(--danger)] hover:underline"
+                        onClick={() => void onDelete(category.id)}
+                      >
+                        {t('delete')}
+                      </button>
+                    </td>
+                  </>
+                )}
+              </SortableRow>
             ))}
-          </tbody>
+          </SortableContainer>
         </table>
       </div>
     </div>

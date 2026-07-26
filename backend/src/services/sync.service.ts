@@ -158,6 +158,7 @@ export class SyncService {
         extras?: Array<{ id: string; name: string; price: number }>;
         comboItems?: Array<{ productId: string; quantity: number; name?: string }>;
         allowExtras?: boolean;
+        sortOrder?: number;
       }>;
     }
   ) {
@@ -241,6 +242,7 @@ export class SyncService {
         extras: product.extras || [],
         comboItems: product.comboItems || [],
         allowExtras: !!product.allowExtras,
+        sortOrder: product.sortOrder ?? 0,
         updatedAt: new Date(),
       };
 

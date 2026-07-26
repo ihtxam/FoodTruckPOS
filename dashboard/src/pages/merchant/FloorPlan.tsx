@@ -293,8 +293,12 @@ export default function FloorPlan() {
             </div>
           ) : (
             <div
-              className="relative overflow-auto rounded-xl border border-slate-200 bg-[linear-gradient(#e2e8f0_1px,transparent_1px),linear-gradient(90deg,#e2e8f0_1px,transparent_1px)] bg-[size:24px_24px]"
-              style={{ height: Math.min(activePlan.canvasHeight, 560) }}
+              className="relative rounded-xl border border-slate-200 bg-[linear-gradient(#e2e8f0_1px,transparent_1px),linear-gradient(90deg,#e2e8f0_1px,transparent_1px)] bg-[size:24px_24px]"
+              style={{
+                height: Math.min(activePlan.canvasHeight, 560),
+                overflow: drag ? 'hidden' : 'auto',
+                touchAction: drag ? 'none' : 'auto',
+              }}
               onPointerMove={onCanvasPointerMove}
               onPointerUp={onCanvasPointerUp}
               onPointerLeave={onCanvasPointerUp}
@@ -316,6 +320,7 @@ export default function FloorPlan() {
                       top: table.posY,
                       width: table.width,
                       height: table.height,
+                      touchAction: 'none',
                       backgroundColor: `${STATUS_COLOR[table.status]}22`,
                       transform: table.rotation ? `rotate(${table.rotation}deg)` : undefined,
                     }}

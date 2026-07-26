@@ -12,6 +12,9 @@
   },
   "dependencies": {
     "@adyen/adyen-web": "^5.66.1",
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
     "@hookform/resolvers": "^3.3.4",
     "axios": "^1.6.5",
     "clsx": "^2.1.1",
