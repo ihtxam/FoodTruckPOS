@@ -241,17 +241,34 @@ export default function OrderConfirmationPage() {
         ? t('shopDineIn')
         : t('shopPickup');
 
+  const statusLabel = translateOrderStatus(order.status, t);
+  const paymentStatusLabel = isCash
+    ? t('shopCash')
+    : translatePaymentStatus(order.paymentStatus, t);
+
+  const shopLocale = locale === 'de' ? 'de-CH' : locale === 'fr' ? 'fr-CH' : 'en-CH';
+
   return (
     <div className="min-h-screen bg-[#f6f5f2] text-stone-900">
       <header className="bg-white border-b border-stone-200">
-        <div className="max-w-2xl mx-auto px-4 py-4 flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-xs uppercase tracking-wide text-stone-400">{t('shopOrderConfirmation')}</p>
-            <h1 className="text-xl font-bold">#{order.orderNumber}</h1>
+        <div className="max-w-2xl mx-auto px-4 py-4 space-y-3">
+          <div className="flex items-start justify-between gap-3">
+            <p className="text-xs uppercase tracking-wide text-stone-400 pt-1">
+              {t('shopOrderConfirmation')}
+            </p>
+            <ShopLangSwitcher className="shrink-0" />
           </div>
-          <div className="flex items-center gap-3 shrink-0">
-            <ShopLangSwitcher />
-            <Link to={`${shopBasePath(shopKey) || '/'}`} className="text-sm font-semibold text-stone-900 underline">
+          <div className="flex items-end justify-between gap-3">
+            <h1
+              className="min-w-0 flex-1 text-base sm:text-lg font-bold leading-snug break-all"
+              title={order.orderNumber}
+            >
+              #{order.orderNumber}
+            </h1>
+            <Link
+              to={`${shopBasePath(shopKey) || '/'}`}
+              className="shrink-0 text-sm font-semibold text-stone-900 underline underline-offset-2"
+            >
               {t('shopOrderAgain')}
             </Link>
           </div>
@@ -261,9 +278,9 @@ export default function OrderConfirmationPage() {
       <main className="max-w-2xl mx-auto px-4 py-6 space-y-4">
         <section className="bg-white border border-stone-200 p-5 space-y-3">
           <div className="flex flex-wrap gap-2">
-            <StatusPill label={order.status} tone={statusTone(order.status)} />
+            <StatusPill label={statusLabel} tone={statusTone(order.status)} />
             <StatusPill
-              label={`${t('shopPaymentLabel')}: ${isCash ? t('shopCash') : order.paymentStatus || '—'}`}
+              label={`${t('shopPaymentLabel')}: ${paymentStatusLabel}`}
               tone={paid ? 'green' : 'amber'}
             />
             <StatusPill label={channelLabel} tone="stone" />
@@ -278,10 +295,14 @@ export default function OrderConfirmationPage() {
           {order.scheduledFor && (
             <p className="text-sm font-medium">
               {t('shopScheduledFor')}{' '}
-              {new Date(order.scheduledFor).toLocaleString(
-                locale === 'de' ? 'de-CH' : locale === 'fr' ? 'fr-CH' : 'en-CH',
-                { timeZone: 'Europe/Zurich' }
-              )}
+              {new Date(order.scheduledFor).toLocaleString(shopLocale, {
+                timeZone: 'Europe/Zurich',
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
             </p>
           )}
         </section>
@@ -407,17 +428,30 @@ function StatusPill({
           ? 'bg-sky-50 text-sky-800 border-sky-200'
           : 'bg-stone-100 text-stone-700 border-stone-200';
   return (
-    <span
-      className={`inline-flex px-2.5 py-1 text-xs font-semibold border capitalize ${cls}`}
-    >
-      {label.split('_').join(' ')}
+    <span className={`inline-flex max-w-full px-2.5 py-1 text-xs font-semibold border ${cls}`}>
+      {label}
     </span>
   );
 }
 
+function translateOrderStatus(status: string, t: (key: string) => string) {
+  const key = `shopStatus_${status}`;
+  const translated = t(key);
+  if (translated !== key) return translated;
+  return status.replace(/_/g, ' ');
+}
+
+function translatePaymentStatus(status: string | null, t: (key: string) => string) {
+  if (!status) return '—';
+  const key = `shopPayStatus_${status}`;
+  const translated = t(key);
+  if (translated !== key) return translated;
+  return status.replace(/_/g, ' ');
+}
+
 function statusTone(status: string): 'green' | 'amber' | 'stone' | 'blue' {
   if (status === 'ready' || status === 'completed') return 'green';
-  if (status === 'preparing' || status === 'confirmed') return 'blue';
-  if (status === 'cancelled') return 'amber';
+  if (status === 'preparing' || status === 'confirmed' || status === 'accepted') return 'blue';
+  if (status === 'cancelled' || status === 'failed') return 'amber';
   return 'stone';
 }
