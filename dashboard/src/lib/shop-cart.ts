@@ -73,14 +73,41 @@ export function cartSubtotal(items: ShopCartItem[]) {
   return items.reduce((s, i) => s + i.price * i.quantity, 0);
 }
 
+const RESERVED_SUBDOMAINS = new Set(['admin', 'api', 'pay', 'www', 'app', 'panel', 'shop']);
+
+function publicDomain() {
+  return (import.meta.env.VITE_PUBLIC_DOMAIN || 'manupos.webprintmedia.swiss').toLowerCase();
+}
+
+function subdomainLabel() {
+  const host = window.location.hostname.toLowerCase();
+  const main = publicDomain();
+  if (host === main || !host.endsWith(`.${main}`)) return '';
+  return host.slice(0, -(main.length + 1));
+}
+
+/**
+ * Resolve public shop key:
+ * - /shop/:slug or shop.domain/:slug → param slug
+ * - {slug}.domain → subdomain label (not reserved)
+ */
 export function resolveShopKey(paramSlug?: string) {
   if (paramSlug) return paramSlug;
-  const host = window.location.hostname.toLowerCase();
-  const main = (import.meta.env.VITE_PUBLIC_DOMAIN || 'manupos.webprintmedia.swiss').toLowerCase();
-  if (host !== main && host.endsWith(`.${main}`)) {
-    return host.slice(0, -(main.length + 1));
+  const label = subdomainLabel();
+  if (label && !RESERVED_SUBDOMAINS.has(label)) return label;
+  if (label === 'shop') {
+    const seg = window.location.pathname.split('/').filter(Boolean)[0];
+    if (seg && !['checkout', 'order', 'api', 'assets'].includes(seg)) return seg;
   }
   return '';
+}
+
+/** Frontend path prefix for a shop (Chaslay shop hub vs /shop/:slug vs subdomain root). */
+export function shopBasePath(shopKey: string) {
+  const label = subdomainLabel();
+  if (label && !RESERVED_SUBDOMAINS.has(label)) return ''; // {slug}.domain → /
+  if (label === 'shop') return `/${shopKey}`; // shop.domain/{slug}
+  return `/shop/${shopKey}`;
 }
 
 const CUSTOMER_TOKEN_PREFIX = 'manupos_shop_customer:';

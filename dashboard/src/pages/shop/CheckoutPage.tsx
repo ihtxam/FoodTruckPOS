@@ -10,6 +10,7 @@ import {
   resolveShopKey,
   saveCart,
   saveCustomerToken,
+  shopBasePath,
   type ShopCheckoutDraft,
   type ShopChannel,
   emptyDraft,
@@ -50,7 +51,7 @@ export default function CheckoutPage() {
     if (!shopKey) return;
     const stored = loadCart(shopKey);
     if (!stored?.items?.length) {
-      navigate(`/shop/${shopKey}`, { replace: true });
+      navigate(`${shopBasePath(shopKey) || '/'}`, { replace: true });
       return;
     }
     setDraft(stored);
@@ -336,11 +337,11 @@ export default function CheckoutPage() {
         if (session?.sessionData && session?.clientKey) {
           sessionStorage.setItem(`manupos_pay_${order.id}`, JSON.stringify(session));
         }
-        navigate(`/shop/${shopKey}/order/${order.id}?pay=1`);
+        navigate(`${shopBasePath(shopKey)}/order/${order.id}?pay=1`);
         return;
       }
 
-      navigate(`/shop/${shopKey}/order/${order.id}`);
+      navigate(`${shopBasePath(shopKey)}/order/${order.id}`);
     } catch (err: any) {
       setError(err.response?.data?.error || 'Checkout failed');
     } finally {
@@ -370,7 +371,7 @@ export default function CheckoutPage() {
     <div className="min-h-screen bg-[#f6f5f2] text-stone-900">
       <header className="bg-white border-b border-stone-200">
         <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
-          <Link to={`/shop/${shopKey}`} className="font-bold tracking-tight">
+          <Link to={`${shopBasePath(shopKey) || '/'}`} className="font-bold tracking-tight">
             ← {merchant?.name || 'Back to menu'}
           </Link>
           <span className="text-sm text-stone-500">{channelLabel} checkout</span>

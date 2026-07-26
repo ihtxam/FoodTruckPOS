@@ -6,6 +6,7 @@ import {
   loadCart,
   resolveShopKey,
   saveCart,
+  shopBasePath,
   type ShopCartItem,
   type ShopChannel,
   type ShopCheckoutDraft,
@@ -211,7 +212,7 @@ export default function OrderingPage() {
       next.scheduledFor = '';
     }
     saveCart(shopKey, next);
-    navigate(`/shop/${shopKey}/checkout`);
+    navigate(`${shopBasePath(shopKey)}/checkout`);
   };
 
   if (loading) {

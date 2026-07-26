@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
-import { clearCart, resolveShopKey } from '@/lib/shop-cart';
+import { clearCart, resolveShopKey, shopBasePath } from '@/lib/shop-cart';
 import { roundMoney2 } from '@/lib/money';
 
 type OrderItem = {
@@ -209,7 +209,7 @@ export default function OrderConfirmationPage() {
     return (
       <div className="min-h-screen bg-[#f6f5f2] flex flex-col items-center justify-center gap-3 p-6">
         <p className="text-red-600">{error || 'Order not found'}</p>
-        <Link to={`/shop/${shopKey}`} className="text-stone-900 font-semibold underline">
+        <Link to={`${shopBasePath(shopKey) || '/'}`} className="text-stone-900 font-semibold underline">
           Back to menu
         </Link>
       </div>
@@ -237,7 +237,7 @@ export default function OrderConfirmationPage() {
             <p className="text-xs uppercase tracking-wide text-stone-400">Order confirmation</p>
             <h1 className="text-xl font-bold">#{order.orderNumber}</h1>
           </div>
-          <Link to={`/shop/${shopKey}`} className="text-sm font-semibold text-stone-900 underline">
+          <Link to={`${shopBasePath(shopKey) || '/'}`} className="text-sm font-semibold text-stone-900 underline">
             Order again
           </Link>
         </div>

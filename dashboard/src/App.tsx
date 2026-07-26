@@ -17,14 +17,25 @@ const MAIN_HOST = (
   'manupos.webprintmedia.swiss'
 ).toLowerCase();
 
-function isShopSubdomain() {
+/** Reserved hosts that must never be treated as a merchant shop subdomain. */
+const RESERVED_SUBDOMAINS = new Set(['admin', 'api', 'pay', 'www', 'app', 'panel']);
+
+function hostParts() {
   const host = window.location.hostname.toLowerCase();
-  return host !== MAIN_HOST && host.endsWith(`.${MAIN_HOST}`);
+  if (host === MAIN_HOST) return { host, kind: 'main' as const, label: '' };
+  if (!host.endsWith(`.${MAIN_HOST}`)) return { host, kind: 'other' as const, label: '' };
+  const label = host.slice(0, -(MAIN_HOST.length + 1));
+  if (label === 'shop') return { host, kind: 'shop_hub' as const, label };
+  if (RESERVED_SUBDOMAINS.has(label)) return { host, kind: 'reserved' as const, label };
+  return { host, kind: 'merchant_subdomain' as const, label };
 }
 
 function App() {
   const { hydrate } = useAuthStore();
-  const shopHost = isShopSubdomain();
+  const { kind } = hostParts();
+  const shopHub = kind === 'shop_hub';
+  const merchantSubdomain = kind === 'merchant_subdomain';
+  const shopMode = shopHub || merchantSubdomain;
 
   useEffect(() => {
     hydrate();
@@ -34,13 +45,24 @@ function App() {
     <>
       <BrowserRouter>
         <Routes>
-          {!shopHost && <Route path="/login" element={<LoginPage />} />}
+          {!shopMode && <Route path="/login" element={<LoginPage />} />}
           <Route path="/receipt/:saleId" element={<ReceiptPage />} />
           <Route path="/shop/:merchantSlug" element={<OrderingPage />} />
           <Route path="/shop/:merchantSlug/checkout" element={<CheckoutPage />} />
           <Route path="/shop/:merchantSlug/order/:orderId" element={<OrderConfirmationPage />} />
 
-          {shopHost && (
+          {/* shop.domain/{slug} — Chaslay-style path shops */}
+          {shopHub && (
+            <>
+              <Route path="/:merchantSlug/checkout" element={<CheckoutPage />} />
+              <Route path="/:merchantSlug/order/:orderId" element={<OrderConfirmationPage />} />
+              <Route path="/:merchantSlug" element={<OrderingPage />} />
+              <Route path="/" element={<OrderingPage />} />
+            </>
+          )}
+
+          {/* {slug}.domain — merchant subdomain shops */}
+          {merchantSubdomain && (
             <>
               <Route path="/checkout" element={<CheckoutPage />} />
               <Route path="/order/:orderId" element={<OrderConfirmationPage />} />
@@ -49,7 +71,7 @@ function App() {
             </>
           )}
 
-          {!shopHost && (
+          {!shopMode && (
             <>
               <Route
                 path="/superadmin/*"
