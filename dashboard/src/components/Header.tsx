@@ -1,4 +1,4 @@
-import { ArrowLeft, Menu, Bell, User, Moon, Sun } from 'lucide-react';
+import { ArrowLeft, LogOut, Menu, Bell, User, Moon, Sun } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '@/store/auth';
@@ -14,7 +14,7 @@ interface HeaderProps {
 
 export default function Header({ title, onMenuClick, language, onLanguageChange }: HeaderProps) {
   const navigate = useNavigate();
-  const { user, impersonating, stopImpersonation } = useAuthStore();
+  const { user, impersonating, stopImpersonation, logout } = useAuthStore();
   const { theme, toggleTheme } = useTheme();
 
   const backToSuperadmin = () => {
@@ -25,6 +25,11 @@ export default function Header({ title, onMenuClick, language, onLanguageChange 
     }
     toast.success('Back to Superadmin');
     navigate('/superadmin/merchants');
+  };
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
   };
 
   return (
@@ -88,14 +93,28 @@ export default function Header({ title, onMenuClick, language, onLanguageChange 
           </button>
 
           <div className="flex items-center gap-2 pl-2 border-l border-[var(--border)]">
-            <div className="text-right hidden xs:block sm:block max-w-[9rem]">
+            <div className="text-right hidden sm:block max-w-[9rem]">
               <p className="font-medium text-xs truncate">{user?.name}</p>
               <p className="text-[10px] muted capitalize truncate">
                 {impersonating ? 'Merchant (SA)' : user?.role}
               </p>
             </div>
-            <button type="button" className="p-1.5 rounded-md hover:bg-[var(--bg-muted)]">
+            <button
+              type="button"
+              className="p-1.5 rounded-md hover:bg-[var(--bg-muted)] hidden sm:inline-flex"
+              aria-label="Account"
+            >
               <User className="w-4 h-4 muted" />
+            </button>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1.5 text-xs font-medium hover:bg-[var(--bg-muted)]"
+              title="Logout"
+              aria-label="Logout"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Logout</span>
             </button>
           </div>
         </div>

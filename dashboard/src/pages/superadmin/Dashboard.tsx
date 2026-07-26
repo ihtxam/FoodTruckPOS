@@ -9,7 +9,9 @@ import Analytics from './Analytics';
 import Settings from './Settings';
 
 export default function SuperadminDashboard() {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(
+    typeof window !== 'undefined' ? window.innerWidth >= 1024 : true
+  );
 
   const menuItems = [
     { label: 'Overview', path: '/superadmin', icon: '📊' },
