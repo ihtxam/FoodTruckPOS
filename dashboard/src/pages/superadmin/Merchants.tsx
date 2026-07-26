@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
-import { Search, Plus, Edit2, Trash2, Eye, X, Copy, KeyRound } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, Eye, X, Copy, KeyRound, Mail } from 'lucide-react';
 
 interface Merchant {
   id: string;
@@ -51,6 +51,15 @@ const emptyForm = {
   deviceSeats: 1,
   licenseType: 'yearly' as 'trial' | 'yearly' | 'custom',
   customDays: 365,
+  sendInvite: true,
+};
+
+type InviteResult = {
+  emailed?: boolean;
+  emailError?: string;
+  inviteUrl?: string;
+  email?: string;
+  expiresAt?: string;
 };
 
 export default function Merchants() {
@@ -65,6 +74,9 @@ export default function Merchants() {
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [issuedKeys, setIssuedKeys] = useState<IssuedLicense[]>([]);
+  const [inviteResult, setInviteResult] = useState<InviteResult | null>(null);
+  const [inviteMerchantId, setInviteMerchantId] = useState<string | null>(null);
+  const [sendingInvite, setSendingInvite] = useState(false);
 
   useEffect(() => {
     fetchMerchants();
@@ -111,8 +123,12 @@ export default function Merchants() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.businessName || !form.email || !form.password) {
-      toast.error('Name, email and password are required');
+    if (!form.businessName || !form.email) {
+      toast.error('Name and email are required');
+      return;
+    }
+    if (form.password && form.password.length < 8) {
+      toast.error('Password must be at least 8 characters (or leave blank to invite)');
       return;
     }
     setSaving(true);
@@ -120,7 +136,7 @@ export default function Merchants() {
       const res = await api.post('/superadmin/merchants', {
         businessName: form.businessName,
         email: form.email,
-        password: form.password,
+        password: form.password || undefined,
         phone: form.phone || undefined,
         address: form.address || undefined,
         city: form.city || undefined,
@@ -131,13 +147,22 @@ export default function Merchants() {
         deviceSeats: Number(form.deviceSeats) || 0,
         licenseType: form.licenseType,
         customDays: form.licenseType === 'custom' ? Number(form.customDays) : undefined,
+        sendInvite: form.sendInvite,
       });
       const issued = res.data.merchant?.issuedLicenses || [];
+      const invite = res.data.merchant?.invite as InviteResult | undefined;
       setIssuedKeys(issued);
-      toast.success('Merchant created');
+      setInviteMerchantId(res.data.merchant?.id || null);
+      setInviteResult(invite || null);
+      toast.success('Merchant account created');
       setForm(emptyForm);
       setShowCreate(false);
       fetchMerchants();
+      if (invite?.emailed) {
+        toast.success(`Invite email sent to ${invite.email}`);
+      } else if (form.sendInvite && invite?.inviteUrl) {
+        toast('Invite link ready — copy it below (email not configured or failed)', { icon: '🔗' });
+      }
       if (issued.length) {
         toast.success(`${issued.length} device license(s) issued — copy keys below`);
       }
@@ -145,6 +170,31 @@ export default function Merchants() {
       toast.error(err.response?.data?.error || 'Failed to create merchant');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const sendInvite = async (merchantId: string) => {
+    setSendingInvite(true);
+    try {
+      const res = await api.post(`/superadmin/merchants/${merchantId}/send-invite`);
+      setInviteMerchantId(merchantId);
+      setInviteResult({
+        emailed: res.data.emailed,
+        emailError: res.data.emailError,
+        inviteUrl: res.data.inviteUrl,
+        email: res.data.email,
+        expiresAt: res.data.expiresAt,
+      });
+      if (res.data.emailed) {
+        toast.success(`Invite email sent to ${res.data.email}`);
+      } else {
+        toast('Invite link created — copy it below', { icon: '🔗' });
+        if (res.data.emailError) toast.error(res.data.emailError);
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to send invite');
+    } finally {
+      setSendingInvite(false);
     }
   };
 
@@ -220,6 +270,48 @@ export default function Merchants() {
           Add Merchant
         </button>
       </div>
+
+
+      {inviteResult?.inviteUrl && (
+        <div className="card border-sky-200 bg-sky-50">
+          <div className="flex items-center justify-between mb-3 gap-3">
+            <h3 className="font-semibold flex items-center gap-2">
+              <Mail className="w-4 h-4" /> Password setup invite
+            </h3>
+            <button
+              className="text-sm text-gray-500"
+              onClick={() => {
+                setInviteResult(null);
+                setInviteMerchantId(null);
+              }}
+            >
+              Dismiss
+            </button>
+          </div>
+          <p className="text-sm text-gray-700 mb-2">
+            {inviteResult.emailed
+              ? `Email sent to ${inviteResult.email}.`
+              : `Email not sent${inviteResult.emailError ? `: ${inviteResult.emailError}` : '.'} You can copy the link below.`}
+          </p>
+          <div className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 border">
+            <p className="font-mono text-xs truncate flex-1">{inviteResult.inviteUrl}</p>
+            <button className="btn-secondary p-2" onClick={() => copyText(inviteResult.inviteUrl!)}>
+              <Copy className="w-4 h-4" />
+            </button>
+          </div>
+          {inviteMerchantId && (
+            <button
+              type="button"
+              className="btn-primary mt-3 flex items-center gap-2"
+              disabled={sendingInvite}
+              onClick={() => void sendInvite(inviteMerchantId)}
+            >
+              <Mail className="w-4 h-4" />
+              {sendingInvite ? 'Sending…' : 'Send / resend invite email'}
+            </button>
+          )}
+        </div>
+      )}
 
       {issuedKeys.length > 0 && (
         <div className="card border-emerald-200 bg-emerald-50">
@@ -400,14 +492,14 @@ export default function Merchants() {
                   />
                 </label>
                 <label className="block">
-                  <span className="text-sm font-medium">Temp password *</span>
+                  <span className="text-sm font-medium">Password (optional)</span>
                   <input
                     type="text"
                     className="input mt-1"
                     value={form.password}
                     onChange={(e) => setForm({ ...form, password: e.target.value })}
-                    required
                     minLength={8}
+                    placeholder="Leave blank — merchant sets via email link"
                   />
                 </label>
                 <label className="block">
@@ -474,6 +566,18 @@ export default function Merchants() {
               </div>
 
               <div className="border rounded-lg p-4 space-y-3 bg-slate-50">
+                <label className="flex items-center gap-2 text-sm font-medium">
+                  <input
+                    type="checkbox"
+                    checked={form.sendInvite}
+                    onChange={(e) => setForm({ ...form, sendInvite: e.target.checked })}
+                  />
+                  Send email with link to create password
+                </label>
+                <p className="text-xs text-gray-500 -mt-1">
+                  Merchant receives a one-time link to set their own password. Requires SendGrid on the
+                  server; otherwise you get a copyable invite link.
+                </p>
                 <label className="flex items-center gap-2 text-sm font-medium">
                   <input
                     type="checkbox"
@@ -572,6 +676,15 @@ export default function Merchants() {
                 <span className="text-gray-500">Devices / licenses:</span> {showDetail.devices} /{' '}
                 {showDetail.licenses}
               </p>
+              <button
+                type="button"
+                className="btn-primary flex items-center gap-2"
+                disabled={sendingInvite}
+                onClick={() => void sendInvite(showDetail.id)}
+              >
+                <Mail className="w-4 h-4" />
+                {sendingInvite ? 'Sending…' : 'Send password setup email'}
+              </button>
               {detailFull?.devices?.length > 0 && (
                 <div>
                   <p className="font-semibold mb-2">Devices</p>

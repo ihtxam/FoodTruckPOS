@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { getDb, schema } from "@/db";
 import { eq, and, like, desc, or, lt, gt } from "drizzle-orm";
 import { AuthService } from "./auth.service";
@@ -10,6 +11,10 @@ function slugify(input: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 80);
+}
+
+function cryptoRandomSecret() {
+  return crypto.randomBytes(48).toString("hex");
 }
 
 export class MerchantService {
@@ -100,7 +105,7 @@ export class MerchantService {
    */
   static async createMerchant(
     email: string,
-    password: string,
+    password: string | undefined,
     businessName: string,
     _contactName?: string,
     phone?: string,
@@ -115,6 +120,8 @@ export class MerchantService {
       deviceSeats?: number;
       licenseType?: "trial" | "yearly" | "custom";
       customDays?: number;
+      /** Send password-setup invite email after create (default true when no password) */
+      sendInvite?: boolean;
     }
   ) {
     const db = getDb();
@@ -127,7 +134,15 @@ export class MerchantService {
         throw new Error("Email already registered");
       }
 
-      const passwordHash = await AuthService.hashPassword(password);
+      const hasPassword = !!(password && password.trim().length >= 8);
+      if (password && password.trim() && !hasPassword) {
+        throw new Error("Password must be at least 8 characters");
+      }
+
+      // Random unusable hash when inviting merchant to set their own password
+      const passwordHash = hasPassword
+        ? await AuthService.hashPassword(password!.trim())
+        : await AuthService.hashPassword(cryptoRandomSecret());
       const now = new Date();
       const trialEndsAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
@@ -146,6 +161,7 @@ export class MerchantService {
         .values({
           email,
           passwordHash,
+          passwordSetAt: hasPassword ? now : null,
           name: businessName,
           phone,
           address,
@@ -175,7 +191,24 @@ export class MerchantService {
         issuedLicenses = issued;
       }
 
-      return { ...created, issuedLicenses };
+      // Default: send invite when no password was set; admin can also force sendInvite: true
+      const sendInvite = options?.sendInvite ?? !hasPassword;
+      let invite: Awaited<
+        ReturnType<typeof import("./merchant-invite.service").MerchantInviteService.sendInviteEmail>
+      > | null = null;
+
+      if (sendInvite) {
+        const { MerchantInviteService } = await import("./merchant-invite.service");
+        invite = await MerchantInviteService.sendInviteEmail(created.id);
+      }
+
+      // Don't leak password hash to API clients
+      const { passwordHash: _ph, inviteTokenHash: _ith, ...safe } = created as typeof created & {
+        passwordHash: string;
+        inviteTokenHash?: string | null;
+      };
+
+      return { ...safe, issuedLicenses, invite, passwordSet: hasPassword };
     } catch (error) {
       console.error("Error creating merchant:", error);
       throw error;

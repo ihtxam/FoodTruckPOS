@@ -3,6 +3,7 @@ import { verifyToken, requireSuperadmin } from "@/middleware/auth.middleware";
 import { MerchantService } from "@/services/merchant.service";
 import { LicenseAdminService } from "@/services/license-admin.service";
 import { AnalyticsService } from "@/services/analytics.service";
+import { MerchantInviteService } from "@/services/merchant-invite.service";
 import { SubscriptionPlansService } from "@/services/subscription-plans.service";
 import { PlatformSettingsService } from "@/services/platform-settings.service";
 import { getDb, schema } from "@/db";
@@ -84,9 +85,12 @@ router.post("/merchants", async (req: Request, res: Response) => {
       customDays,
     } = req.body;
 
-    if (!email || !password || !businessName) {
-      return res.status(400).json({ error: "Email, password, and business name are required" });
+    if (!email || !businessName) {
+      return res.status(400).json({ error: "Email and business name are required" });
     }
+
+    const sendInvite =
+      req.body.sendInvite === undefined ? undefined : !!req.body.sendInvite;
 
     const merchant = await MerchantService.createMerchant(
       email,
@@ -105,6 +109,7 @@ router.post("/merchants", async (req: Request, res: Response) => {
         deviceSeats: deviceSeats != null ? Number(deviceSeats) : 0,
         licenseType,
         customDays: customDays != null ? Number(customDays) : undefined,
+        sendInvite,
       }
     );
 
@@ -116,6 +121,28 @@ router.post("/merchants", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Error creating merchant:", error);
     res.status(400).json({ error: error instanceof Error ? error.message : "Failed to create merchant" });
+  }
+});
+
+/**
+ * POST /api/superadmin/merchants/:merchantId/send-invite
+ * Email a one-time link for the merchant to create their password
+ */
+router.post("/merchants/:merchantId/send-invite", async (req: Request, res: Response) => {
+  try {
+    const result = await MerchantInviteService.sendInviteEmail(req.params.merchantId);
+    res.json({
+      success: true,
+      message: result.emailed
+        ? `Invite email sent to ${result.email}`
+        : "Invite link created (email not sent — copy the link)",
+      ...result,
+    });
+  } catch (error) {
+    console.error("Error sending merchant invite:", error);
+    res.status(400).json({
+      error: error instanceof Error ? error.message : "Failed to send invite",
+    });
   }
 });
 
