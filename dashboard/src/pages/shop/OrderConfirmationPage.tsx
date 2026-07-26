@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
-import { clearCart, resolveShopKey } from '@/lib/shop-cart';
+import { clearCart, resolveShopKey, shopBasePath } from '@/lib/shop-cart';
 import { roundMoney2 } from '@/lib/money';
 
 type OrderItem = {
