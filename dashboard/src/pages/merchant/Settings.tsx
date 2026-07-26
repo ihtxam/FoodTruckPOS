@@ -1,5 +1,13 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState, type ReactNode } from 'react';
 import toast from 'react-hot-toast';
+import {
+  Building2,
+  CreditCard,
+  Globe2,
+  Languages,
+  LayoutGrid,
+  Percent,
+} from 'lucide-react';
 import api from '@/lib/api';
 import { useI18n, type Locale } from '@/lib/i18n';
 
@@ -27,26 +35,101 @@ interface SettingsData {
   status?: string | null;
 }
 
+interface AdyenCreds {
+  merchantAccount?: string | null;
+  clientId?: string | null;
+  apiKeyMasked?: string | null;
+  apiKeySet?: boolean;
+}
+
+type TabId = 'business' | 'taxes' | 'shop' | 'operations' | 'payments' | 'language';
+
+function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: ReactNode;
+}) {
+  return (
+    <label className="block space-y-1.5">
+      <span className="block text-sm font-medium text-[var(--text)]">{label}</span>
+      {children}
+      {hint ? <span className="block text-[11px] muted break-all">{hint}</span> : null}
+    </label>
+  );
+}
+
+function Section({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="space-y-4">
+      <div>
+        <h2 className="text-base font-semibold tracking-tight">{title}</h2>
+        {description ? <p className="page-sub mt-1">{description}</p> : null}
+      </div>
+      {children}
+    </section>
+  );
+}
+
 export default function Settings() {
   const { t, setLocale, locale } = useI18n();
   const [settings, setSettings] = useState<SettingsData | null>(null);
+  const [adyen, setAdyen] = useState<AdyenCreds>({});
+  const [merchantAccount, setMerchantAccount] = useState('');
+  const [clientId, setClientId] = useState('');
+  const [apiKey, setApiKey] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingAdyen, setSavingAdyen] = useState(false);
+  const [tab, setTab] = useState<TabId>('business');
+
+  const tabs = useMemo(
+    () =>
+      [
+        { id: 'business' as const, label: t('settingsBusiness'), icon: Building2 },
+        { id: 'taxes' as const, label: t('settingsTaxes'), icon: Percent },
+        { id: 'shop' as const, label: t('shop'), icon: Globe2 },
+        { id: 'operations' as const, label: t('settingsOperations'), icon: LayoutGrid },
+        { id: 'payments' as const, label: t('settingsPayments'), icon: CreditCard },
+        { id: 'language' as const, label: t('language'), icon: Languages },
+      ] as const,
+    [t]
+  );
 
   useEffect(() => {
     const load = async () => {
       try {
-        const response = await api.get('/merchant/settings');
-        const s = response.data.settings;
+        const [settingsRes, adyenRes] = await Promise.all([
+          api.get('/merchant/settings'),
+          api.get('/terminals').catch(() => ({ data: { adyen: {} } })),
+        ]);
+        const s = settingsRes.data.settings;
         setSettings(s);
-        // Prefer local browser choice; only adopt server language if none stored yet.
+        const a = adyenRes.data.adyen || {};
+        setAdyen(a);
+        setMerchantAccount(a.merchantAccount || '');
+        setClientId(a.clientId || '');
+
         const stored = localStorage.getItem('manupos_panel_lang');
-        if ((!stored || !['en', 'fr', 'de'].includes(stored)) && s?.panelLanguage && ['en', 'fr', 'de'].includes(s.panelLanguage)) {
+        if (
+          (!stored || !['en', 'fr', 'de'].includes(stored)) &&
+          s?.panelLanguage &&
+          ['en', 'fr', 'de'].includes(s.panelLanguage)
+        ) {
           setLocale(s.panelLanguage as Locale);
         } else if (stored && ['en', 'fr', 'de'].includes(stored)) {
-          setSettings((prev: SettingsData | null) =>
-            prev ? { ...prev, panelLanguage: stored } : prev
-          );
+          setSettings((prev) => (prev ? { ...prev, panelLanguage: stored } : prev));
         }
       } catch (error: any) {
         toast.error(error.response?.data?.error || 'Failed to load settings');
@@ -54,7 +137,7 @@ export default function Settings() {
         setLoading(false);
       }
     };
-    load();
+    void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -70,9 +153,11 @@ export default function Settings() {
         country: settings.country,
         vatNumber: settings.vatNumber,
         vatRate: settings.vatRate ? Number(settings.vatRate) : undefined,
-        taxTakeawayRate: settings.taxTakeawayRate != null ? Number(settings.taxTakeawayRate) : undefined,
+        taxTakeawayRate:
+          settings.taxTakeawayRate != null ? Number(settings.taxTakeawayRate) : undefined,
         taxDineInRate: settings.taxDineInRate != null ? Number(settings.taxDineInRate) : undefined,
-        taxDeliveryRate: settings.taxDeliveryRate != null ? Number(settings.taxDeliveryRate) : undefined,
+        taxDeliveryRate:
+          settings.taxDeliveryRate != null ? Number(settings.taxDeliveryRate) : undefined,
         slug: settings.slug || undefined,
         subdomain: settings.subdomain || undefined,
         shopEnabled: !!settings.shopEnabled,
@@ -83,7 +168,7 @@ export default function Settings() {
       const next = response.data.merchant || response.data.settings || settings;
       setSettings((prev) => (prev ? { ...prev, ...next } : prev));
       if (next.panelLanguage) setLocale(next.panelLanguage as Locale);
-      toast.success('Settings saved');
+      toast.success(t('settingsSaved'));
     } catch (error: any) {
       toast.error(error.response?.data?.error || 'Failed to save settings');
     } finally {
@@ -91,217 +176,347 @@ export default function Settings() {
     }
   };
 
-  if (loading) return <div className="text-center py-12">Loading settings...</div>;
-  if (!settings) return <div className="card">Could not load settings.</div>;
+  const saveAdyen = async (e: FormEvent) => {
+    e.preventDefault();
+    setSavingAdyen(true);
+    try {
+      const response = await api.put('/terminals/adyen-credentials', {
+        adyenMerchantAccount: merchantAccount,
+        adyenApiKey: apiKey || undefined,
+        adyenClientId: clientId,
+      });
+      setAdyen(response.data.adyen || {});
+      setApiKey('');
+      toast.success(t('adyenSaved'));
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Failed to save Adyen credentials');
+    } finally {
+      setSavingAdyen(false);
+    }
+  };
+
+  if (loading) {
+    return <div className="text-center py-12 muted text-sm">{t('loading')}</div>;
+  }
+  if (!settings) {
+    return <div className="card">{t('settingsLoadError')}</div>;
+  }
 
   return (
-    <div className="space-y-6 max-w-3xl">
-      <div className="card">
-        <h1 className="text-2xl font-bold mb-2">{t('settings')}</h1>
-        <p className="text-gray-600 mb-6">Business profile for {settings.name}</p>
+    <div className="mx-auto max-w-3xl space-y-3 sm:space-y-4">
+      <div>
+        <h1 className="page-title">{t('settings')}</h1>
+        <p className="page-sub">
+          {t('settingsFor')} <span className="font-medium text-[var(--text)]">{settings.name}</span>
+        </p>
+      </div>
 
-        <form onSubmit={onSave} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-1">{t('language')}</label>
-            <select
-              className="input"
-              value={settings.panelLanguage || locale}
-              onChange={async (e) => {
-                const lang = e.target.value as Locale;
-                setSettings({ ...settings, panelLanguage: lang });
-                setLocale(lang);
-                try {
-                  await api.put('/merchant/settings', { panelLanguage: lang });
-                  toast.success(lang === 'de' ? 'Sprache gespeichert' : lang === 'fr' ? 'Langue enregistrée' : 'Language saved');
-                } catch (error: any) {
-                  toast.error(error.response?.data?.error || 'Failed to save language');
-                }
-              }}
-            >
-              <option value="en">English</option>
-              <option value="fr">Français</option>
-              <option value="de">Deutsch</option>
-            </select>
-          </div>
+      <div className="card !p-0 overflow-hidden">
+        <div className="border-b border-[var(--border)] overflow-x-auto">
+          <nav className="flex min-w-max gap-0.5 px-2 py-2" aria-label={t('settings')}>
+            {tabs.map((item) => {
+              const Icon = item.icon;
+              const active = tab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setTab(item.id)}
+                  className={`flex min-w-[4.75rem] flex-col items-center gap-1 rounded-md px-3 py-2 text-[11px] font-medium transition-colors ${
+                    active
+                      ? 'bg-[var(--bg-muted)] text-[var(--text)]'
+                      : 'text-[var(--text-muted)] hover:bg-[var(--bg-muted)] hover:text-[var(--text)]'
+                  }`}
+                >
+                  <Icon className="h-4 w-4" />
+                  <span className="whitespace-nowrap">{item.label}</span>
+                </button>
+              );
+            })}
+          </nav>
+        </div>
 
-          <div>
-            <label className="block text-sm font-medium mb-1">Business email</label>
-            <input className="input bg-gray-50" value={settings.email} disabled />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">Phone</label>
-            <input
-              className="input"
-              value={settings.phone || ''}
-              onChange={(e) => setSettings({ ...settings, phone: e.target.value })}
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">Address</label>
-            <input
-              className="input"
-              value={settings.address || ''}
-              onChange={(e) => setSettings({ ...settings, address: e.target.value })}
-            />
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">City</label>
-              <input
-                className="input"
-                value={settings.city || ''}
-                onChange={(e) => setSettings({ ...settings, city: e.target.value })}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Country</label>
-              <input
-                className="input"
-                value={settings.country || ''}
-                onChange={(e) => setSettings({ ...settings, country: e.target.value })}
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">VAT number</label>
-              <input
-                className="input"
-                value={settings.vatNumber || ''}
-                onChange={(e) => setSettings({ ...settings, vatNumber: e.target.value })}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Default VAT rate (%)</label>
-              <input
-                className="input"
-                type="number"
-                step="0.01"
-                value={settings.vatRate || ''}
-                onChange={(e) => setSettings({ ...settings, vatRate: e.target.value })}
-              />
-            </div>
-          </div>
+        <div className="p-4 sm:p-5">
+          {tab === 'business' && (
+            <form onSubmit={onSave} className="space-y-5">
+              <Section title={t('businessSettings')} description={t('businessSettingsHint')}>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <Field label={t('businessName')}>
+                    <input className="input bg-[var(--bg-muted)]" value={settings.name} disabled />
+                  </Field>
+                  <Field label={t('businessEmail')}>
+                    <input className="input bg-[var(--bg-muted)]" value={settings.email} disabled />
+                  </Field>
+                  <Field label={t('phone')}>
+                    <input
+                      className="input"
+                      value={settings.phone || ''}
+                      onChange={(e) => setSettings({ ...settings, phone: e.target.value })}
+                    />
+                  </Field>
+                  <Field label={t('vatNumber')}>
+                    <input
+                      className="input"
+                      value={settings.vatNumber || ''}
+                      onChange={(e) => setSettings({ ...settings, vatNumber: e.target.value })}
+                      placeholder="CHE-000.000.000 MWST"
+                    />
+                  </Field>
+                  <Field label={t('address')}>
+                    <input
+                      className="input"
+                      value={settings.address || ''}
+                      onChange={(e) => setSettings({ ...settings, address: e.target.value })}
+                    />
+                  </Field>
+                  <Field label={t('city')}>
+                    <input
+                      className="input"
+                      value={settings.city || ''}
+                      onChange={(e) => setSettings({ ...settings, city: e.target.value })}
+                    />
+                  </Field>
+                  <Field label={t('country')}>
+                    <input
+                      className="input"
+                      value={settings.country || ''}
+                      onChange={(e) => setSettings({ ...settings, country: e.target.value })}
+                    />
+                  </Field>
+                </div>
+              </Section>
 
-          <div className="border-t pt-4">
-            <h2 className="font-semibold mb-3">{t('taxRates')}</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">{t('takeaway')} (%)</label>
-                <input
-                  className="input"
-                  type="number"
-                  step="0.01"
-                  value={settings.taxTakeawayRate ?? settings.vatRate ?? ''}
-                  onChange={(e) => setSettings({ ...settings, taxTakeawayRate: e.target.value })}
-                />
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border)] pt-4">
+                <p className="text-xs muted">
+                  {t('plan')}: {settings.subscriptionPlan || 'free'} · {t('status')}:{' '}
+                  {settings.status || 'active'}
+                </p>
+                <button type="submit" className="btn-primary" disabled={saving}>
+                  {saving ? t('saving') : t('save')}
+                </button>
               </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">{t('dineIn')} (%)</label>
-                <input
-                  className="input"
-                  type="number"
-                  step="0.01"
-                  value={settings.taxDineInRate ?? settings.vatRate ?? ''}
-                  onChange={(e) => setSettings({ ...settings, taxDineInRate: e.target.value })}
-                />
+            </form>
+          )}
+
+          {tab === 'taxes' && (
+            <form onSubmit={onSave} className="space-y-5">
+              <Section title={t('taxRates')} description={t('taxRatesHint')}>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <Field label={`${t('defaultVatRate')} (%)`}>
+                    <input
+                      className="input"
+                      type="number"
+                      step="0.01"
+                      value={settings.vatRate || ''}
+                      onChange={(e) => setSettings({ ...settings, vatRate: e.target.value })}
+                    />
+                  </Field>
+                  <Field label={`${t('takeaway')} (%)`}>
+                    <input
+                      className="input"
+                      type="number"
+                      step="0.01"
+                      value={settings.taxTakeawayRate ?? settings.vatRate ?? ''}
+                      onChange={(e) => setSettings({ ...settings, taxTakeawayRate: e.target.value })}
+                    />
+                  </Field>
+                  <Field label={`${t('dineIn')} (%)`}>
+                    <input
+                      className="input"
+                      type="number"
+                      step="0.01"
+                      value={settings.taxDineInRate ?? settings.vatRate ?? ''}
+                      onChange={(e) => setSettings({ ...settings, taxDineInRate: e.target.value })}
+                    />
+                  </Field>
+                  <Field label={`${t('delivery')} (%)`}>
+                    <input
+                      className="input"
+                      type="number"
+                      step="0.01"
+                      value={settings.taxDeliveryRate ?? settings.vatRate ?? ''}
+                      onChange={(e) => setSettings({ ...settings, taxDeliveryRate: e.target.value })}
+                    />
+                  </Field>
+                </div>
+              </Section>
+              <div className="flex justify-end border-t border-[var(--border)] pt-4">
+                <button type="submit" className="btn-primary" disabled={saving}>
+                  {saving ? t('saving') : t('save')}
+                </button>
               </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">{t('delivery')} (%)</label>
-                <input
-                  className="input"
-                  type="number"
-                  step="0.01"
-                  value={settings.taxDeliveryRate ?? settings.vatRate ?? ''}
-                  onChange={(e) => setSettings({ ...settings, taxDeliveryRate: e.target.value })}
-                />
+            </form>
+          )}
+
+          {tab === 'shop' && (
+            <form onSubmit={onSave} className="space-y-5">
+              <Section title={t('shop')} description={t('shopSettingsHint')}>
+                <label className="flex items-start gap-2.5 rounded-md border border-[var(--border)] bg-[var(--bg-muted)] px-3 py-2.5 text-sm">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={!!settings.shopEnabled}
+                    onChange={(e) => setSettings({ ...settings, shopEnabled: e.target.checked })}
+                  />
+                  <span>
+                    <span className="font-medium block">{t('enableOnlineShop')}</span>
+                    <span className="text-xs muted">{t('enableOnlineShopHint')}</span>
+                  </span>
+                </label>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <Field label={t('shopSlug')} hint={settings.shopPathUrl || undefined}>
+                    <input
+                      className="input"
+                      value={settings.slug || ''}
+                      onChange={(e) => setSettings({ ...settings, slug: e.target.value })}
+                      placeholder="my-cafe"
+                    />
+                  </Field>
+                  <Field label={t('subdomain')} hint={settings.shopSubdomainUrl || undefined}>
+                    <input
+                      className="input"
+                      value={settings.subdomain || ''}
+                      onChange={(e) => setSettings({ ...settings, subdomain: e.target.value })}
+                      placeholder="mycafe"
+                    />
+                  </Field>
+                </div>
+              </Section>
+              <div className="flex justify-end border-t border-[var(--border)] pt-4">
+                <button type="submit" className="btn-primary" disabled={saving}>
+                  {saving ? t('saving') : t('save')}
+                </button>
               </div>
+            </form>
+          )}
+
+          {tab === 'operations' && (
+            <form onSubmit={onSave} className="space-y-5">
+              <Section title={t('floorPlan')} description={t('floorPlanSettingsHint')}>
+                <label className="flex items-start gap-2.5 rounded-md border border-[var(--border)] px-3 py-2.5 text-sm">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={!!settings.floorPlanEnabled}
+                    onChange={(e) => setSettings({ ...settings, floorPlanEnabled: e.target.checked })}
+                  />
+                  <span className="font-medium">{t('floorPlanEnabled')}</span>
+                </label>
+                <label className="flex items-start gap-2.5 rounded-md border border-[var(--border)] px-3 py-2.5 text-sm">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={!!settings.paxOrderingEnabled}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        paxOrderingEnabled: e.target.checked,
+                        floorPlanEnabled: e.target.checked ? true : settings.floorPlanEnabled,
+                      })
+                    }
+                  />
+                  <span>
+                    <span className="font-medium block">{t('paxOrderingEnabled')}</span>
+                    <span className="text-xs muted">{t('paxOrderingHint')}</span>
+                  </span>
+                </label>
+              </Section>
+
+              <div className="border-t border-[var(--border)] pt-4">
+                <Section title={t('webPos')} description={t('webPosHint')}>
+                  <a href="/merchant/pos" className="btn-secondary inline-flex">
+                    {t('openWebPos')}
+                  </a>
+                </Section>
+              </div>
+
+              <div className="flex justify-end border-t border-[var(--border)] pt-4">
+                <button type="submit" className="btn-primary" disabled={saving}>
+                  {saving ? t('saving') : t('save')}
+                </button>
+              </div>
+            </form>
+          )}
+
+          {tab === 'payments' && (
+            <form onSubmit={saveAdyen} className="space-y-5">
+              <Section title={t('adyenCredentials')} description={t('adyenSettingsHint')}>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <Field label={t('merchantAccount')}>
+                    <input
+                      className="input"
+                      value={merchantAccount}
+                      onChange={(e) => setMerchantAccount(e.target.value)}
+                      placeholder="ManuPOS_COM"
+                    />
+                  </Field>
+                  <Field label={t('clientId')}>
+                    <input
+                      className="input"
+                      value={clientId}
+                      onChange={(e) => setClientId(e.target.value)}
+                    />
+                  </Field>
+                  <div className="sm:col-span-2">
+                    <Field
+                      label={t('apiKey')}
+                      hint={
+                        adyen.apiKeySet
+                          ? `${t('currentKey')}: ${adyen.apiKeyMasked || '••••'}`
+                          : t('apiKeyHint')
+                      }
+                    >
+                      <input
+                        className="input"
+                        type="password"
+                        value={apiKey}
+                        onChange={(e) => setApiKey(e.target.value)}
+                        placeholder={adyen.apiKeySet ? adyen.apiKeyMasked || '••••' : 'AQE...'}
+                        autoComplete="new-password"
+                      />
+                    </Field>
+                  </div>
+                </div>
+              </Section>
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border)] pt-4">
+                <a href="/merchant/terminals" className="text-xs font-medium text-sky-700 hover:underline dark:text-sky-300">
+                  {t('manageTerminals')}
+                </a>
+                <button type="submit" className="btn-primary" disabled={savingAdyen}>
+                  {savingAdyen ? t('saving') : t('save')}
+                </button>
+              </div>
+            </form>
+          )}
+
+          {tab === 'language' && (
+            <div className="space-y-5">
+              <Section title={t('language')} description={t('languageSettingsHint')}>
+                <Field label={t('panelLanguage')}>
+                  <select
+                    className="input"
+                    value={settings.panelLanguage || locale}
+                    onChange={async (e) => {
+                      const lang = e.target.value as Locale;
+                      setSettings({ ...settings, panelLanguage: lang });
+                      setLocale(lang);
+                      try {
+                        await api.put('/merchant/settings', { panelLanguage: lang });
+                        toast.success(t('languageSaved'));
+                      } catch (error: any) {
+                        toast.error(error.response?.data?.error || t('failedSaveLanguage'));
+                      }
+                    }}
+                  >
+                    <option value="en">English</option>
+                    <option value="fr">Français</option>
+                    <option value="de">Deutsch</option>
+                  </select>
+                </Field>
+              </Section>
             </div>
-          </div>
-
-          <div className="border-t pt-4 space-y-3">
-            <h2 className="font-semibold">{t('webPos')}</h2>
-            <p className="text-sm text-gray-600">
-              Browser POS: open <a className="text-indigo-600 underline" href="/merchant/pos">WebPOS</a>.
-              For USB thermal printers on Windows, run <strong>ManuPOS Desktop</strong> (see repo <code>desktop/</code>) —
-              it starts a local print agent on <code>127.0.0.1:9101</code>.
-            </p>
-          </div>
-
-          <div className="border-t pt-4 space-y-3">
-            <h2 className="font-semibold">{t('floorPlan')}</h2>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={!!settings.floorPlanEnabled}
-                onChange={(e) => setSettings({ ...settings, floorPlanEnabled: e.target.checked })}
-              />
-              {t('floorPlanEnabled')}
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={!!settings.paxOrderingEnabled}
-                onChange={(e) =>
-                  setSettings({
-                    ...settings,
-                    paxOrderingEnabled: e.target.checked,
-                    floorPlanEnabled: e.target.checked ? true : settings.floorPlanEnabled,
-                  })
-                }
-              />
-              {t('paxOrderingEnabled')}
-            </label>
-            <p className="text-xs text-gray-500">
-              When PAX is on: order each guest separately (kitchen ticket: Person-1…), bill per person, or split total /N at checkout.
-            </p>
-          </div>
-
-          <div className="border-t pt-4 space-y-3">
-            <h2 className="font-semibold">{t('shop')}</h2>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={!!settings.shopEnabled}
-                onChange={(e) => setSettings({ ...settings, shopEnabled: e.target.checked })}
-              />
-              Enable online shop (orders appear in POS)
-            </label>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">Shop slug (path)</label>
-                <input
-                  className="input"
-                  value={settings.slug || ''}
-                  onChange={(e) => setSettings({ ...settings, slug: e.target.value })}
-                  placeholder="my-cafe"
-                />
-                {settings.shopPathUrl && (
-                  <p className="text-xs text-gray-500 mt-1 break-all">{settings.shopPathUrl}</p>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">{t('subdomain')}</label>
-                <input
-                  className="input"
-                  value={settings.subdomain || ''}
-                  onChange={(e) => setSettings({ ...settings, subdomain: e.target.value })}
-                  placeholder="mycafé → mycafe"
-                />
-                {settings.shopSubdomainUrl && (
-                  <p className="text-xs text-gray-500 mt-1 break-all">{settings.shopSubdomainUrl}</p>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="text-sm text-gray-500">
-            Plan: {settings.subscriptionPlan || 'free'} · Status: {settings.status || 'active'}
-          </div>
-          <button type="submit" className="btn-primary" disabled={saving}>
-            {saving ? 'Saving...' : t('save')}
-          </button>
-        </form>
+          )}
+        </div>
       </div>
     </div>
   );
