@@ -25,3 +25,4 @@ export function getDb(): Database {
 
 export type { Database };
 export { schema };
+export type { CmsBlock } from "./schema";

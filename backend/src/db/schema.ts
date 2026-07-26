@@ -59,7 +59,11 @@ export const merchants = pgTable(
     // Online shop: path slug + optional DNS subdomain (e.g. demo → demo.domain)
     slug: varchar("slug", { length: 100 }),
     subdomain: varchar("subdomain", { length: 63 }),
+    /** Custom apex/domain for CMS website (e.g. cafe.ch) — DNS CNAME to platform */
+    customDomain: varchar("custom_domain", { length: 255 }),
     shopEnabled: boolean("shop_enabled").default(false).notNull(),
+    /** When true, shop root serves published CMS homepage instead of menu */
+    cmsHomepageEnabled: boolean("cms_homepage_enabled").default(false).notNull(),
     // Online ordering channels
     pickupEnabled: boolean("pickup_enabled").default(true).notNull(),
     dineInEnabled: boolean("dine_in_enabled").default(true).notNull(),
@@ -109,6 +113,7 @@ export const merchants = pgTable(
     statusIdx: index("merchants_status_idx").on(table.status),
     slugIdx: uniqueIndex("merchants_slug_idx").on(table.slug),
     subdomainIdx: uniqueIndex("merchants_subdomain_idx").on(table.subdomain),
+    customDomainIdx: uniqueIndex("merchants_custom_domain_idx").on(table.customDomain),
     syncApiKeyIdx: uniqueIndex("merchants_sync_api_key_idx").on(table.syncApiKey),
   })
 );
@@ -917,9 +922,110 @@ export const dailyReports = pgTable(
   })
 );
 
+
+// ============================================================================
+// CMS PAGES (merchant website / homepage builder)
+// ============================================================================
+
+export type CmsBlock =
+  | {
+      id: string;
+      type: "hero";
+      title: string;
+      subtitle?: string;
+      ctaLabel?: string;
+      ctaHref?: string;
+      imageUrl?: string;
+      align?: "left" | "center";
+    }
+  | {
+      id: string;
+      type: "richtext";
+      html: string;
+    }
+  | {
+      id: string;
+      type: "html";
+      html: string;
+    }
+  | {
+      id: string;
+      type: "menu";
+      title?: string;
+      subtitle?: string;
+      mode: "full" | "featured";
+      categoryIds?: string[];
+      productIds?: string[];
+      limit?: number;
+      showPrices?: boolean;
+      ctaLabel?: string;
+      ctaHref?: string;
+    }
+  | {
+      id: string;
+      type: "hours";
+      title?: string;
+      channel?: "display" | "pickup" | "delivery";
+    }
+  | {
+      id: string;
+      type: "cta";
+      title: string;
+      subtitle?: string;
+      primaryLabel?: string;
+      primaryHref?: string;
+      secondaryLabel?: string;
+      secondaryHref?: string;
+    }
+  | {
+      id: string;
+      type: "image";
+      imageUrl: string;
+      alt?: string;
+      caption?: string;
+      href?: string;
+    }
+  | {
+      id: string;
+      type: "spacer";
+      size?: "sm" | "md" | "lg";
+    };
+
+export const cmsPages = pgTable(
+  "cms_pages",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    merchantId: uuid("merchant_id")
+      .notNull()
+      .references(() => merchants.id, { onDelete: "cascade" }),
+    title: varchar("title", { length: 200 }).notNull(),
+    slug: varchar("slug", { length: 120 }).notNull(),
+    isHomepage: boolean("is_homepage").notNull().default(false),
+    status: varchar("status", { length: 20 }).notNull().default("draft"),
+    templateKey: varchar("template_key", { length: 40 }),
+    blocks: json("blocks").$type<CmsBlock[]>().notNull().default([]),
+    seoTitle: varchar("seo_title", { length: 200 }),
+    seoDescription: text("seo_description"),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    merchantSlugUq: uniqueIndex("cms_pages_merchant_slug_uq").on(table.merchantId, table.slug),
+    merchantHomepageIdx: index("cms_pages_merchant_homepage_idx").on(table.merchantId, table.isHomepage),
+  })
+);
+
 // ============================================================================
 // RELATIONS
 // ============================================================================
+
+export const cmsPagesRelations = relations(cmsPages, ({ one }) => ({
+  merchant: one(merchants, {
+    fields: [cmsPages.merchantId],
+    references: [merchants.id],
+  }),
+}));
 
 export const merchantsRelations = relations(merchants, ({ many }) => ({
   devices: many(devices),
@@ -942,6 +1048,7 @@ export const merchantsRelations = relations(merchants, ({ many }) => ({
   modifierGroups: many(modifierGroups),
   floorPlans: many(floorPlans),
   diningTables: many(diningTables),
+  cmsPages: many(cmsPages),
 }));
 
 export const floorPlansRelations = relations(floorPlans, ({ one, many }) => ({

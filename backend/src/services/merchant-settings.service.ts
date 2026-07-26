@@ -1,5 +1,6 @@
 import { getDb, schema } from "@/db";
 import { eq, and, or } from "drizzle-orm";
+import { normalizeCustomDomain } from "@/services/cms.service";
 
 function maskSecret(value?: string | null): string | null {
   if (!value) return null;
@@ -61,6 +62,8 @@ export class MerchantSettingsService {
       taxDeliveryRate: merchant.taxDeliveryRate,
       slug: merchant.slug,
       subdomain: merchant.subdomain,
+      customDomain: merchant.customDomain,
+      cmsHomepageEnabled: !!merchant.cmsHomepageEnabled,
       shopEnabled: merchant.shopEnabled,
       pickupEnabled: merchant.pickupEnabled,
       dineInEnabled: merchant.dineInEnabled,
@@ -76,6 +79,7 @@ export class MerchantSettingsService {
       deliveryEtaMinutes: merchant.deliveryEtaMinutes,
       shopPathUrl: merchant.slug ? `https://${domain}/shop/${merchant.slug}` : null,
       shopSubdomainUrl: merchant.subdomain ? `https://${merchant.subdomain}.${domain}` : null,
+      shopCustomDomainUrl: merchant.customDomain ? `https://${merchant.customDomain}` : null,
       adyenMerchantAccount: merchant.adyenMerchantAccount,
       adyenApiKeyMasked: maskSecret(merchant.adyenApiKey),
       adyenApiKeySet: !!merchant.adyenApiKey,
@@ -103,6 +107,8 @@ export class MerchantSettingsService {
       taxDeliveryRate?: number;
       slug?: string;
       subdomain?: string;
+      customDomain?: string | null;
+      cmsHomepageEnabled?: boolean;
       shopEnabled?: boolean;
       pickupEnabled?: boolean;
       dineInEnabled?: boolean;
@@ -186,6 +192,21 @@ export class MerchantSettingsService {
     }
     if (updates.subdomain !== undefined) {
       patch.subdomain = normalizeSubdomain(updates.subdomain);
+    }
+    if (updates.customDomain !== undefined) {
+      const domainNorm = normalizeCustomDomain(updates.customDomain);
+      if (domainNorm) {
+        const taken = await db.query.merchants.findFirst({
+          where: eq(schema.merchants.customDomain, domainNorm),
+        });
+        if (taken && taken.id !== merchantId) {
+          throw new Error("Custom domain already in use");
+        }
+      }
+      patch.customDomain = domainNorm;
+    }
+    if (updates.cmsHomepageEnabled !== undefined) {
+      patch.cmsHomepageEnabled = !!updates.cmsHomepageEnabled;
     }
 
     // Auto-create slug when enabling shop without one
@@ -378,12 +399,18 @@ export class MerchantSettingsService {
     const db = getDb();
     const raw = hostOrSlug.toLowerCase().trim();
     const domain = (process.env.DOMAIN || "").toLowerCase();
-    let key = raw;
-    if (domain && raw.endsWith(`.${domain}`)) {
-      key = raw.slice(0, -(domain.length + 1));
-    }
     // strip port
-    key = key.split(":")[0];
+    const host = raw.split(":")[0];
+    let key = host;
+    if (domain && host.endsWith(`.${domain}`)) {
+      key = host.slice(0, -(domain.length + 1));
+    }
+
+    // Custom apex / branded domain first
+    const byCustom = await db.query.merchants.findFirst({
+      where: eq(schema.merchants.customDomain, host),
+    });
+    if (byCustom) return byCustom;
 
     return db.query.merchants.findFirst({
       where: or(eq(schema.merchants.subdomain, key), eq(schema.merchants.slug, key)),
