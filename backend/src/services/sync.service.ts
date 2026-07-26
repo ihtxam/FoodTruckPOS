@@ -13,6 +13,14 @@ export interface SyncSaleItem {
   taxAmount?: number;
   weightKg?: number;
   selectedExtras?: Array<{ id: string; name: string; price: number }>;
+  comboSelections?: Array<{
+    slotId: string;
+    slotName: string;
+    productId: string;
+    productName: string;
+    extraPrice: number;
+    selectedExtras?: Array<{ id: string; name: string; price: number }>;
+  }>;
   isOpenPrice?: boolean;
   seatNumber?: number | null;
 }
@@ -338,6 +346,7 @@ export class SyncService {
           taxAmount: (item.taxAmount || 0).toString(),
           weightKg: item.weightKg != null ? item.weightKg.toString() : null,
           selectedExtras: item.selectedExtras || [],
+          comboSelections: item.comboSelections || [],
           isOpenPrice: !!item.isOpenPrice,
           seatNumber: item.seatNumber != null ? Number(item.seatNumber) : null,
         });

@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import multer from "multer";
+import { and, eq, inArray } from "drizzle-orm";
 import { verifyToken, requireMerchant, setMerchantContext } from "@/middleware/auth.middleware";
 import { ProductService } from "@/services/product.service";
 import { CategoryService } from "@/services/category.service";
@@ -8,6 +9,9 @@ import { CustomerService } from "@/services/customer.service";
 import { MerchantSettingsService } from "@/services/merchant-settings.service";
 import { CatalogImportService } from "@/services/catalog-import.service";
 import { ModifierService } from "@/services/modifier.service";
+import { normalizeComboSlots } from "@/lib/combo";
+import { roundMoney2 } from "@/lib/money";
+import { getDb, schema } from "@/db";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -74,21 +78,85 @@ router.get("/products", async (req: Request, res: Response) => {
     }
 
     const products = await ProductService.getProducts(merchantId, page, limit, search, categoryId);
-    const productIds = (products || []).map((p: { id: string }) => p.id);
-    const groupsByProduct = await ModifierService.getGroupsForProducts(merchantId, productIds);
-    const withModifiers = (products || []).map((p: any) => {
+    const pageList = products || [];
+
+    // Resolve combo option products that may not be on the current page
+    const optionIds = new Set<string>();
+    for (const p of pageList as any[]) {
+      if (p.productType !== "combo") continue;
+      for (const slot of normalizeComboSlots(p.comboItems)) {
+        for (const o of slot.options) optionIds.add(o.productId);
+      }
+    }
+    const pageIds = new Set(pageList.map((p: { id: string }) => p.id));
+    const missingIds = [...optionIds].filter((id) => !pageIds.has(id));
+    let optionProducts: any[] = [];
+    if (missingIds.length) {
+      const db = getDb();
+      optionProducts = await db.query.products.findMany({
+        where: and(
+          eq(schema.products.merchantId, merchantId),
+          inArray(schema.products.id, missingIds)
+        ),
+      });
+    }
+
+    const catalogById = new Map<string, any>();
+    for (const p of [...pageList, ...optionProducts]) catalogById.set(p.id, p);
+    const groupsByProduct = await ModifierService.getGroupsForProducts(
+      merchantId,
+      [...catalogById.keys()]
+    );
+
+    const withCatalog = pageList.map((p: any) => {
       const modifierGroups = groupsByProduct.get(p.id) || [];
       const extras = Array.isArray(p.extras) ? p.extras : [];
+      const isCombo = p.productType === "combo";
+      const comboSlots = isCombo
+        ? normalizeComboSlots(p.comboItems)
+            .map((slot) => ({
+              id: slot.id,
+              name: slot.name,
+              minPick: slot.minPick,
+              maxPick: slot.maxPick,
+              options: slot.options
+                .map((opt) => {
+                  const child = catalogById.get(opt.productId);
+                  if (!child || child.isActive === false) return null;
+                  const childGroups = groupsByProduct.get(child.id) || [];
+                  const childExtras = Array.isArray(child.extras) ? child.extras : [];
+                  return {
+                    productId: child.id,
+                    name: child.name,
+                    image: child.imageUrl,
+                    description: child.description,
+                    extraPrice: roundMoney2(opt.extraPrice),
+                    allowExtras:
+                      !!child.allowExtras || childGroups.length > 0 || childExtras.length > 0,
+                    extras: childExtras.map((e: any) => ({
+                      id: e.id,
+                      name: e.name,
+                      price: Number(e.price) || 0,
+                    })),
+                    modifierGroups: childGroups,
+                  };
+                })
+                .filter(Boolean),
+            }))
+            .filter((s) => s.options.length > 0)
+        : [];
+
       return {
         ...p,
         modifierGroups,
         allowExtras: !!p.allowExtras || modifierGroups.length > 0 || extras.length > 0,
+        comboSlots,
       };
     });
 
     res.json({
       success: true,
-      products: withModifiers,
+      products: withCatalog,
       pagination: { page, limit },
     });
   } catch (error) {

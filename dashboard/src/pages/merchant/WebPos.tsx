@@ -17,12 +17,21 @@ import {
   type AgentPrinter,
 } from '@/lib/print-agent';
 import { buildReceiptUrl, qrImageUrl } from '@/lib/qr';
-import { extrasSignature, type ShopSelectedExtra } from '@/lib/shop-cart';
+import {
+  lineSignature,
+  type ShopComboSelection,
+  type ShopSelectedExtra,
+} from '@/lib/shop-cart';
 import ShopProductModifiersModal, {
   productHasModifiers,
   type ShopModifierGroup,
   type ShopProductForModifiers,
 } from '@/components/shop/ShopProductModifiersModal';
+import ShopComboWizard, {
+  productHasComboSlots,
+  type ComboSlot,
+  type ShopComboProduct,
+} from '@/components/shop/ShopComboWizard';
 
 type Channel = 'takeaway' | 'dine_in' | 'delivery';
 
@@ -33,9 +42,11 @@ type Product = {
   categoryId?: string | null;
   isTaxable?: boolean;
   stock?: number;
+  productType?: string;
   allowExtras?: boolean;
   extras?: Array<{ id: string; name: string; price: number; isDefault?: boolean }>;
   modifierGroups?: ShopModifierGroup[];
+  comboSlots?: ComboSlot[];
 };
 
 type Category = { id: string; name: string };
@@ -49,7 +60,27 @@ type CartLine = {
   lineTotal: number;
   taxable: boolean;
   selectedExtras: ShopSelectedExtra[];
+  comboSelections: ShopComboSelection[];
 };
+
+function lineExtrasLabel(l: CartLine) {
+  const parts: string[] = [];
+  if (l.comboSelections.length) {
+    parts.push(
+      ...l.comboSelections.map((c) =>
+        c.selectedExtras?.length
+          ? `${c.productName} (${c.selectedExtras.map((e) => e.name).join(', ')})`
+          : c.productName
+      )
+    );
+  }
+  if (!l.comboSelections.length && l.selectedExtras.length) {
+    parts.push(...l.selectedExtras.map((e) => e.name));
+  } else if (l.comboSelections.length && l.selectedExtras.length) {
+    parts.push(...l.selectedExtras.map((e) => e.name));
+  }
+  return parts.join(' · ');
+}
 
 type SaleRecord = {
   id: string;
@@ -90,6 +121,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
   const [lastReceipt, setLastReceipt] = useState<string>('');
   const [lastReceiptUrl, setLastReceiptUrl] = useState<string>('');
   const [pendingProduct, setPendingProduct] = useState<ShopProductForModifiers | null>(null);
+  const [pendingCombo, setPendingCombo] = useState<ShopComboProduct | null>(null);
 
   const showPanelMenus = useCallback(() => {
     window.dispatchEvent(new CustomEvent('webpos:show-panel'));
@@ -202,13 +234,16 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
   const addConfiguredProduct = (
     p: Product,
     unitPrice: number,
-    selectedExtras: ShopSelectedExtra[] = []
+    selectedExtras: ShopSelectedExtra[] = [],
+    comboSelections: ShopComboSelection[] = []
   ) => {
     const price = roundMoney2(unitPrice);
-    const sig = extrasSignature(selectedExtras);
+    const sig = lineSignature(selectedExtras, comboSelections);
     setCart((prev) => {
       const existing = prev.find(
-        (l) => l.productId === p.id && extrasSignature(l.selectedExtras) === sig
+        (l) =>
+          l.productId === p.id &&
+          lineSignature(l.selectedExtras, l.comboSelections) === sig
       );
       if (existing) {
         const quantity = existing.quantity + 1;
@@ -229,12 +264,29 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
           lineTotal: price,
           taxable: p.isTaxable !== false,
           selectedExtras,
+          comboSelections,
         },
       ];
     });
   };
 
   const onProductClick = (p: Product) => {
+    if (productHasComboSlots(p)) {
+      if (!p.comboSlots?.length) {
+        toast.error('This combo has no available options');
+        return;
+      }
+      setPendingCombo({
+        id: p.id,
+        name: p.name,
+        price: Number(p.price) || 0,
+        allowExtras: p.allowExtras,
+        extras: p.extras,
+        modifierGroups: p.modifierGroups,
+        comboSlots: p.comboSlots || [],
+      });
+      return;
+    }
     if (productHasModifiers(p as ShopProductForModifiers)) {
       setPendingProduct({
         id: p.id,
@@ -246,7 +298,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
       });
       return;
     }
-    addConfiguredProduct(p, Number(p.price) || 0, []);
+    addConfiguredProduct(p, Number(p.price) || 0, [], []);
   };
 
   const setQty = (lineId: string, quantity: number) => {
@@ -304,6 +356,18 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
             name: e.name,
             price: e.price,
           })),
+          comboSelections: l.comboSelections.map((c) => ({
+            slotId: c.slotId,
+            slotName: c.slotName,
+            productId: c.productId,
+            productName: c.productName,
+            extraPrice: c.extraPrice,
+            selectedExtras: (c.selectedExtras || []).map((e) => ({
+              id: e.id,
+              name: e.name,
+              price: e.price,
+            })),
+          })),
           isOpenPrice: false,
         })),
       };
@@ -319,14 +383,15 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
         completedAt: Date.now(),
         channel,
         paymentMethod,
-        items: cart.map((l) => ({
-          name: l.selectedExtras.length
-            ? `${l.name} (${l.selectedExtras.map((e) => e.name).join(', ')})`
-            : l.name,
-          quantity: l.quantity,
-          unitPrice: l.unitPrice,
-          lineTotal: l.lineTotal,
-        })),
+        items: cart.map((l) => {
+          const detail = lineExtrasLabel(l);
+          return {
+            name: detail ? `${l.name} (${detail})` : l.name,
+            quantity: l.quantity,
+            unitPrice: l.unitPrice,
+            lineTotal: l.lineTotal,
+          };
+        }),
         subtotal: totals.subtotal,
         discount: 0,
         taxAmount: totals.tax,
@@ -472,7 +537,8 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
             ) : (
               <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2">
                 {visibleProducts.map((p) => {
-                  const hasMods = productHasModifiers(p as ShopProductForModifiers);
+                  const isCombo = productHasComboSlots(p);
+                  const hasMods = !isCombo && productHasModifiers(p as ShopProductForModifiers);
                   return (
                     <button
                       key={p.id}
@@ -481,8 +547,10 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
                       className="text-left bg-white border border-slate-200 rounded-xl p-3 hover:border-indigo-400 hover:shadow-sm transition"
                     >
                       <div className="font-semibold text-slate-900 line-clamp-2 min-h-[2.5rem]">{p.name}</div>
-                      {hasMods && (
-                        <div className="text-[11px] font-medium text-slate-500 mt-1">Options</div>
+                      {(isCombo || hasMods) && (
+                        <div className="text-[11px] font-medium text-slate-500 mt-1">
+                          {isCombo ? 'Combo' : 'Options'}
+                        </div>
                       )}
                       <div className="text-lg font-bold text-indigo-600 mt-2">
                         {money(Number(p.price) || 0)}
@@ -524,10 +592,8 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
                   <div className="flex justify-between gap-2">
                     <div className="min-w-0">
                       <div className="font-medium text-sm text-slate-900">{l.name}</div>
-                      {!!l.selectedExtras.length && (
-                        <div className="text-xs text-slate-500 mt-0.5">
-                          {l.selectedExtras.map((e) => e.name).join(', ')}
-                        </div>
+                      {!!lineExtrasLabel(l) && (
+                        <div className="text-xs text-slate-500 mt-0.5">{lineExtrasLabel(l)}</div>
                       )}
                     </div>
                     <button type="button" className="text-red-500 text-xs shrink-0" onClick={() => setQty(l.lineId, 0)}>
@@ -632,8 +698,27 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
           onClose={() => setPendingProduct(null)}
           onConfirm={(extras, unitPrice) => {
             const base = products.find((p) => p.id === pendingProduct.id);
-            if (base) addConfiguredProduct(base, unitPrice, extras);
+            if (base) addConfiguredProduct(base, unitPrice, extras, []);
             setPendingProduct(null);
+          }}
+        />
+      )}
+
+      {pendingCombo && (
+        <ShopComboWizard
+          product={pendingCombo}
+          onClose={() => setPendingCombo(null)}
+          onConfirm={({ comboSelections, selectedExtras, unitPrice }) => {
+            const base = products.find((p) => p.id === pendingCombo.id);
+            if (base) {
+              addConfiguredProduct(
+                base,
+                unitPrice,
+                selectedExtras,
+                comboSelections as ShopComboSelection[]
+              );
+            }
+            setPendingCombo(null);
           }}
         />
       )}
