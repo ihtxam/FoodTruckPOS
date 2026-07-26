@@ -198,7 +198,10 @@ export default function OnlineShop() {
   const [settings, setSettings] = useState<any>(null);
   const [hours, setHours] = useState<StoreHours>(emptyHours());
   const [selectedDays, setSelectedDays] = useState<DayKey[]>(['mon', 'tue', 'wed', 'thu', 'fri']);
-  const [draftSlots, setDraftSlots] = useState<Slot[]>([{ open: '11:00', close: '22:00' }]);
+  const [draftSlots, setDraftSlots] = useState<Slot[]>([
+    { open: '11:00', close: '14:00' },
+    { open: '17:00', close: '23:00' },
+  ]);
   const [applyTarget, setApplyTarget] = useState<ApplyTarget>('all');
   const [markClosed, setMarkClosed] = useState(false);
   const [showFineTune, setShowFineTune] = useState(false);
@@ -586,19 +589,36 @@ export default function OnlineShop() {
             <div>
               <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
                 <span className="text-sm font-medium">Hours</span>
-                <label className="flex items-center gap-2 text-sm text-stone-600">
-                  <input
-                    type="checkbox"
-                    checked={markClosed}
-                    onChange={(e) => setMarkClosed(e.target.checked)}
-                  />
-                  Mark selected days closed
-                </label>
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    className="text-xs px-2 py-1 rounded border bg-white"
+                    onClick={() =>
+                      setDraftSlots([
+                        { open: '11:00', close: '14:00' },
+                        { open: '17:00', close: '23:00' },
+                      ])
+                    }
+                  >
+                    Lunch + dinner
+                  </button>
+                  <label className="flex items-center gap-2 text-sm text-stone-600">
+                    <input
+                      type="checkbox"
+                      checked={markClosed}
+                      onChange={(e) => setMarkClosed(e.target.checked)}
+                    />
+                    Mark selected days closed
+                  </label>
+                </div>
               </div>
               {!markClosed && (
                 <div className="space-y-2">
                   {draftSlots.map((slot, idx) => (
                     <div key={idx} className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs text-stone-500 w-16 shrink-0">
+                        {idx === 0 ? 'Lunch' : idx === 1 ? 'Dinner' : `Range ${idx + 1}`}
+                      </span>
                       <input
                         type="time"
                         className="input w-auto"
@@ -628,7 +648,7 @@ export default function OnlineShop() {
                     className="text-sm font-medium text-teal-700"
                     onClick={() => setDraftSlots((prev) => [...prev, { open: '17:00', close: '23:00' }])}
                   >
-                    + Add another range (e.g. lunch + dinner)
+                    + Add another range
                   </button>
                 </div>
               )}
