@@ -19,6 +19,8 @@ import com.chaslay.pos.data.local.entity.DiscountPresetEntity
 import com.chaslay.pos.data.local.entity.PrinterConfigEntity
 import com.chaslay.pos.data.local.entity.KitchenMessageEntity
 import com.chaslay.pos.data.local.entity.RestaurantTableEntity
+import com.chaslay.pos.data.local.entity.FloorPlanElementEntity
+import com.chaslay.pos.data.local.entity.TableFloorEntity
 import com.chaslay.pos.data.local.entity.TableOrderEntity
 import com.chaslay.pos.data.local.entity.TableOrderItemEntity
 import com.chaslay.pos.domain.model.PaymentMethod
@@ -90,6 +92,9 @@ interface CategoryDao {
     @Query("UPDATE categories SET isActive = 0 WHERE id = :id")
     suspend fun deactivate(id: Long)
 
+    @Query("UPDATE categories SET isActive = 0")
+    suspend fun deactivateAll()
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(categories: List<CategoryEntity>)
 
@@ -127,8 +132,17 @@ interface ProductDao {
     @Query("SELECT * FROM products WHERE isActive = 1 ORDER BY sortOrder, name")
     fun observeAllActive(): Flow<List<ProductEntity>>
 
+    @Query("SELECT * FROM products WHERE isActive = 1 AND isCombo = 1 ORDER BY sortOrder, name")
+    fun observeCombos(): Flow<List<ProductEntity>>
+
     @Query("UPDATE products SET isActive = 0 WHERE id = :id")
     suspend fun deactivate(id: Long)
+
+    @Query("UPDATE products SET isActive = 0")
+    suspend fun deactivateAll()
+
+    @Query("SELECT * FROM products WHERE sku = :sku AND isActive = 1 LIMIT 1")
+    suspend fun getBySku(sku: String): ProductEntity?
 
     @Query("SELECT COUNT(*) FROM products")
     suspend fun count(): Int
@@ -371,12 +385,45 @@ interface BusinessSettingsDao {
 }
 
 @Dao
+interface FloorPlanElementDao {
+    @Query("SELECT * FROM floor_plan_elements WHERE floorId = :floorId ORDER BY id")
+    suspend fun getByFloor(floorId: Long): List<FloorPlanElementEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(element: FloorPlanElementEntity): Long
+
+    @Update
+    suspend fun update(element: FloorPlanElementEntity)
+
+    @Query("DELETE FROM floor_plan_elements WHERE id = :id")
+    suspend fun delete(id: Long)
+}
+
+@Dao
+interface TableFloorDao {
+    @Query("SELECT * FROM table_floors WHERE isActive = 1 ORDER BY sortOrder, name")
+    fun observeActive(): Flow<List<TableFloorEntity>>
+
+    @Query("SELECT * FROM table_floors WHERE isActive = 1 ORDER BY sortOrder, name")
+    suspend fun getAllActive(): List<TableFloorEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(floor: TableFloorEntity): Long
+
+    @Update
+    suspend fun update(floor: TableFloorEntity)
+}
+
+@Dao
 interface RestaurantTableDao {
     @Query("SELECT * FROM restaurant_tables WHERE isActive = 1 ORDER BY sortOrder, name")
     fun observeActive(): Flow<List<RestaurantTableEntity>>
 
     @Query("SELECT * FROM restaurant_tables WHERE isActive = 1 ORDER BY sortOrder, name")
     suspend fun getAllActive(): List<RestaurantTableEntity>
+
+    @Query("SELECT * FROM restaurant_tables WHERE isActive = 1 AND floorId = :floorId ORDER BY sortOrder, name")
+    suspend fun getByFloor(floorId: Long): List<RestaurantTableEntity>
 
     @Query("SELECT * FROM restaurant_tables WHERE id = :id LIMIT 1")
     suspend fun getById(id: Long): RestaurantTableEntity?
@@ -386,6 +433,12 @@ interface RestaurantTableDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(tables: List<RestaurantTableEntity>)
+
+    @Update
+    suspend fun update(table: RestaurantTableEntity)
+
+    @Query("UPDATE restaurant_tables SET isActive = 0 WHERE id = :id")
+    suspend fun deactivate(id: Long)
 }
 
 @Dao
@@ -493,6 +546,15 @@ interface TableOrderItemDao {
 
     @Query("SELECT COUNT(*) FROM table_order_items WHERE orderId = :orderId")
     suspend fun countByOrder(orderId: String): Int
+
+    @Query(
+        """
+        UPDATE table_order_items
+        SET orderId = :targetOrderId
+        WHERE id IN (:itemIds)
+        """
+    )
+    suspend fun moveItemsToOrder(itemIds: List<String>, targetOrderId: String)
 
     @Query("DELETE FROM table_order_items")
     suspend fun deleteAll()

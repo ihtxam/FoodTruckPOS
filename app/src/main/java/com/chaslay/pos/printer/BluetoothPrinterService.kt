@@ -199,9 +199,10 @@ class BluetoothPrinterService @Inject constructor(
     fun printReceipt(
         settings: BusinessSettingsEntity,
         transaction: TransactionEntity,
-        items: List<TransactionItemEntity>
+        items: List<TransactionItemEntity>,
+        appendAdyenCustomerReceipt: com.chaslay.pos.payment.AdyenTerminalReceipt? = null
     ): Result<Unit> {
-        val payload = buildEscPosReceipt(settings, transaction, items)
+        val payload = buildEscPosReceipt(settings, transaction, items, appendAdyenCustomerReceipt = appendAdyenCustomerReceipt)
         return sendBytes(settings.printerMacAddress, settings, payload, "Receipt ${transaction.transactionNumber}")
     }
 
@@ -430,17 +431,18 @@ class BluetoothPrinterService @Inject constructor(
     suspend fun routeReceipt(
         settings: BusinessSettingsEntity,
         transaction: TransactionEntity,
-        items: List<TransactionItemEntity>
+        items: List<TransactionItemEntity>,
+        appendAdyenCustomerReceipt: com.chaslay.pos.payment.AdyenTerminalReceipt? = null
     ): Result<Unit> = withContext(Dispatchers.IO) {
         val receiptPrinters = runCatching { printerConfigDao.getAll() }.getOrDefault(emptyList())
             .filter { it.isEnabled && it.printOrderReceipts && it.address.isNotBlank() }
         if (receiptPrinters.isEmpty()) {
-            return@withContext printReceipt(settings, transaction, items)
+            return@withContext printReceipt(settings, transaction, items, appendAdyenCustomerReceipt)
         }
         var last: Result<Unit> = Result.success(Unit)
         for (printer in receiptPrinters) {
             val lineWidth = lineWidthFor(printer.paperWidthMm)
-            val payload = buildEscPosReceipt(settings, transaction, items, lineWidth)
+            val payload = buildEscPosReceipt(settings, transaction, items, lineWidth, appendAdyenCustomerReceipt)
             last = sendBytes(printer.address, settings, payload, "Receipt ${printer.name}")
             if (printer.openCashDrawer) {
                 sendBytes(
@@ -450,6 +452,32 @@ class BluetoothPrinterService @Inject constructor(
                     "Cash drawer"
                 )
             }
+        }
+        last
+    }
+
+    /**
+     * Prints an Adyen Terminal API payment receipt (CustomerReceipt / CashierReceipt)
+     * to every configured order receipt printer.
+     */
+    suspend fun routeAdyenPaymentReceipt(
+        settings: BusinessSettingsEntity,
+        receipt: com.chaslay.pos.payment.AdyenTerminalReceipt
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        val receiptPrinters = runCatching { printerConfigDao.getAll() }.getOrDefault(emptyList())
+            .filter { it.isEnabled && it.printOrderReceipts && it.address.isNotBlank() }
+        val targets = if (receiptPrinters.isEmpty()) {
+            listOf(null)
+        } else {
+            receiptPrinters
+        }
+        var last: Result<Unit> = Result.success(Unit)
+        for (printer in targets) {
+            val lineWidth = printer?.let { lineWidthFor(it.paperWidthMm) } ?: LINE_WIDTH_80
+            val text = com.chaslay.pos.payment.AdyenPaymentReceiptFormatter.toPlainText(receipt, lineWidth)
+            val payload = finalizePayload(text, settings, lineWidth, receiptUrl = null)
+            val address = printer?.address ?: settings.printerMacAddress
+            last = sendBytes(address, settings, payload, "Adyen ${receipt.documentQualifier}")
         }
         last
     }
@@ -721,7 +749,8 @@ class BluetoothPrinterService @Inject constructor(
         settings: BusinessSettingsEntity,
         transaction: TransactionEntity,
         items: List<TransactionItemEntity>,
-        lineWidth: Int = LINE_WIDTH_80
+        lineWidth: Int = LINE_WIDTH_80,
+        appendAdyenCustomerReceipt: com.chaslay.pos.payment.AdyenTerminalReceipt? = null
     ): ByteArray {
         val sb = StringBuilder()
         val labels = ReceiptLabels.forLanguage(settings.defaultLanguage)
@@ -819,7 +848,19 @@ class BluetoothPrinterService @Inject constructor(
             sb.appendLine(center("-".repeat(lineWidth.coerceAtMost(32)), lineWidth))
             sb.appendLine(center(labels.scanDigitalReceipt, lineWidth))
         }
+        appendAdyenCustomerReceipt?.let { receipt ->
+            appendAdyenCustomerReceiptBlock(sb, receipt, lineWidth)
+        }
         return finalizePayload(sb.toString(), settings, lineWidth, qrUrl)
+    }
+
+    private fun appendAdyenCustomerReceiptBlock(
+        sb: StringBuilder,
+        receipt: com.chaslay.pos.payment.AdyenTerminalReceipt,
+        lineWidth: Int
+    ) {
+        sb.appendLine(center("-".repeat(lineWidth.coerceAtMost(32)), lineWidth))
+        sb.append(com.chaslay.pos.payment.AdyenPaymentReceiptFormatter.toPlainText(receipt, lineWidth))
     }
 
     private fun buildEndOfDayReport(
@@ -883,6 +924,9 @@ class BluetoothPrinterService @Inject constructor(
             sb.appendLine(leftRight("GRAND TOTAL", formatMoney(report.grandTotal, sym), lineWidth))
         }
         sb.appendLine(leftRight("Orders", report.salesCount.toString(), lineWidth))
+        report.coversServed?.let { covers ->
+            sb.appendLine(leftRight("Guests served", covers.toString(), lineWidth))
+        }
         sb.appendLine("")
 
         sb.appendLine(dashes)
@@ -1297,9 +1341,14 @@ class BluetoothPrinterService @Inject constructor(
     }
 
     private fun appendKitchenNotes(sb: StringBuilder, notes: String?) {
-        notes?.lines()?.map { it.trim() }?.filter { it.isNotBlank() }?.forEach { noteLine ->
+        if (notes.isNullOrBlank()) return
+        val lines = notes.lines().map { it.trim() }.filter { it.isNotBlank() }
+        val startIndex = if (lines.firstOrNull() == com.chaslay.pos.domain.model.COMBO_NOTES_MARKER) 1 else 0
+        lines.drop(startIndex).forEach { noteLine ->
             if (isKitchenDiscountNote(noteLine)) return@forEach
             if (kitchenQtyLine.containsMatchIn(noteLine)) {
+                sb.appendLine("  $noteLine")
+            } else if (noteLine.contains(":")) {
                 sb.appendLine("  $noteLine")
             } else {
                 sb.appendLine("  Note: $noteLine")

@@ -222,6 +222,9 @@ private fun EndOfDayTab(report: EndOfDayReport, currency: String, onPrint: () ->
             ReportRow("Grand total", formatMoney(report.grandTotal, currency))
         }
         ReportRow(stringResource(R.string.transactions), report.salesCount.toString())
+        report.coversServed?.let { covers ->
+            ReportRow(stringResource(R.string.covers_served), covers.toString())
+        }
 
         Spacer(modifier = Modifier.height(4.dp))
         Text("PAYMENT METHODS", fontWeight = FontWeight.Bold)

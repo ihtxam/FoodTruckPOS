@@ -197,24 +197,38 @@ data class CartItem(
     val splitCheck: Int = 1,
     val modifiers: List<SelectedModifier> = emptyList(),
     val addons: List<SelectedAddon> = emptyList(),
-    val vatIncludedInPrice: Boolean = false
+    val vatIncludedInPrice: Boolean = false,
+    /** When true, [quantity] stores grams and [unitPrice] is per kg. */
+    val isWeighed: Boolean = false,
+    val isCombo: Boolean = false,
+    val comboSelections: List<ComboSelection> = emptyList()
 ) {
     val catalogUnitPrice: Double get() = originalUnitPrice ?: unitPrice
-    val lineSubtotal: Double get() = unitPrice * quantity
-    val lineDiscount: Double get() = lineDiscountPerUnit * quantity
+    val weightKg: Double? get() = if (isWeighed) quantity / 1000.0 else null
+    val lineSubtotal: Double get() = if (isWeighed) unitPrice * (quantity / 1000.0) else unitPrice * quantity
+    val lineDiscount: Double get() = if (isWeighed) lineDiscountPerUnit * (quantity / 1000.0) else lineDiscountPerUnit * quantity
     val lineTax: Double get() = computeLineTax(lineSubtotal, taxRate, vatIncludedInPrice)
     val lineTotal: Double get() = computeLineTotal(lineSubtotal, taxRate, vatIncludedInPrice)
 
     fun optionNotes(): String? {
         val lines = mutableListOf<String>()
-        modifiers.forEach { lines.add("${it.quantity}x ${it.name}") }
-        addons.forEach { lines.add("${it.quantity}x ${it.name}") }
-        notes?.trim()?.takeIf { it.isNotBlank() }?.let { lines.add(it) }
+        if (isCombo) {
+            lines.add(COMBO_NOTES_MARKER)
+            comboSelections.forEach { lines.add("${it.slotName}: ${it.productName}") }
+        } else {
+            modifiers.forEach { lines.add("${it.quantity}x ${it.name}") }
+            addons.forEach { lines.add("${it.quantity}x ${it.name}") }
+            notes?.trim()?.takeIf { it.isNotBlank() }?.let { lines.add(it) }
+        }
         return lines.joinToString("\n").ifBlank { null }
     }
 
     fun modifierSummary(): String =
-        (modifiers.map { it.name } + addons.map { it.name }).joinToString(", ")
+        if (isCombo) {
+            comboSelections.joinToString(", ") { it.productName }
+        } else {
+            (modifiers.map { it.name } + addons.map { it.name }).joinToString(", ")
+        }
 }
 
 data class CartSummary(
@@ -233,6 +247,7 @@ data class CartSummary(
     val tableId: Long? = null,
     val tableOrderId: String? = null,
     val tableName: String? = null,
+    val guestCount: Int? = null,
     val activeCourse: Int = 1,
     val courseCount: Int = 1,
     val splitCount: Int = 1,
@@ -304,6 +319,8 @@ data class ProductWithVariants(
     val imageUri: String?,
     val isActive: Boolean,
     val isOpenPrice: Boolean,
+    val isWeighed: Boolean = false,
+    val isCombo: Boolean = false,
     val variants: List<ProductVariantModel>
 )
 
@@ -356,6 +373,41 @@ data class ProductCustomizeState(
 data class SelectedModifier(val name: String, val quantity: Int = 1)
 
 data class SelectedAddon(val name: String, val price: Double, val quantity: Int = 1)
+
+data class ComboSelection(val slotName: String, val productId: Long, val productName: String)
+
+data class ComboSlotOptionModel(val id: Long, val productId: Long, val productName: String)
+
+data class ComboSlotModel(
+    val id: Long,
+    val name: String,
+    val minPick: Int,
+    val maxPick: Int,
+    val options: List<ComboSlotOptionModel> = emptyList()
+)
+
+data class ComboMealModel(
+    val product: ProductWithVariants,
+    val slots: List<ComboSlotModel>
+)
+
+data class ComboPickState(val combo: ComboMealModel)
+
+const val COMBO_NOTES_MARKER = "__COMBO__"
+
+fun parseComboSelectionsFromNotes(notes: String?): Pair<Boolean, List<ComboSelection>> {
+    if (notes.isNullOrBlank()) return false to emptyList()
+    val lines = notes.lines().map { it.trim() }.filter { it.isNotBlank() }
+    if (lines.firstOrNull() != COMBO_NOTES_MARKER) return false to emptyList()
+    val selections = lines.drop(1).mapNotNull { line ->
+        val idx = line.indexOf(':')
+        if (idx <= 0) return@mapNotNull null
+        val slot = line.substring(0, idx).trim()
+        val product = line.substring(idx + 1).trim()
+        if (slot.isBlank() || product.isBlank()) null else ComboSelection(slot, 0L, product)
+    }
+    return true to selections
+}
 
 data class OptionChoice(val name: String, val price: Double = 0.0)
 
@@ -431,6 +483,30 @@ data class OngoingOrderCard(
     val updatedAt: Long
 )
 
+enum class FloorPlanElementType(val apiValue: String) {
+    WALL("WALL"),
+    BAR("BAR"),
+    OBSTACLE("OBSTACLE");
+
+    companion object {
+        fun fromApi(value: String?): FloorPlanElementType = entries.find {
+            it.apiValue.equals(value, ignoreCase = true)
+        } ?: WALL
+    }
+}
+
+enum class TableShape(val apiValue: String) {
+    ROUND("ROUND"),
+    SQUARE("SQUARE"),
+    RECT("RECT");
+
+    companion object {
+        fun fromApi(value: String?): TableShape = entries.find {
+            it.apiValue.equals(value, ignoreCase = true)
+        } ?: ROUND
+    }
+}
+
 data class TableWithOrderInfo(
     val id: Long,
     val name: String,
@@ -440,8 +516,19 @@ data class TableWithOrderInfo(
     val unsentItemCount: Int,
     val sentItemCount: Int,
     val orderTotal: Double,
-    val status: TableStatus = TableStatus.FREE
-)
+    val status: TableStatus = TableStatus.FREE,
+    val floorId: Long = 1,
+    val seatCapacity: Int = 4,
+    val planX: Float = 0f,
+    val planY: Float = 0f,
+    val planWidth: Float = 0.12f,
+    val planHeight: Float = 0.12f,
+    val shape: String = "ROUND",
+    val rotation: Float = 0f,
+    val guestCount: Int? = null
+) {
+    val hasPlanPosition: Boolean get() = planX > 0f || planY > 0f
+}
 
 data class KitchenMessagePreset(
     val label: String,
@@ -498,7 +585,9 @@ data class EndOfDayReport(
     val dineInCount: Int,
     val takeawayTotal: Double,
     val takeawayCount: Int,
-    val productsSold: List<ProductSalesReport> = emptyList()
+    val productsSold: List<ProductSalesReport> = emptyList(),
+    /** Sum of guest/cover counts from dine-in transactions (when seating plan tracking enabled). */
+    val coversServed: Int? = null
 )
 
 data class DiscountPreset(

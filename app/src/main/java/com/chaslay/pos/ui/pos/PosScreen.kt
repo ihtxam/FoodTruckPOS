@@ -49,6 +49,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -150,6 +151,10 @@ import com.chaslay.pos.domain.model.applyCashRounding
 import com.chaslay.pos.ui.theme.VectronColors
 import com.chaslay.pos.ui.theme.vectronColors
 import com.chaslay.pos.ui.theme.categoryColor
+import com.chaslay.pos.ui.tableplan.FloorPlanCanvas
+import com.chaslay.pos.ui.tableplan.FloorPlanElementDisplay
+import com.chaslay.pos.ui.tableplan.GuestCountDialog
+import com.chaslay.pos.ui.tableplan.toFloorPlanDisplay
 import java.util.Date
 import kotlinx.coroutines.delay
 
@@ -237,7 +242,11 @@ fun PosScreen(
                 successMessage = state.successMessage,
                 receiptPublicUrl = state.receiptPublicUrl,
                 orderCompleteNotice = state.orderCompleteNotice,
+                showAdyenPaymentReceipt = state.adyenCustomerReceipt != null,
+                showAdyenCashierReceipt = state.adyenCashierReceipt != null,
                 onPrintReceipt = viewModel::printCompletedReceipt,
+                onPrintAdyenPaymentReceipt = viewModel::printAdyenCustomerReceipt,
+                onPrintAdyenCashierReceipt = viewModel::printAdyenCashierReceipt,
                 onShareEmail = viewModel::openReceiptEmailDialog,
                 onDone = viewModel::dismissOrderComplete
             )
@@ -289,7 +298,11 @@ fun PosScreen(
             successMessage = state.successMessage,
             receiptPublicUrl = state.receiptPublicUrl,
             orderCompleteNotice = state.orderCompleteNotice,
+            showAdyenPaymentReceipt = state.adyenCustomerReceipt != null,
+            showAdyenCashierReceipt = state.adyenCashierReceipt != null,
             onPrintReceipt = viewModel::printCompletedReceipt,
+            onPrintAdyenPaymentReceipt = viewModel::printAdyenCustomerReceipt,
+            onPrintAdyenCashierReceipt = viewModel::printAdyenCashierReceipt,
             onShareEmail = viewModel::openReceiptEmailDialog,
             onDone = viewModel::dismissOrderComplete
         )
@@ -318,21 +331,7 @@ fun PosScreen(
             }
         }
 
-        OdooPosNavBar(
-            businessName = state.settings.businessName,
-            userAccess = userAccess,
-            selectedTab = mainTab,
-            isRestaurantMode = isRestaurantMode,
-            showTabs = false,
-            onTabSelected = { tab ->
-                when (tab) {
-                    PosMainTab.ORDERS -> mainTab = PosMainTab.ORDERS
-                    PosMainTab.REGISTER, PosMainTab.TABLES -> mainTab = tab
-                }
-            },
-            onNavigate = onNavigate,
-            onLogout = onLogout
-        )
+        OdooPosNavBar(businessName = state.settings.businessName)
         LicenseRenewalBanner(licenseState)
 
         Row(modifier = Modifier.weight(1f)) {
@@ -367,6 +366,7 @@ fun PosScreen(
                 PosMainTab.TABLES -> {
                     OdooTablesScreen(
                         tables = state.tables,
+                        floorElementsByFloorId = state.floorElementsByFloorId,
                         currencySymbol = state.currencySymbol,
                         activeTableName = state.activeTableName,
                         modifier = Modifier.weight(1f).fillMaxHeight(),
@@ -420,8 +420,8 @@ fun PosScreen(
                         onPickup = viewModel::showPickupOrderDialog,
                         onDelivery = viewModel::showDeliveryOrderDialog,
                         isRestaurantMode = isRestaurantMode,
-                        selectedTab = mainTab,
-                        onTabSelected = { mainTab = it },
+                        onMoveEntireTable = viewModel::startMoveEntireTable,
+                        onMoveDishes = viewModel::startMoveDishes,
                         modifier = Modifier
                             .width(304.dp)
                             .fillMaxHeight()
@@ -461,6 +461,30 @@ fun PosScreen(
                 }
             }
         }
+
+        PosBottomActionBar(
+            isRestaurantMode = isRestaurantMode,
+            selectedTab = mainTab,
+            onTabSelected = { tab ->
+                when (tab) {
+                    PosMainTab.ORDERS -> mainTab = PosMainTab.ORDERS
+                    PosMainTab.REGISTER, PosMainTab.TABLES -> mainTab = tab
+                }
+            },
+            userAccess = userAccess,
+            onNavigate = onNavigate,
+            onLogout = onLogout
+        )
+    }
+
+    if (state.showGuestCountDialog) {
+        GuestCountDialog(
+            tableName = state.guestCountTableName,
+            seatCapacity = state.guestCountSeatCapacity,
+            initialCount = state.guestCountDefault,
+            onConfirm = viewModel::confirmGuestCount,
+            onDismiss = viewModel::dismissGuestCountDialog
+        )
     }
 
     if (state.showTablePicker && isRestaurantMode) {
@@ -470,6 +494,34 @@ fun PosScreen(
             onSelectTable = viewModel::openTable,
             onWalkIn = viewModel::switchToWalkIn,
             onDismiss = viewModel::dismissTablePicker
+        )
+    }
+
+    if (state.showTableTransferItemsDialog) {
+        TableTransferItemsDialog(
+            items = state.cart.items,
+            selectedIds = state.tableTransferSelectedIds,
+            currencySymbol = state.currencySymbol,
+            onToggleItem = viewModel::toggleTableTransferItem,
+            onConfirm = viewModel::confirmTableTransferItems,
+            onDismiss = viewModel::dismissTableTransferItemsDialog
+        )
+    }
+
+    if (state.showTableTransferDestDialog && state.tableTransferMode != null) {
+        val sourceTableId = state.cart.tableId
+        TableTransferDestinationDialog(
+            tables = state.tables.filter { it.id != sourceTableId },
+            currencySymbol = state.currencySymbol,
+            title = stringResource(
+                if (state.tableTransferMode == TableTransferMode.ENTIRE_TABLE) {
+                    R.string.move_table_to
+                } else {
+                    R.string.move_dishes_to
+                }
+            ),
+            onSelectTable = viewModel::confirmTableTransferDestination,
+            onDismiss = viewModel::dismissTableTransferDestDialog
         )
     }
 
@@ -595,12 +647,33 @@ fun PosScreen(
         )
     }
 
+    if (state.showWeighedProductDialog && state.selectedProduct != null) {
+        WeighedProductDialog(
+            productName = state.selectedProduct!!.name,
+            pricePerKg = state.selectedProduct!!.price,
+            currencySymbol = state.currencySymbol,
+            scaleEnabled = state.settings.scaleEnabled,
+            reading = state.scaleReading,
+            onConfirm = viewModel::addWeighedProductToCart,
+            onDismiss = viewModel::dismissWeighedProductDialog
+        )
+    }
+
     state.productCustomize?.let { customize ->
         ProductCustomizeDialog(
             state = customize,
             currencySymbol = state.currencySymbol,
             onAdd = viewModel::addCustomizedProduct,
             onDismiss = viewModel::dismissProductCustomize
+        )
+    }
+
+    state.comboPick?.let { comboPick ->
+        ComboPickDialog(
+            state = comboPick,
+            currencySymbol = state.currencySymbol,
+            onConfirm = viewModel::addComboToCart,
+            onDismiss = viewModel::dismissComboPick
         )
     }
 
@@ -641,13 +714,32 @@ fun PosScreen(
 }
 
 @Composable
-private fun OdooPosNavBar(
-    businessName: String,
-    userAccess: UserAccess,
-    selectedTab: PosMainTab,
+private fun OdooPosNavBar(businessName: String) {
+    val vc = vectronColors()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(vc.header)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            businessName,
+            color = vc.textPrimary,
+            fontWeight = FontWeight.Bold,
+            fontSize = 15.sp,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+@Composable
+private fun PosBottomActionBar(
     isRestaurantMode: Boolean,
-    showTabs: Boolean,
+    selectedTab: PosMainTab,
     onTabSelected: (PosMainTab) -> Unit,
+    userAccess: UserAccess,
     onNavigate: (String) -> Unit,
     onLogout: () -> Unit
 ) {
@@ -660,66 +752,75 @@ private fun OdooPosNavBar(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            if (showTabs) {
-                if (isRestaurantMode) {
-                    OdooNavTab(
-                        label = stringResource(R.string.tables),
-                        selected = selectedTab == PosMainTab.TABLES,
-                        onClick = { onTabSelected(PosMainTab.TABLES) }
-                    )
-                }
-                OdooNavTab(
-                    label = stringResource(R.string.pos_register),
-                    selected = selectedTab == PosMainTab.REGISTER,
-                    onClick = { onTabSelected(PosMainTab.REGISTER) }
-                )
-                OdooNavTab(
-                    label = stringResource(R.string.pos_orders),
-                    selected = selectedTab == PosMainTab.ORDERS,
-                    onClick = { onTabSelected(PosMainTab.ORDERS) }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (isRestaurantMode) {
+                PosBottomTabChip(
+                    label = stringResource(R.string.tables),
+                    icon = Icons.Default.TableRestaurant,
+                    selected = selectedTab == PosMainTab.TABLES,
+                    onClick = { onTabSelected(PosMainTab.TABLES) }
                 )
             }
+            PosBottomTabChip(
+                label = stringResource(R.string.pos_register),
+                icon = Icons.Default.PointOfSale,
+                selected = selectedTab == PosMainTab.REGISTER,
+                onClick = { onTabSelected(PosMainTab.REGISTER) }
+            )
         }
-        Text(
-            businessName,
-            color = vc.textPrimary,
-            fontWeight = FontWeight.Bold,
-            fontSize = 14.sp,
-            modifier = Modifier.weight(1f),
-            textAlign = TextAlign.Center
-        )
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             if (userAccess.canAccessSettings() || userAccess.canManageProducts() || userAccess.canAccessReports()) {
                 IconButton(onClick = { onNavigate(AppRoute.Admin.route) }) {
-                    Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.menu), tint = vc.textPrimary)
+                    Icon(
+                        Icons.Default.Settings,
+                        contentDescription = stringResource(R.string.settings),
+                        tint = vc.textPrimary
+                    )
                 }
             }
             IconButton(onClick = onLogout) {
-                Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = stringResource(R.string.logout), tint = vc.textPrimary)
+                Icon(
+                    Icons.AutoMirrored.Filled.Logout,
+                    contentDescription = stringResource(R.string.change_user),
+                    tint = vc.textPrimary
+                )
             }
         }
     }
 }
 
 @Composable
-private fun OdooNavTab(label: String, selected: Boolean, onClick: () -> Unit) {
-    val bg = if (selected) Color(0xFF714B67) else Color.Transparent
-    val textColor = if (selected) Color.White else vectronColors().textPrimary
-    Box(
+private fun PosBottomTabChip(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    val bg = if (selected) Color(0xFF714B67) else Color(0xFF455A64).copy(alpha = 0.45f)
+    Row(
         modifier = Modifier
-            .clip(RoundedCornerShape(6.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(bg)
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 8.dp)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(label, color = textColor, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+        Icon(icon, contentDescription = label, tint = Color.White, modifier = Modifier.size(20.dp))
+        Text(label, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
     }
 }
 
 @Composable
 private fun OdooTablesScreen(
     tables: List<TableWithOrderInfo>,
+    floorElementsByFloorId: Map<Long, List<com.chaslay.pos.data.local.entity.FloorPlanElementEntity>>,
     currencySymbol: String,
     activeTableName: String?,
     modifier: Modifier = Modifier,
@@ -728,19 +829,39 @@ private fun OdooTablesScreen(
 ) {
     val mainFloorLabel = stringResource(R.string.main_floor)
     val patioLabel = stringResource(R.string.patio_floor)
-    val floorPairs = remember(tables, mainFloorLabel, patioLabel) {
-        if (tables.size <= 1) {
+    val floorGroups = remember(tables, mainFloorLabel, patioLabel) {
+        val grouped = tables.groupBy { it.floorId }.toList().sortedBy { it.first }
+        if (grouped.isEmpty()) {
             listOf(mainFloorLabel to tables)
         } else {
-            val split = (tables.size + 1) / 2
-            listOf(
-                mainFloorLabel to tables.take(split),
-                patioLabel to tables.drop(split)
-            )
+            grouped.map { (floorId, floorTables) ->
+                val name = when (floorId) {
+                    1L -> mainFloorLabel
+                    2L -> patioLabel
+                    else -> "Floor $floorId"
+                }
+                name to floorTables
+            }
         }
     }
     var selectedFloor by remember(tables) { mutableIntStateOf(0) }
-    val floorTables = floorPairs.getOrElse(selectedFloor) { floorPairs.first() }.second
+    val floorTables = floorGroups.getOrElse(selectedFloor) { floorGroups.first() }.second
+    val floorId = floorTables.firstOrNull()?.floorId ?: 1L
+    val planElements = floorElementsByFloorId[floorId].orEmpty().map { element ->
+        FloorPlanElementDisplay(
+            id = element.id,
+            elementType = element.elementType,
+            label = element.label,
+            planX = element.planX,
+            planY = element.planY,
+            planWidth = element.planWidth,
+            planHeight = element.planHeight,
+            rotation = element.rotation
+        )
+    }
+    var usePlanView by remember(floorTables) {
+        mutableStateOf(floorTables.any { it.hasPlanPosition })
+    }
 
     Column(
         modifier = modifier
@@ -749,11 +870,26 @@ private fun OdooTablesScreen(
             .padding(12.dp)
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            floorPairs.forEachIndexed { index, (name, _) ->
+            floorGroups.forEachIndexed { index, (name, _) ->
                 FilterChip(
                     selected = selectedFloor == index,
                     onClick = { selectedFloor = index },
                     label = { Text(name, fontSize = 12.sp) }
+                )
+            }
+        }
+        if (floorTables.any { it.hasPlanPosition }) {
+            Spacer(modifier = Modifier.height(6.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = usePlanView,
+                    onClick = { usePlanView = true },
+                    label = { Text(stringResource(R.string.floor_plan_view), fontSize = 12.sp) }
+                )
+                FilterChip(
+                    selected = !usePlanView,
+                    onClick = { usePlanView = false },
+                    label = { Text(stringResource(R.string.grid_view), fontSize = 12.sp) }
                 )
             }
         }
@@ -779,20 +915,34 @@ private fun OdooTablesScreen(
             )
         }
         Spacer(modifier = Modifier.height(8.dp))
-        LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 110.dp),
-            modifier = Modifier.fillMaxSize(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            contentPadding = PaddingValues(bottom = 12.dp)
-        ) {
-            items(floorTables, key = { it.id }) { table ->
-                OdooTableCard(
-                    table = table,
-                    currencySymbol = currencySymbol,
-                    isActive = table.name == activeTableName,
-                    onClick = { onSelectTable(table.id) }
-                )
+        if (usePlanView && floorTables.any { it.hasPlanPosition }) {
+            FloorPlanCanvas(
+                tables = floorTables.map { it.toFloorPlanDisplay(activeTableName, currencySymbol) },
+                elements = planElements,
+                editable = false,
+                selectedTableId = null,
+                onTableClick = onSelectTable,
+                onTableMoved = null,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+            )
+        } else {
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(minSize = 110.dp),
+                modifier = Modifier.fillMaxSize(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                contentPadding = PaddingValues(bottom = 12.dp)
+            ) {
+                items(floorTables, key = { it.id }) { table ->
+                    OdooTableCard(
+                        table = table,
+                        currencySymbol = currencySymbol,
+                        isActive = table.name == activeTableName,
+                        onClick = { onSelectTable(table.id) }
+                    )
+                }
             }
         }
     }
@@ -960,8 +1110,8 @@ private fun VectronOrderPanel(
     onPickup: () -> Unit,
     onDelivery: () -> Unit,
     isRestaurantMode: Boolean,
-    selectedTab: PosMainTab,
-    onTabSelected: (PosMainTab) -> Unit,
+    onMoveEntireTable: () -> Unit = {},
+    onMoveDishes: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val isTableMode = isRestaurantMode && activeTableName != null
@@ -1018,12 +1168,15 @@ private fun VectronOrderPanel(
             CartOrderMenuButton(
                 enabled = !cart.isEmpty,
                 isDineIn = activeTableName != null || serviceType == ServiceType.DINE_IN,
+                isTableMode = isTableMode,
                 canCancelOrder = canCancelOrder,
                 onPrintReceipt = onPrintReceipt,
                 onPrintKitchen = onPrintKitchen,
                 onAddCustomer = onAddCustomer,
                 onChangeOrderType = onChangeOrderType,
-                onCancelOrder = onCancelOrder
+                onCancelOrder = onCancelOrder,
+                onMoveEntireTable = onMoveEntireTable,
+                onMoveDishes = onMoveDishes
             )
             Column(horizontalAlignment = Alignment.End) {
                 Text(stringResource(R.string.receipt), color = Color(0xFF333333), fontWeight = FontWeight.Bold, fontSize = 14.sp)
@@ -1244,12 +1397,15 @@ private fun formatScheduledTimeLabel(timeMs: Long?): String {
 private fun CartOrderMenuButton(
     enabled: Boolean,
     isDineIn: Boolean,
+    isTableMode: Boolean,
     canCancelOrder: Boolean,
     onPrintReceipt: () -> Unit,
     onPrintKitchen: () -> Unit,
     onAddCustomer: () -> Unit,
     onChangeOrderType: () -> Unit,
-    onCancelOrder: () -> Unit
+    onCancelOrder: () -> Unit,
+    onMoveEntireTable: () -> Unit,
+    onMoveDishes: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box {
@@ -1289,6 +1445,22 @@ private fun CartOrderMenuButton(
                     onAddCustomer()
                 }
             )
+            if (isTableMode) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.move_table_to)) },
+                    onClick = {
+                        expanded = false
+                        onMoveEntireTable()
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.move_dishes_to)) },
+                    onClick = {
+                        expanded = false
+                        onMoveDishes()
+                    }
+                )
+            }
             DropdownMenuItem(
                 text = {
                     Text(
@@ -1404,22 +1576,6 @@ private fun CartActionSidebar(
             onClick = onNewOrder
         )
         HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp), color = vc.textSecondary.copy(alpha = 0.3f))
-        if (isRestaurantMode) {
-            CartTabButton(
-                label = stringResource(R.string.tables),
-                icon = Icons.Default.TableRestaurant,
-                baseColor = Color(0xFF00796B),
-                selected = selectedTab == PosMainTab.TABLES,
-                onClick = { onTabSelected(PosMainTab.TABLES) }
-            )
-        }
-        CartTabButton(
-            label = stringResource(R.string.pos_register),
-            icon = Icons.Default.PointOfSale,
-            baseColor = Color(0xFF37474F),
-            selected = selectedTab == PosMainTab.REGISTER,
-            onClick = { onTabSelected(PosMainTab.REGISTER) }
-        )
         CartTabButton(
             label = stringResource(R.string.pos_orders),
             icon = Icons.Default.ReceiptLong,
@@ -1639,7 +1795,11 @@ private fun VectronCartRow(
     ) {
         Column(modifier = Modifier.weight(1f).fillMaxWidth()) {
             Text(
-                "${item.quantity}x ${item.productName}",
+                if (item.isWeighed) {
+                    "${String.format(Locale.getDefault(), "%.3f", item.weightKg ?: 0.0)} kg ${item.productName}"
+                } else {
+                    "${item.quantity}x ${item.productName}"
+                },
                 color = Color(0xFF222222),
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 2,
@@ -2209,6 +2369,157 @@ private fun TablePickerDialog(
 }
 
 @Composable
+private fun TableTransferItemsDialog(
+    items: List<CartItem>,
+    selectedIds: Set<String>,
+    currencySymbol: String,
+    onToggleItem: (String) -> Unit,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.table_transfer_select_dishes)) },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 360.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                items.forEach { item ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onToggleItem(item.id) }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = item.id in selectedIds,
+                            onCheckedChange = { onToggleItem(item.id) }
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "${item.quantity}x ${item.productName}",
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 14.sp
+                            )
+                            item.variantName?.takeIf { it.isNotBlank() }?.let {
+                                Text(it, fontSize = 11.sp, color = Color(0xFF666666))
+                            }
+                            if (item.sentToKitchen) {
+                                Text(
+                                    stringResource(R.string.sent_to_kitchen),
+                                    fontSize = 10.sp,
+                                    color = Color(0xFFE67E22)
+                                )
+                            }
+                        }
+                        Text(
+                            formatMoney(item.lineTotal, currencySymbol),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(stringResource(R.string.confirm))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        }
+    )
+}
+
+@Composable
+private fun TableTransferDestinationDialog(
+    tables: List<TableWithOrderInfo>,
+    currencySymbol: String,
+    title: String,
+    onSelectTable: (Long) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 380.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (tables.isEmpty()) {
+                    Text(stringResource(R.string.table_transfer_same_table))
+                } else {
+                    tables.chunked(3).forEach { row ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            row.forEach { table ->
+                                val bg = when (table.status) {
+                                    TableStatus.OCCUPIED -> Color(0xFFE67E22)
+                                    TableStatus.ACTIVE -> VectronColors.CashGreen.copy(alpha = 0.85f)
+                                    TableStatus.FREE -> VectronColors.KeypadButton
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(64.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(bg)
+                                        .clickable { onSelectTable(table.id) }
+                                        .padding(6.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text(
+                                            table.name,
+                                            color = Color.White,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp
+                                        )
+                                        when (table.status) {
+                                            TableStatus.OCCUPIED, TableStatus.ACTIVE -> {
+                                                Text(
+                                                    "${table.itemCount} \u00B7 ${formatMoney(table.orderTotal, currencySymbol)}",
+                                                    color = Color.White.copy(alpha = 0.9f),
+                                                    fontSize = 10.sp
+                                                )
+                                            }
+                                            TableStatus.FREE -> Unit
+                                        }
+                                    }
+                                }
+                            }
+                            repeat(3 - row.size) {
+                                Spacer(modifier = Modifier.weight(1f))
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        }
+    )
+}
+
+@Composable
 private fun KitchenMessageDialog(
     presets: List<com.chaslay.pos.domain.model.KitchenMessagePreset>,
     onSend: (String) -> Unit,
@@ -2276,6 +2587,68 @@ private fun OpenPriceDialog(
         confirmButton = {
             Button(onClick = { priceText.toDoubleOrNull()?.let(onConfirm) }) {
                 Text(stringResource(R.string.add_to_cart))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+        }
+    )
+}
+
+@Composable
+private fun WeighedProductDialog(
+    productName: String,
+    pricePerKg: Double,
+    currencySymbol: String,
+    scaleEnabled: Boolean,
+    reading: com.chaslay.pos.scale.AclasScaleReading?,
+    onConfirm: (Double) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val weightKg = reading?.weightKg ?: 0.0
+    val stable = reading?.status == com.chaslay.pos.scale.AclasScaleStatus.STABLE
+    val total = pricePerKg * weightKg.coerceAtLeast(0.0)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.weighed_product_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(productName, fontWeight = FontWeight.Bold)
+                Text(
+                    "${formatMoney(pricePerKg, currencySymbol)} / kg",
+                    color = Color.Gray,
+                    fontSize = 14.sp
+                )
+                if (!scaleEnabled) {
+                    Text(stringResource(R.string.scale_not_connected), color = Color(0xFFB91C1C), fontSize = 13.sp)
+                } else if (reading == null) {
+                    Text(stringResource(R.string.scale_place_item), color = Color.Gray, fontSize = 13.sp)
+                } else {
+                    Text(
+                        com.chaslay.pos.scale.AclasScaleProtocol.formatWeight(weightKg),
+                        fontSize = 32.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        if (stable) stringResource(R.string.scale_stable) else stringResource(R.string.scale_unstable),
+                        color = if (stable) Color(0xFF16A085) else Color(0xFFE67E22),
+                        fontSize = 13.sp
+                    )
+                    Text(
+                        "Total: ${formatMoney(total, currencySymbol)}",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(weightKg) },
+                enabled = scaleEnabled && stable && weightKg > 0.0
+            ) {
+                Text(stringResource(R.string.add_weighed_to_cart))
             }
         },
         dismissButton = {

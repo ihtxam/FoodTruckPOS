@@ -16,6 +16,7 @@ import com.chaslay.pos.ui.auth.LoginScreen
 import com.chaslay.pos.ui.ongoing.OngoingOrdersScreen
 import com.chaslay.pos.ui.orderhistory.OrderHistoryScreen
 import com.chaslay.pos.ui.pos.PosScreen
+import com.chaslay.pos.ui.waiter.WaiterPosScreen
 
 sealed class AppRoute(val route: String) {
     data object Login : AppRoute("login")
@@ -46,18 +47,25 @@ fun ChaslayNavHost(
                 .padding(padding)
         ) {
             composable(AppRoute.Pos.route) {
-                PosScreen(
-                    userAccess = userAccess,
-                    onNavigate = { route ->
-                        navController.navigate(route) {
-                            launchSingleTop = true
-                        }
-                    },
-                    onBackToPos = {
-                        navController.popBackStack(AppRoute.Pos.route, inclusive = false)
-                    },
-                    onLogout = { authViewModel.logout() }
-                )
+                if (userAccess.isWaiterProfile()) {
+                    WaiterPosScreen(
+                        userAccess = userAccess,
+                        onLogout = { authViewModel.logout() }
+                    )
+                } else {
+                    PosScreen(
+                        userAccess = userAccess,
+                        onNavigate = { route ->
+                            navController.navigate(route) {
+                                launchSingleTop = true
+                            }
+                        },
+                        onBackToPos = {
+                            navController.popBackStack(AppRoute.Pos.route, inclusive = false)
+                        },
+                        onLogout = { authViewModel.logout() }
+                    )
+                }
             }
             composable(AppRoute.OrderHistory.route) {
                 if (userAccess.canViewOrderHistory()) {

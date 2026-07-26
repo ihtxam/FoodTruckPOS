@@ -1,6 +1,7 @@
 package com.chaslay.pos.di
 
 import com.chaslay.pos.BuildConfig
+import com.chaslay.pos.data.remote.FloorApi
 import com.chaslay.pos.data.remote.LicenseApi
 import com.chaslay.pos.data.remote.PosAuthApi
 import com.chaslay.pos.data.remote.SyncApi
@@ -57,6 +58,10 @@ object NetworkModule {
     @Provides
     @Singleton
     fun provideSyncApi(retrofit: Retrofit): SyncApi = retrofit.create(SyncApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideFloorApi(retrofit: Retrofit): FloorApi = retrofit.create(FloorApi::class.java)
 
     @Provides
     @Singleton

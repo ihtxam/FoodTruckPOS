@@ -57,6 +57,16 @@ data class UserAccess(
     fun canManageTakeaway(): Boolean = has(PosPermission.TAKEAWAY_ORDERS)
     fun canManageTables(): Boolean = has(PosPermission.MANAGE_TABLES)
 
+    /** Waiter profile: simplified mobile UI, floor sync client. */
+    fun isWaiterProfile(): Boolean =
+        roleName.equals("Waiter", ignoreCase = true) ||
+            roleName.equals("Kellner", ignoreCase = true) ||
+            roleName.equals("Serveur", ignoreCase = true) ||
+            roleName.equals("Cameriere", ignoreCase = true)
+
+    /** Main POS station that runs connected receipt/kitchen printers. */
+    fun isMainPosStation(): Boolean = !isWaiterProfile() && has(PosPermission.ACCESS_SETTINGS)
+
     companion object {
         val FULL_ACCESS = UserAccess(
             roleId = 1,

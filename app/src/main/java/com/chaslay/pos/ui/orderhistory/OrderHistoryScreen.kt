@@ -24,7 +24,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Print
+import androidx.compose.material.icons.filled.Receipt
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
@@ -35,6 +37,7 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
@@ -61,6 +64,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.chaslay.pos.R
 import com.chaslay.pos.data.local.entity.TransactionEntity
+import com.chaslay.pos.payment.AdyenPaymentReceiptStorage
 import com.chaslay.pos.domain.model.PaymentMethod
 import com.chaslay.pos.domain.model.PaymentStatus
 import com.chaslay.pos.domain.model.ServiceType
@@ -138,6 +142,8 @@ fun OrderHistoryScreen(
             canDelete = state.deleteModeUnlocked && state.isAdminUser,
             onDismiss = viewModel::closeOrderDetail,
             onPrint = viewModel::printSelectedOrder,
+            onPrintCustomerCard = viewModel::printAdyenCustomerReceiptForSelected,
+            onPrintMerchantCard = viewModel::printAdyenCashierReceiptForSelected,
             onPrintAllSplits = viewModel::printAllSplitOrders,
             onPrintSplit = viewModel::printSplitOrder,
             onCancel = viewModel::showCancelDialog,
@@ -716,6 +722,8 @@ private fun OrderDetailDialog(
     canDelete: Boolean,
     onDismiss: () -> Unit,
     onPrint: () -> Unit,
+    onPrintCustomerCard: () -> Unit,
+    onPrintMerchantCard: () -> Unit,
     onPrintAllSplits: () -> Unit,
     onPrintSplit: (String) -> Unit,
     onCancel: () -> Unit,
@@ -723,6 +731,8 @@ private fun OrderDetailDialog(
     onDelete: () -> Unit
 ) {
     val isSplit = splitOrders.size > 1
+    val hasCustomerCard = AdyenPaymentReceiptStorage.customerReceipt(order) != null
+    val hasMerchantCard = AdyenPaymentReceiptStorage.cashierReceipt(order) != null
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
@@ -742,6 +752,33 @@ private fun OrderDetailDialog(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
+                if (hasCustomerCard || hasMerchantCard) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        if (hasCustomerCard) {
+                            OutlinedButton(
+                                onClick = onPrintCustomerCard,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(Icons.Default.CreditCard, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(stringResource(R.string.print_customer_card_receipt), fontSize = 11.sp, maxLines = 2)
+                            }
+                        }
+                        if (hasMerchantCard) {
+                            OutlinedButton(
+                                onClick = onPrintMerchantCard,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(Icons.Default.Receipt, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(stringResource(R.string.print_merchant_card_receipt), fontSize = 11.sp, maxLines = 2)
+                            }
+                        }
+                    }
+                }
                 Text("Payment: ${order.paymentMethod.name}", fontSize = 12.sp)
                 if (isSplit) {
                     Row(

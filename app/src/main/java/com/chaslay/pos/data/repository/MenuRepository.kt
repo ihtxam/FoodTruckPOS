@@ -3,6 +3,8 @@ package com.chaslay.pos.data.repository
 import com.chaslay.pos.data.local.dao.AddonGroupDao
 import com.chaslay.pos.data.local.dao.AddonOptionDao
 import com.chaslay.pos.data.local.dao.CategoryDao
+import com.chaslay.pos.data.local.dao.ComboSlotDao
+import com.chaslay.pos.data.local.dao.ComboSlotOptionDao
 import com.chaslay.pos.data.local.dao.ModifierGroupDao
 import com.chaslay.pos.data.local.dao.ModifierOptionDao
 import com.chaslay.pos.data.local.dao.ProductAddonGroupDao
@@ -12,6 +14,8 @@ import com.chaslay.pos.data.local.dao.ProductVariantDao
 import com.chaslay.pos.data.local.entity.AddonGroupEntity
 import com.chaslay.pos.data.local.entity.AddonOptionEntity
 import com.chaslay.pos.data.local.entity.CategoryEntity
+import com.chaslay.pos.data.local.entity.ComboSlotEntity
+import com.chaslay.pos.data.local.entity.ComboSlotOptionEntity
 import com.chaslay.pos.data.local.entity.ModifierGroupEntity
 import com.chaslay.pos.data.local.entity.ModifierOptionEntity
 import com.chaslay.pos.data.local.entity.ProductAddonGroupEntity
@@ -20,6 +24,10 @@ import com.chaslay.pos.data.local.entity.ProductModifierGroupEntity
 import com.chaslay.pos.data.local.entity.ProductVariantEntity
 import com.chaslay.pos.domain.model.AddonGroupModel
 import com.chaslay.pos.domain.model.AddonOptionModel
+import com.chaslay.pos.domain.model.ComboMealModel
+import com.chaslay.pos.domain.model.ComboSlotModel
+import com.chaslay.pos.domain.model.ComboSlotOptionModel
+import com.chaslay.pos.domain.model.ProductWithVariants
 import com.chaslay.pos.domain.model.ModifierGroupModel
 import com.chaslay.pos.domain.model.ModifierOptionModel
 import kotlinx.coroutines.flow.Flow
@@ -37,8 +45,11 @@ class MenuRepository @Inject constructor(
     private val productAddonGroupDao: ProductAddonGroupDao,
     private val productDao: ProductDao,
     private val productVariantDao: ProductVariantDao,
-    private val categoryDao: CategoryDao
+    private val categoryDao: CategoryDao,
+    private val comboSlotDao: ComboSlotDao,
+    private val comboSlotOptionDao: ComboSlotOptionDao
 ) {
+    fun observeComboProducts(): Flow<List<ProductEntity>> = productDao.observeCombos()
     fun observeModifierGroups(): Flow<List<ModifierGroupEntity>> = modifierGroupDao.observeActive()
 
     fun observeAddonGroups(): Flow<List<AddonGroupEntity>> = addonGroupDao.observeActive()
@@ -203,6 +214,88 @@ class MenuRepository @Inject constructor(
     suspend fun getAllProducts(): List<ProductEntity> = productDao.observeAllActive().first()
 
     suspend fun getAllCategories(): List<CategoryEntity> = categoryDao.observeActive().first()
+
+    data class ComboSlotDraft(
+        val name: String,
+        val minPick: Int,
+        val maxPick: Int,
+        val productIds: List<Long>
+    )
+
+    suspend fun getComboMeal(comboProductId: Long): ComboMealModel? {
+        val product = productDao.getById(comboProductId) ?: return null
+        if (!product.isCombo) return null
+        val categoryName = product.categoryId?.let { cid ->
+            categoryDao.observeActive().first().find { it.id == cid }?.name
+        }
+        val slots = comboSlotDao.getByComboProduct(comboProductId).map { slot ->
+            val options = comboSlotOptionDao.getBySlot(slot.id).mapNotNull { opt ->
+                val p = productDao.getById(opt.productId) ?: return@mapNotNull null
+                ComboSlotOptionModel(opt.id, p.id, p.name)
+            }
+            ComboSlotModel(slot.id, slot.name, slot.minPick, slot.maxPick, options)
+        }
+        return ComboMealModel(
+            product = product.toComboModel(categoryName),
+            slots = slots
+        )
+    }
+
+    suspend fun saveComboMeal(
+        product: ProductEntity,
+        slots: List<ComboSlotDraft>
+    ): Long {
+        val comboProduct = product.copy(isCombo = true, isOpenPrice = false, isWeighed = false)
+        val productId = if (comboProduct.id == 0L) {
+            productDao.insert(comboProduct)
+        } else {
+            productDao.update(comboProduct.copy(updatedAt = System.currentTimeMillis()))
+            comboProduct.id
+        }
+        comboSlotOptionDao.deleteByComboProduct(productId)
+        comboSlotDao.deleteByComboProduct(productId)
+        slots.forEachIndexed { slotIndex, draft ->
+            if (draft.name.isBlank()) return@forEachIndexed
+            val slotId = comboSlotDao.insert(
+                ComboSlotEntity(
+                    comboProductId = productId,
+                    name = draft.name.trim(),
+                    minPick = draft.minPick.coerceAtLeast(0),
+                    maxPick = draft.maxPick.coerceAtLeast(1),
+                    sortOrder = slotIndex
+                )
+            )
+            val options = draft.productIds.mapIndexed { optIndex, pid ->
+                ComboSlotOptionEntity(slotId = slotId, productId = pid, sortOrder = optIndex)
+            }
+            if (options.isNotEmpty()) comboSlotOptionDao.insertAll(options)
+        }
+        return productId
+    }
+
+    suspend fun deleteComboMeal(productId: Long) {
+        comboSlotOptionDao.deleteByComboProduct(productId)
+        comboSlotDao.deleteByComboProduct(productId)
+        productDao.deactivate(productId)
+    }
+
+    private fun ProductEntity.toComboModel(categoryName: String?) = ProductWithVariants(
+        id = id,
+        name = name,
+        sku = sku,
+        barcode = barcode,
+        categoryId = categoryId,
+        categoryName = categoryName,
+        taxRate = taxRate,
+        price = price,
+        costPrice = costPrice,
+        imageUri = imageUri,
+        isActive = isActive,
+        isOpenPrice = isOpenPrice,
+        isWeighed = isWeighed,
+        isCombo = isCombo,
+        variants = emptyList()
+    )
 
     private fun ModifierGroupEntity.toModel(options: List<ModifierOptionModel>, productIds: List<Long>) =
         ModifierGroupModel(

@@ -63,7 +63,11 @@ fun OrderCompleteDialog(
     successMessage: String? = null,
     receiptPublicUrl: String? = null,
     orderCompleteNotice: String? = null,
+    showAdyenPaymentReceipt: Boolean = false,
+    showAdyenCashierReceipt: Boolean = false,
     onPrintReceipt: () -> Unit,
+    onPrintAdyenPaymentReceipt: () -> Unit = {},
+    onPrintAdyenCashierReceipt: () -> Unit = {},
     onShareEmail: () -> Unit = {},
     onDone: () -> Unit
 ) {
@@ -222,6 +226,28 @@ fun OrderCompleteDialog(
                                 modifier = Modifier.weight(1f),
                                 verticalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
+                                if (showAdyenPaymentReceipt) {
+                                    OutlinedButton(
+                                        onClick = onPrintAdyenPaymentReceipt,
+                                        modifier = Modifier.fillMaxWidth().height(52.dp),
+                                        shape = RoundedCornerShape(14.dp)
+                                    ) {
+                                        Icon(Icons.Default.CreditCard, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(stringResource(R.string.print_customer_card_receipt), fontSize = 13.sp)
+                                    }
+                                }
+                                if (showAdyenCashierReceipt) {
+                                    OutlinedButton(
+                                        onClick = onPrintAdyenCashierReceipt,
+                                        modifier = Modifier.fillMaxWidth().height(52.dp),
+                                        shape = RoundedCornerShape(14.dp)
+                                    ) {
+                                        Icon(Icons.Default.Receipt, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(stringResource(R.string.print_merchant_card_receipt), fontSize = 13.sp)
+                                    }
+                                }
                                 OutlinedButton(
                                     onClick = onPrintReceipt,
                                     modifier = Modifier.fillMaxWidth().height(52.dp),
@@ -229,7 +255,14 @@ fun OrderCompleteDialog(
                                 ) {
                                     Icon(Icons.Default.Print, contentDescription = null, modifier = Modifier.size(18.dp))
                                     Spacer(modifier = Modifier.width(8.dp))
-                                    Text(stringResource(R.string.print_receipt), fontSize = 13.sp)
+                                    Text(
+                                        if (showAdyenPaymentReceipt) {
+                                            stringResource(R.string.print_receipt_with_card_copy)
+                                        } else {
+                                            stringResource(R.string.print_receipt)
+                                        },
+                                        fontSize = 13.sp
+                                    )
                                 }
                                 OutlinedButton(
                                     onClick = onShareEmail,
@@ -245,14 +278,44 @@ fun OrderCompleteDialog(
                     }
                 } else {
                     Spacer(modifier = Modifier.height(16.dp))
-                    OutlinedButton(
-                        onClick = onPrintReceipt,
-                        modifier = Modifier.fillMaxWidth().height(52.dp),
-                        shape = RoundedCornerShape(14.dp)
-                    ) {
-                        Icon(Icons.Default.Print, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(stringResource(R.string.print_receipt))
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        if (showAdyenPaymentReceipt) {
+                            OutlinedButton(
+                                onClick = onPrintAdyenPaymentReceipt,
+                                modifier = Modifier.fillMaxWidth().height(52.dp),
+                                shape = RoundedCornerShape(14.dp)
+                            ) {
+                                Icon(Icons.Default.CreditCard, contentDescription = null)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(stringResource(R.string.print_customer_card_receipt))
+                            }
+                        }
+                        if (showAdyenCashierReceipt) {
+                            OutlinedButton(
+                                onClick = onPrintAdyenCashierReceipt,
+                                modifier = Modifier.fillMaxWidth().height(52.dp),
+                                shape = RoundedCornerShape(14.dp)
+                            ) {
+                                Icon(Icons.Default.Receipt, contentDescription = null)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(stringResource(R.string.print_merchant_card_receipt))
+                            }
+                        }
+                        OutlinedButton(
+                            onClick = onPrintReceipt,
+                            modifier = Modifier.fillMaxWidth().height(52.dp),
+                            shape = RoundedCornerShape(14.dp)
+                        ) {
+                            Icon(Icons.Default.Print, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                if (showAdyenPaymentReceipt) {
+                                    stringResource(R.string.print_receipt_with_card_copy)
+                                } else {
+                                    stringResource(R.string.print_receipt)
+                                }
+                            )
+                        }
                     }
                 }
 

@@ -14,6 +14,8 @@ import com.chaslay.pos.debug.CrashLogger
 import com.chaslay.pos.domain.model.AppLanguage
 import androidx.annotation.StringRes
 import com.chaslay.pos.R
+import com.chaslay.pos.domain.model.FloorConnectionMode
+import com.chaslay.pos.domain.model.FloorDeviceRole
 import com.chaslay.pos.domain.model.PosMode
 import com.chaslay.pos.domain.model.PosThemeMode
 import com.chaslay.pos.domain.model.CategoryPrintSetting
@@ -37,6 +39,11 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.chaslay.pos.sync.FloorLanServer
+import com.chaslay.pos.sync.NetworkAddress
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
 data class PrinterLinkProduct(val id: Long, val name: String)
@@ -48,6 +55,7 @@ enum class SettingsSection(@StringRes val titleRes: Int) {
     PAYMENTS(R.string.settings_section_payments),
     PRINTERS(R.string.settings_section_printers),
     RECEIPTS(R.string.settings_section_receipts),
+    FLOOR_DEVICES(R.string.settings_section_floor_devices),
     USERS_ACCOUNTS(R.string.settings_section_users),
     APPEARANCE(R.string.settings_section_appearance),
     LICENSE(R.string.settings_section_license)
@@ -112,6 +120,10 @@ data class SettingsUiState(
     val editingPrinter: com.chaslay.pos.data.local.entity.PrinterConfigEntity? = null,
     val linkCategories: List<PrinterLinkCategory> = emptyList(),
     val usbDevices: List<UsbPrinterDevice> = emptyList(),
+    val scaleEnabled: Boolean = false,
+    val scaleUsbAddress: String? = null,
+    val scaleDevices: List<com.chaslay.pos.scale.ScaleUsbDevice> = emptyList(),
+    val scaleTestReading: String? = null,
     val message: String? = null,
     val selectedSection: SettingsSection = SettingsSection.GENERAL,
     val posThemeMode: PosThemeMode = PosThemeMode.LIGHT,
@@ -123,7 +135,15 @@ data class SettingsUiState(
     val openHour: String = "10",
     val openMinute: String = "0",
     val closeHour: String = "22",
-    val closeMinute: String = "0"
+    val closeMinute: String = "0",
+    val trackCoversFromSeatingPlan: Boolean = false,
+    val floorSyncEnabled: Boolean = false,
+    val floorDeviceRole: FloorDeviceRole = FloorDeviceRole.STANDARD,
+    val floorConnectionMode: FloorConnectionMode = FloorConnectionMode.AUTO,
+    val mainPosLanUrl: String = "",
+    val localLanUrl: String? = null,
+    val isTestingMainPos: Boolean = false,
+    val isDiscoveringMainPos: Boolean = false
 )
 
 @HiltViewModel
@@ -138,7 +158,9 @@ class SettingsViewModel @Inject constructor(
     private val printerService: BluetoothPrinterService,
     private val usbPrinterManager: UsbPrinterManager,
     private val crashLogger: CrashLogger,
-    private val adyenTerminalService: com.chaslay.pos.payment.AdyenTerminalService
+    private val adyenTerminalService: com.chaslay.pos.payment.AdyenTerminalService,
+    private val scaleService: com.chaslay.pos.scale.AclasScaleService,
+    private val floorSyncRepository: com.chaslay.pos.sync.FloorSyncRepository
 ) : ViewModel() {
 
     private var currentSettings = BusinessSettingsEntity()
@@ -208,6 +230,14 @@ class SettingsViewModel @Inject constructor(
                     logoUri = settings.logoUri,
                     receiptTemplateName = settings.receiptTemplateName,
                     posMode = settings.posMode,
+                    trackCoversFromSeatingPlan = settings.trackCoversFromSeatingPlan,
+                    floorSyncEnabled = settings.floorSyncEnabled,
+                    floorDeviceRole = FloorDeviceRole.fromApi(settings.floorDeviceRole),
+                    floorConnectionMode = FloorConnectionMode.fromApi(settings.floorConnectionMode),
+                    mainPosLanUrl = settings.mainPosLanUrl,
+                    localLanUrl = NetworkAddress.localLanUrl(FloorLanServer.PORT),
+                    scaleEnabled = settings.scaleEnabled,
+                    scaleUsbAddress = settings.scaleUsbAddress,
                     selectedPrinter = resolvePrinter(settings.printerMacAddress, settings.printerName),
                     selectedKitchenPrinter = resolvePrinter(
                         settings.kitchenPrinterMacAddress,
@@ -396,6 +426,108 @@ class SettingsViewModel @Inject constructor(
 
     fun updateBusinessName(value: String) = _uiState.update { it.copy(businessName = value) }
     fun updatePosMode(mode: PosMode) = _uiState.update { it.copy(posMode = mode) }
+    fun updateTrackCoversFromSeatingPlan(enabled: Boolean) =
+        _uiState.update { it.copy(trackCoversFromSeatingPlan = enabled) }
+
+    fun updateFloorSyncEnabled(enabled: Boolean) {
+        _uiState.update { it.copy(floorSyncEnabled = enabled) }
+        persistFloorSettings()
+    }
+
+    fun updateFloorDeviceRole(role: FloorDeviceRole) {
+        _uiState.update { it.copy(floorDeviceRole = role) }
+        persistFloorSettings()
+    }
+
+    fun updateFloorConnectionMode(mode: FloorConnectionMode) {
+        _uiState.update { it.copy(floorConnectionMode = mode) }
+        persistFloorSettings()
+    }
+
+    fun updateMainPosLanUrl(value: String) {
+        _uiState.update { it.copy(mainPosLanUrl = value) }
+    }
+
+    fun commitMainPosLanUrl() = persistFloorSettings()
+
+    fun refreshLocalLanUrl() {
+        _uiState.update { it.copy(localLanUrl = NetworkAddress.localLanUrl(FloorLanServer.PORT)) }
+    }
+
+    fun testMainPosConnection() {
+        val url = _uiState.value.mainPosLanUrl.trim().trimEnd('/')
+        if (url.isBlank()) {
+            _uiState.update { it.copy(message = "Enter the main POS LAN URL first") }
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update { it.copy(isTestingMainPos = true) }
+            val message = withContext(Dispatchers.IO) {
+                runCatching {
+                    val client = OkHttpClient.Builder()
+                        .connectTimeout(3, TimeUnit.SECONDS)
+                        .readTimeout(5, TimeUnit.SECONDS)
+                        .build()
+                    val response = client.newCall(
+                        Request.Builder().url("$url/health").get().build()
+                    ).execute()
+                    response.close()
+                    if (response.isSuccessful) "Main POS reachable on LAN" else "Main POS returned ${response.code}"
+                }.getOrElse { "Cannot reach main POS: ${it.message ?: "unknown error"}" }
+            }
+            _uiState.update { it.copy(isTestingMainPos = false, message = message) }
+        }
+    }
+
+    fun discoverMainPos() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isDiscoveringMainPos = true) }
+            val url = floorSyncRepository.discoverMainPosUrl()
+            if (url != null) {
+                _uiState.update {
+                    it.copy(
+                        isDiscoveringMainPos = false,
+                        mainPosLanUrl = url,
+                        message = appContext.getString(R.string.floor_main_pos_found, url)
+                    )
+                }
+                persistFloorSettings()
+            } else {
+                _uiState.update {
+                    it.copy(
+                        isDiscoveringMainPos = false,
+                        message = appContext.getString(R.string.floor_main_pos_not_found)
+                    )
+                }
+            }
+        }
+    }
+
+    private fun persistFloorSettings() {
+        viewModelScope.launch {
+            val state = _uiState.value
+            val updated = currentSettings.copy(
+                floorSyncEnabled = state.floorSyncEnabled,
+                floorDeviceRole = state.floorDeviceRole.apiValue,
+                floorConnectionMode = state.floorConnectionMode.apiValue,
+                mainPosLanUrl = state.mainPosLanUrl.trim()
+            )
+            settingsRepository.saveSettings(updated)
+            currentSettings = updated
+            runCatching { floorSyncRepository.registerDevice(updated) }
+            _uiState.update {
+                it.copy(
+                    message = appContext.getString(R.string.floor_settings_saved),
+                    localLanUrl = if (state.floorDeviceRole == FloorDeviceRole.MAIN_POS) {
+                        NetworkAddress.localLanUrl(FloorLanServer.PORT)
+                    } else {
+                        it.localLanUrl
+                    }
+                )
+            }
+        }
+    }
+
     fun updateOpenHour(value: String) = _uiState.update { it.copy(openHour = value) }
     fun updateOpenMinute(value: String) = _uiState.update { it.copy(openMinute = value) }
     fun updateCloseHour(value: String) = _uiState.update { it.copy(closeHour = value) }
@@ -844,7 +976,72 @@ class SettingsViewModel @Inject constructor(
             kitchenHeaderTextScale = state.kitchenHeaderTextScale.coerceIn(1, 3),
             logoUri = state.logoUri,
             receiptTemplateName = state.receiptTemplateName,
-            posMode = state.posMode
+            posMode = state.posMode,
+            trackCoversFromSeatingPlan = state.trackCoversFromSeatingPlan,
+            floorSyncEnabled = state.floorSyncEnabled,
+            floorDeviceRole = state.floorDeviceRole.apiValue,
+            floorConnectionMode = state.floorConnectionMode.apiValue,
+            mainPosLanUrl = state.mainPosLanUrl.trim(),
+            scaleEnabled = state.scaleEnabled,
+            scaleUsbAddress = state.scaleUsbAddress?.trim()?.takeIf { it.isNotEmpty() }
         )
+    }
+
+    fun updateScaleEnabled(enabled: Boolean) = _uiState.update { it.copy(scaleEnabled = enabled) }
+
+    fun selectScaleDevice(address: String) = _uiState.update {
+        it.copy(scaleUsbAddress = address, message = "Scale device selected — tap Save")
+    }
+
+    fun scanScaleUsbDevices() {
+        val devices = scaleService.listDevices()
+        _uiState.update {
+            it.copy(
+                scaleDevices = devices,
+                message = if (devices.isEmpty()) {
+                    "No USB scale found — connect Aclas OS6X via USB OTG"
+                } else {
+                    "${devices.size} scale device(s) found — tap one and allow USB access"
+                }
+            )
+        }
+    }
+
+    fun requestScalePermission(address: String) {
+        scaleService.requestPermission(address) { granted ->
+            _uiState.update {
+                it.copy(
+                    scaleDevices = scaleService.listDevices(),
+                    message = if (granted) "Scale USB permission granted — tap Save" else "USB permission denied"
+                )
+            }
+        }
+    }
+
+    fun testScaleReading() {
+        val address = _uiState.value.scaleUsbAddress?.trim().orEmpty()
+        if (address.isBlank()) {
+            _uiState.update { it.copy(message = "Select a scale USB device first") }
+            return
+        }
+        viewModelScope.launch {
+            scaleService.readOnce(address)
+                .onSuccess { reading ->
+                    _uiState.update {
+                        it.copy(
+                            scaleTestReading = com.chaslay.pos.scale.AclasScaleProtocol.formatWeight(reading.weightKg),
+                            message = "Scale reading OK"
+                        )
+                    }
+                }
+                .onFailure { error ->
+                    _uiState.update {
+                        it.copy(
+                            scaleTestReading = null,
+                            message = error.message ?: "Scale test failed"
+                        )
+                    }
+                }
+        }
     }
 }

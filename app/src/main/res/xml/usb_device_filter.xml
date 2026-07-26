@@ -4,4 +4,8 @@
     <usb-device class="7" />
     <!-- Vendor-specific interfaces used by many POS-80 / thermal printers -->
     <usb-device class="255" />
+    <!-- Aclas OS6X USB adapter (CH340 serial) -->
+    <usb-device vendor-id="6790" product-id="29987" />
+    <!-- USB CDC serial devices -->
+    <usb-device class="2" />
 </resources>

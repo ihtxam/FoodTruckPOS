@@ -33,6 +33,9 @@ class DatabaseCallback(
         if (count(db, "restaurant_tables") == 0L) {
             seedTables(db)
         }
+        if (count(db, "table_floors") == 0L) {
+            seedTableFloors(db)
+        }
         if (count(db, "discount_presets") == 0L) {
             seedDiscountPresets(db)
         }
@@ -61,6 +64,7 @@ class DatabaseCallback(
         seedRoles(db)
         seedUsers(db)
         seedSettings(db)
+        seedTableFloors(db)
         seedTables(db)
         SushiSakeCatalogSeeder.seed(db)
         seedDiscountPresets(db)
@@ -139,10 +143,30 @@ class DatabaseCallback(
         )
     }
 
+    private fun seedTableFloors(db: SupportSQLiteDatabase) {
+        listOf(
+            Triple(1L, "Main Floor", 1),
+            Triple(2L, "Patio", 2)
+        ).forEach { (id, name, order) ->
+            db.execSQL(
+                "INSERT OR IGNORE INTO table_floors (id, name, sortOrder, isActive) VALUES ($id, '${q(name)}', $order, 1)"
+            )
+        }
+    }
+
     private fun seedTables(db: SupportSQLiteDatabase) {
         (1..20).forEach { number ->
+            val col = (number - 1) % 5
+            val row = (number - 1) / 5
+            val planX = 0.08f + col * 0.17f
+            val planY = 0.12f + row * 0.16f
+            val floorId = if (number <= 12) 1 else 2
             db.execSQL(
-                "INSERT OR IGNORE INTO restaurant_tables (id, name, sortOrder, isActive) VALUES ($number, '${q("Table $number")}', $number, 1)"
+                """
+                INSERT OR IGNORE INTO restaurant_tables
+                (id, name, sortOrder, isActive, floorId, seatCapacity, planX, planY, planWidth, planHeight, shape, rotation)
+                VALUES ($number, '${q("Table $number")}', $number, 1, $floorId, 4, $planX, $planY, 0.12, 0.12, 'ROUND', 0)
+                """.trimIndent()
             )
         }
     }

@@ -315,13 +315,23 @@ class OrderHistoryViewModel @Inject constructor(
     fun printSelectedOrder() {
         val order = _uiState.value.selectedOrder ?: return
         val items = _uiState.value.selectedItems
-        printOrder(order, items)
+        printOrder(order, items, includeCustomerCardCopy = true)
+    }
+
+    fun printAdyenCustomerReceiptForSelected() {
+        val order = _uiState.value.selectedOrder ?: return
+        printAdyenReceipt(order, customerCopy = true)
+    }
+
+    fun printAdyenCashierReceiptForSelected() {
+        val order = _uiState.value.selectedOrder ?: return
+        printAdyenReceipt(order, customerCopy = false)
     }
 
     fun printSplitOrder(orderId: String) {
         val order = _uiState.value.splitOrders.find { it.id == orderId } ?: return
         val items = _uiState.value.splitItemsByOrderId[orderId].orEmpty()
-        printOrder(order, items)
+        printOrder(order, items, includeCustomerCardCopy = true)
     }
 
     fun printAllSplitOrders() {
@@ -335,12 +345,43 @@ class OrderHistoryViewModel @Inject constructor(
         }
     }
 
-    private fun printOrder(order: TransactionEntity, items: List<TransactionItemEntity>) {
+    private fun printOrder(
+        order: TransactionEntity,
+        items: List<TransactionItemEntity>,
+        includeCustomerCardCopy: Boolean = false
+    ) {
         viewModelScope.launch {
             val settings = settingsRepository.getSettings()
-            printerService.routeReceipt(settings, order, items)
+            val customerCopy = if (includeCustomerCardCopy) {
+                com.chaslay.pos.payment.AdyenPaymentReceiptStorage.customerReceipt(order)
+            } else {
+                null
+            }
+            printerService.routeReceipt(settings, order, items, customerCopy)
                 .onSuccess {
                     _uiState.value = _uiState.value.copy(message = "Receipt printed")
+                }
+                .onFailure { e ->
+                    _uiState.value = _uiState.value.copy(message = e.message ?: "Print failed")
+                }
+        }
+    }
+
+    private fun printAdyenReceipt(order: TransactionEntity, customerCopy: Boolean) {
+        viewModelScope.launch {
+            val receipt = if (customerCopy) {
+                com.chaslay.pos.payment.AdyenPaymentReceiptStorage.customerReceipt(order)
+            } else {
+                com.chaslay.pos.payment.AdyenPaymentReceiptStorage.cashierReceipt(order)
+            } ?: run {
+                _uiState.value = _uiState.value.copy(message = "Card receipt not available for this order")
+                return@launch
+            }
+            val settings = settingsRepository.getSettings()
+            printerService.routeAdyenPaymentReceipt(settings, receipt)
+                .onSuccess {
+                    val label = if (customerCopy) "Customer card receipt printed" else "Merchant card receipt printed"
+                    _uiState.value = _uiState.value.copy(message = label)
                 }
                 .onFailure { e ->
                     _uiState.value = _uiState.value.copy(message = e.message ?: "Print failed")

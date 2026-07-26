@@ -18,7 +18,9 @@ import com.chaslay.pos.data.local.dao.HeldOrderDao
 import com.chaslay.pos.data.local.dao.HeldOrderItemDao
 import com.chaslay.pos.data.local.dao.PrinterConfigDao
 import com.chaslay.pos.data.local.dao.KitchenMessageDao
+import com.chaslay.pos.data.local.dao.FloorPlanElementDao
 import com.chaslay.pos.data.local.dao.RestaurantTableDao
+import com.chaslay.pos.data.local.dao.TableFloorDao
 import com.chaslay.pos.data.local.dao.TableOrderDao
 import com.chaslay.pos.data.local.dao.TableOrderItemDao
 import dagger.Module
@@ -51,8 +53,12 @@ object DatabaseModule {
     @Provides fun provideAddonOptionDao(db: AppDatabase): com.chaslay.pos.data.local.dao.AddonOptionDao = db.addonOptionDao()
     @Provides fun provideProductModifierGroupDao(db: AppDatabase): com.chaslay.pos.data.local.dao.ProductModifierGroupDao = db.productModifierGroupDao()
     @Provides fun provideProductAddonGroupDao(db: AppDatabase): com.chaslay.pos.data.local.dao.ProductAddonGroupDao = db.productAddonGroupDao()
+    @Provides fun provideComboSlotDao(db: AppDatabase): com.chaslay.pos.data.local.dao.ComboSlotDao = db.comboSlotDao()
+    @Provides fun provideComboSlotOptionDao(db: AppDatabase): com.chaslay.pos.data.local.dao.ComboSlotOptionDao = db.comboSlotOptionDao()
     @Provides fun provideTransactionDao(db: AppDatabase): TransactionDao = db.transactionDao()
     @Provides fun provideBusinessSettingsDao(db: AppDatabase): BusinessSettingsDao = db.businessSettingsDao()
+    @Provides fun provideTableFloorDao(db: AppDatabase): TableFloorDao = db.tableFloorDao()
+    @Provides fun provideFloorPlanElementDao(db: AppDatabase): FloorPlanElementDao = db.floorPlanElementDao()
     @Provides fun provideRestaurantTableDao(db: AppDatabase): RestaurantTableDao = db.restaurantTableDao()
     @Provides fun provideTableOrderDao(db: AppDatabase): TableOrderDao = db.tableOrderDao()
     @Provides fun provideTableOrderItemDao(db: AppDatabase): TableOrderItemDao = db.tableOrderItemDao()

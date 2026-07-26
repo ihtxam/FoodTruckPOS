@@ -24,6 +24,7 @@ import com.chaslay.pos.data.local.entity.TableOrderItemEntity
 import com.chaslay.pos.data.local.entity.TransactionEntity
 import com.chaslay.pos.data.local.entity.TransactionItemEntity
 import com.chaslay.pos.data.local.entity.UserEntity
+import com.chaslay.pos.domain.model.parseComboSelectionsFromNotes
 import com.chaslay.pos.domain.model.CartItem
 import com.chaslay.pos.domain.model.CartSummary
 import com.chaslay.pos.domain.model.FulfillmentType
@@ -376,6 +377,8 @@ class ProductRepository @Inject constructor(
             imageUri = imageUri,
             isActive = isActive,
             isOpenPrice = isOpenPrice,
+            isWeighed = isWeighed,
+            isCombo = isCombo,
             variants = variants
         )
 
@@ -433,7 +436,9 @@ class TransactionRepository @Inject constructor(
         amountTendered: Double? = null,
         changeDue: Double? = null,
         transactionId: String? = null,
-        receiptUrl: String? = null
+        receiptUrl: String? = null,
+        adyenCustomerReceiptJson: String? = null,
+        adyenCashierReceiptJson: String? = null
     ): TransactionEntity {
         val settings = settingsDao.get() ?: BusinessSettingsEntity()
         val resolvedTransactionId = transactionId ?: UUID.randomUUID().toString()
@@ -491,7 +496,12 @@ class TransactionRepository @Inject constructor(
             splitCheckNumber = splitCheckNumber,
             amountTendered = amountTendered,
             changeDue = changeDue,
-            pickupTimeMs = cart.pickupTimeMs
+            pickupTimeMs = cart.pickupTimeMs,
+            adyenCustomerReceiptJson = adyenCustomerReceiptJson,
+            adyenCashierReceiptJson = adyenCashierReceiptJson,
+            guestCount = cart.guestCount?.takeIf {
+                settings.trackCoversFromSeatingPlan && cart.serviceType == ServiceType.DINE_IN
+            }
         )
 
         val items = cart.items.map { item ->
@@ -648,6 +658,15 @@ class TransactionRepository @Inject constructor(
             ProductSalesReport(it.productName, it.qty, roundMoney(it.revenue))
         }
 
+        val coversServed = if (settings.trackCoversFromSeatingPlan) {
+            completed
+                .filter { it.serviceType == ServiceType.DINE_IN && (it.guestCount ?: 0) > 0 }
+                .sumOf { it.guestCount ?: 0 }
+                .takeIf { it > 0 }
+        } else {
+            null
+        }
+
         return EndOfDayReport(
             periodStart = start,
             periodEnd = end,
@@ -670,7 +689,8 @@ class TransactionRepository @Inject constructor(
             dineInCount = completed.count { it.serviceType == ServiceType.DINE_IN },
             takeawayTotal = roundMoney(completed.filter { it.serviceType == ServiceType.TAKEAWAY }.sumOf { brutOf(it) }),
             takeawayCount = completed.count { it.serviceType == ServiceType.TAKEAWAY },
-            productsSold = productsSold
+            productsSold = productsSold,
+            coversServed = coversServed
         )
     }
 
@@ -919,6 +939,8 @@ class CartManager @Inject constructor() {
                         it.unitPrice == stamped.unitPrice &&
                         it.modifiers == stamped.modifiers &&
                         it.addons == stamped.addons &&
+                        it.comboSelections == stamped.comboSelections &&
+                        it.isCombo == stamped.isCombo &&
                         it.notes == stamped.notes &&
                         it.courseNumber == stamped.courseNumber &&
                         it.splitCheck == stamped.splitCheck &&
@@ -1152,6 +1174,7 @@ class CartManager @Inject constructor() {
         discountAmount: Double,
         courseCount: Int = 1,
         activeCourse: Int = 1,
+        guestCount: Int? = null,
         vatIncludedInPrice: Boolean? = null
     ) {
         val included = vatIncludedInPrice ?: _cart.value.vatIncludedInPrice
@@ -1164,10 +1187,15 @@ class CartManager @Inject constructor() {
             tableId = tableId,
             tableOrderId = orderId,
             tableName = tableName,
+            guestCount = guestCount,
             activeCourse = activeCourse,
             courseCount = maxOf(courseCount, maxCourse),
             vatIncludedInPrice = included
         )
+    }
+
+    fun setGuestCount(count: Int) {
+        _cart.update { it.copy(guestCount = count.coerceIn(1, 99)) }
     }
 
     fun setTableOrderId(orderId: String) {
@@ -1276,9 +1304,21 @@ class CartManager @Inject constructor() {
     }
 }
 
+sealed class TableTransferResult {
+    data class Success(
+        val targetTableId: Long,
+        val targetTableName: String,
+        val message: String
+    ) : TableTransferResult()
+
+    data class Error(val message: String) : TableTransferResult()
+}
+
 @Singleton
 class TableOrderRepository @Inject constructor(
     private val tableDao: RestaurantTableDao,
+    private val floorDao: com.chaslay.pos.data.local.dao.TableFloorDao,
+    private val floorPlanElementDao: com.chaslay.pos.data.local.dao.FloorPlanElementDao,
     private val orderDao: TableOrderDao,
     private val orderItemDao: TableOrderItemDao,
     private val kitchenMessageDao: KitchenMessageDao,
@@ -1318,7 +1358,16 @@ class TableOrderRepository @Inject constructor(
                 unsentItemCount = unsentQty,
                 sentItemCount = sentQty,
                 orderTotal = total,
-                status = status
+                status = status,
+                floorId = table.floorId,
+                seatCapacity = table.seatCapacity,
+                planX = table.planX,
+                planY = table.planY,
+                planWidth = table.planWidth,
+                planHeight = table.planHeight,
+                shape = table.shape,
+                rotation = table.rotation,
+                guestCount = order?.guestCount
             )
         }
     }
@@ -1327,7 +1376,8 @@ class TableOrderRepository @Inject constructor(
         table: RestaurantTableEntity,
         serviceType: ServiceType,
         userId: Long,
-        userName: String
+        userName: String,
+        guestCount: Int? = null
     ): Pair<TableOrderEntity, List<CartItem>> {
         val existing = orderDao.getOpenOrderForTable(table.id)
         if (existing != null) {
@@ -1340,11 +1390,20 @@ class TableOrderRepository @Inject constructor(
             serviceType = serviceType,
             status = TableOrderStatus.OPEN,
             userId = userId,
-            userName = userName
+            userName = userName,
+            guestCount = guestCount?.coerceIn(1, 99)
         )
         orderDao.upsert(order)
         return order to emptyList()
     }
+
+    suspend fun updateGuestCount(orderId: String, guestCount: Int) {
+        val order = orderDao.getById(orderId) ?: return
+        orderDao.upsert(order.copy(guestCount = guestCount.coerceIn(1, 99), updatedAt = System.currentTimeMillis()))
+    }
+
+    suspend fun hasOpenOrder(tableId: Long): Boolean =
+        orderDao.getOpenOrderForTable(tableId) != null
 
     suspend fun syncCartToTable(cart: CartSummary, userId: Long, userName: String): String {
         val tableId = cart.tableId ?: error("No table selected")
@@ -1383,6 +1442,7 @@ class TableOrderRepository @Inject constructor(
                 discountPercent = cart.discountPercent,
                 discountAmount = cart.discountAmount,
                 notes = cart.cartNotes,
+                guestCount = cart.guestCount ?: order.guestCount,
                 status = when (order.status) {
                     TableOrderStatus.PAID -> TableOrderStatus.OPEN
                     TableOrderStatus.HELD -> TableOrderStatus.OPEN
@@ -1464,12 +1524,235 @@ class TableOrderRepository @Inject constructor(
         orderDao.deleteById(orderId)
     }
 
+    suspend fun getOpenOrderForTable(tableId: Long): TableOrderEntity? =
+        orderDao.getOpenOrderForTable(tableId)
+
+    suspend fun transferEntireOrder(
+        sourceTableId: Long,
+        targetTableId: Long,
+        userId: Long,
+        userName: String
+    ): TableTransferResult {
+        if (sourceTableId == targetTableId) {
+            return TableTransferResult.Error("Cannot move to the same table")
+        }
+        val sourceTable = tableDao.getById(sourceTableId)
+            ?: return TableTransferResult.Error("Source table not found")
+        val targetTable = tableDao.getById(targetTableId)
+            ?: return TableTransferResult.Error("Target table not found")
+        val sourceOrder = orderDao.getOpenOrderForTable(sourceTableId)
+            ?: return TableTransferResult.Error("No open order on ${sourceTable.name}")
+        val sourceItems = orderItemDao.getByOrder(sourceOrder.id)
+        if (sourceItems.isEmpty()) {
+            orderDao.deleteById(sourceOrder.id)
+            return TableTransferResult.Error("Order on ${sourceTable.name} is empty")
+        }
+
+        val now = System.currentTimeMillis()
+        val targetOrder = orderDao.getOpenOrderForTable(targetTableId)
+        if (targetOrder == null) {
+            orderDao.upsert(
+                sourceOrder.copy(
+                    tableId = targetTableId,
+                    updatedAt = now
+                )
+            )
+            addKitchenMessage(
+                sourceOrder.id,
+                targetTableId,
+                targetTable.name,
+                "Table moved from ${sourceTable.name}"
+            )
+            return TableTransferResult.Success(
+                targetTableId = targetTableId,
+                targetTableName = targetTable.name,
+                message = "Moved to ${targetTable.name}"
+            )
+        }
+
+        orderItemDao.moveItemsToOrder(sourceItems.map { it.id }, targetOrder.id)
+        val mergedGuestCount = listOfNotNull(sourceOrder.guestCount, targetOrder.guestCount)
+            .takeIf { it.isNotEmpty() }
+            ?.sum()
+        orderDao.upsert(
+            targetOrder.copy(
+                guestCount = mergedGuestCount,
+                lastSentAt = listOfNotNull(sourceOrder.lastSentAt, targetOrder.lastSentAt).maxOrNull(),
+                kitchenRound = maxOf(sourceOrder.kitchenRound, targetOrder.kitchenRound),
+                updatedAt = now
+            )
+        )
+        orderDao.deleteById(sourceOrder.id)
+        addKitchenMessage(
+            targetOrder.id,
+            targetTableId,
+            targetTable.name,
+            "Merged from ${sourceTable.name} (${sourceItems.size} item(s))"
+        )
+        return TableTransferResult.Success(
+            targetTableId = targetTableId,
+            targetTableName = targetTable.name,
+            message = "Merged into ${targetTable.name}"
+        )
+    }
+
+    suspend fun transferItems(
+        sourceTableId: Long,
+        targetTableId: Long,
+        itemIds: Set<String>,
+        userId: Long,
+        userName: String
+    ): TableTransferResult {
+        if (sourceTableId == targetTableId) {
+            return TableTransferResult.Error("Cannot move to the same table")
+        }
+        if (itemIds.isEmpty()) {
+            return TableTransferResult.Error("No dishes selected")
+        }
+        val sourceTable = tableDao.getById(sourceTableId)
+            ?: return TableTransferResult.Error("Source table not found")
+        val targetTable = tableDao.getById(targetTableId)
+            ?: return TableTransferResult.Error("Target table not found")
+        val sourceOrder = orderDao.getOpenOrderForTable(sourceTableId)
+            ?: return TableTransferResult.Error("No open order on ${sourceTable.name}")
+        val sourceItems = orderItemDao.getByOrder(sourceOrder.id)
+        val toMove = sourceItems.filter { it.id in itemIds }
+        if (toMove.isEmpty()) {
+            return TableTransferResult.Error("Selected dishes not found on ${sourceTable.name}")
+        }
+
+        val now = System.currentTimeMillis()
+        var targetOrder = orderDao.getOpenOrderForTable(targetTableId)
+        if (targetOrder == null) {
+            targetOrder = TableOrderEntity(
+                id = UUID.randomUUID().toString(),
+                tableId = targetTableId,
+                serviceType = sourceOrder.serviceType,
+                status = TableOrderStatus.OPEN,
+                userId = userId,
+                userName = userName,
+                guestCount = sourceOrder.guestCount
+            )
+            orderDao.upsert(targetOrder)
+        }
+
+        orderItemDao.moveItemsToOrder(toMove.map { it.id }, targetOrder.id)
+        val remaining = orderItemDao.countByOrder(sourceOrder.id)
+        if (remaining == 0) {
+            orderDao.deleteById(sourceOrder.id)
+        } else {
+            orderDao.upsert(sourceOrder.copy(updatedAt = now))
+        }
+
+        val itemSummary = toMove.joinToString(", ") { "${it.quantity}x ${it.productName}" }
+        addKitchenMessage(
+            targetOrder.id,
+            targetTableId,
+            targetTable.name,
+            "From ${sourceTable.name}: $itemSummary"
+        )
+
+        return TableTransferResult.Success(
+            targetTableId = targetTableId,
+            targetTableName = targetTable.name,
+            message = "Moved ${toMove.size} dish(es) to ${targetTable.name}"
+        )
+    }
+
     suspend fun getTable(tableId: Long): RestaurantTableEntity? = tableDao.getById(tableId)
 
-    suspend fun addTable(name: String): Long {
+    suspend fun addTable(name: String, floorId: Long = 1, seatCapacity: Int = 4): Long {
         val tables = tableDao.observeActive().first()
         val sortOrder = (tables.maxOfOrNull { it.sortOrder } ?: 0) + 1
-        return tableDao.insert(RestaurantTableEntity(name = name.trim(), sortOrder = sortOrder))
+        val floorTables = tableDao.getByFloor(floorId)
+        val col = floorTables.size % 5
+        val row = floorTables.size / 5
+        return tableDao.insert(
+            RestaurantTableEntity(
+                name = name.trim(),
+                sortOrder = sortOrder,
+                floorId = floorId,
+                seatCapacity = seatCapacity.coerceAtLeast(1),
+                planX = 0.08f + col * 0.17f,
+                planY = 0.12f + row * 0.16f
+            )
+        )
+    }
+
+    suspend fun getAllFloors(): List<com.chaslay.pos.data.local.entity.TableFloorEntity> =
+        floorDao.getAllActive()
+
+    suspend fun addFloor(name: String): Long {
+        val floors = floorDao.getAllActive()
+        val sortOrder = (floors.maxOfOrNull { it.sortOrder } ?: 0) + 1
+        return floorDao.insert(
+            com.chaslay.pos.data.local.entity.TableFloorEntity(
+                name = name.trim(),
+                sortOrder = sortOrder
+            )
+        )
+    }
+
+    suspend fun getTablesForFloor(floorId: Long): List<RestaurantTableEntity> =
+        tableDao.getByFloor(floorId)
+
+    suspend fun updateTable(table: RestaurantTableEntity) {
+        tableDao.update(table)
+    }
+
+    suspend fun deleteTable(tableId: Long) {
+        tableDao.deactivate(tableId)
+    }
+
+    suspend fun autoLayoutFloor(floorId: Long) {
+        val tables = tableDao.getByFloor(floorId)
+        tables.forEachIndexed { index, table ->
+            val col = index % 5
+            val row = index / 5
+            tableDao.update(
+                table.copy(
+                    planX = 0.06f + col * 0.18f,
+                    planY = 0.10f + row * 0.17f,
+                    planWidth = 0.14f,
+                    planHeight = 0.14f
+                )
+            )
+        }
+    }
+
+    suspend fun getFloorElements(floorId: Long): List<com.chaslay.pos.data.local.entity.FloorPlanElementEntity> =
+        floorPlanElementDao.getByFloor(floorId)
+
+    suspend fun addFloorElement(
+        floorId: Long,
+        elementType: String,
+        planX: Float = 0.15f,
+        planY: Float = 0.15f
+    ): Long {
+        val existing = floorPlanElementDao.getByFloor(floorId).size
+        val (w, h) = when (elementType.uppercase()) {
+            "BAR" -> 0.35f to 0.08f
+            "OBSTACLE" -> 0.12f to 0.12f
+            else -> 0.4f to 0.03f
+        }
+        return floorPlanElementDao.insert(
+            com.chaslay.pos.data.local.entity.FloorPlanElementEntity(
+                floorId = floorId,
+                elementType = elementType.uppercase(),
+                planX = planX + (existing % 3) * 0.05f,
+                planY = planY + (existing / 3) * 0.05f,
+                planWidth = w,
+                planHeight = h
+            )
+        )
+    }
+
+    suspend fun updateFloorElement(element: com.chaslay.pos.data.local.entity.FloorPlanElementEntity) {
+        floorPlanElementDao.update(element)
+    }
+
+    suspend fun deleteFloorElement(elementId: Long) {
+        floorPlanElementDao.delete(elementId)
     }
 
     suspend fun getAllTables(): List<RestaurantTableEntity> = tableDao.observeActive().first()
@@ -1499,6 +1782,7 @@ class TableOrderRepository @Inject constructor(
             items = items,
             discountPercent = order.discountPercent,
             discountAmount = order.discountAmount,
+            guestCount = order.guestCount,
             vatIncludedInPrice = vatIncluded
         )
         if (order.status == TableOrderStatus.HELD) {
@@ -1513,21 +1797,26 @@ class TableOrderRepository @Inject constructor(
         }
     }
 
-    private fun TableOrderItemEntity.toCartItem() = CartItem(
-        id = id,
-        productId = productId,
-        productName = productName,
-        variantName = variantName,
-        unitPrice = unitPrice,
-        quantity = quantity,
-        taxRate = taxRate,
-        notes = notes,
-        sku = sku,
-        originalUnitPrice = originalUnitPrice,
-        lineDiscountPerUnit = lineDiscountPerUnit,
-        courseNumber = courseNumber,
-        sentToKitchen = sentToKitchenAt != null
-    )
+    private fun TableOrderItemEntity.toCartItem(): CartItem {
+        val (isCombo, comboSelections) = parseComboSelectionsFromNotes(notes)
+        return CartItem(
+            id = id,
+            productId = productId,
+            productName = productName,
+            variantName = variantName,
+            unitPrice = unitPrice,
+            quantity = quantity,
+            taxRate = taxRate,
+            notes = notes,
+            sku = sku,
+            originalUnitPrice = originalUnitPrice,
+            lineDiscountPerUnit = lineDiscountPerUnit,
+            courseNumber = courseNumber,
+            sentToKitchen = sentToKitchenAt != null,
+            isCombo = isCombo,
+            comboSelections = comboSelections
+        )
+    }
 
     private fun CartItem.toTableOrderEntity(orderId: String) = TableOrderItemEntity(
         id = id,

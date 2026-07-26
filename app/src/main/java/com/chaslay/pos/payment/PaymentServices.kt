@@ -8,7 +8,12 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 sealed class PaymentResult {
-    data class Success(val reference: String? = null, val method: PaymentMethod) : PaymentResult()
+    data class Success(
+        val reference: String? = null,
+        val method: PaymentMethod,
+        val adyenCustomerReceipt: AdyenTerminalReceipt? = null,
+        val adyenCashierReceipt: AdyenTerminalReceipt? = null
+    ) : PaymentResult()
     data class Failure(val message: String) : PaymentResult()
     data object Cancelled : PaymentResult()
 }
@@ -73,7 +78,9 @@ class AdyenTerminalService @Inject constructor(
         return when (val response = adyenTerminalClient.sendPaymentRequest(amount, currencyCode, settings)) {
             is AdyenTerminalResponse.Approved -> PaymentResult.Success(
                 reference = response.reference,
-                method = PaymentMethod.ADYEN_TERMINAL
+                method = PaymentMethod.ADYEN_TERMINAL,
+                adyenCustomerReceipt = response.customerReceipt,
+                adyenCashierReceipt = response.cashierReceipt
             )
             is AdyenTerminalResponse.Cancelled -> PaymentResult.Cancelled
             is AdyenTerminalResponse.Declined -> PaymentResult.Failure(response.message)

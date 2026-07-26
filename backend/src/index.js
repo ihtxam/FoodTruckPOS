@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url';
 import licenseRoutes from './routes/license.js';
 import posAuthRoutes from './routes/posAuth.js';
 import syncRoutes from './routes/sync.js';
+import floorRoutes from './routes/floor.js';
 import ordersRoutes from './routes/orders.js';
 import shopRoutes from './routes/shop.js';
 import adminRoutes from './routes/admin.js';
@@ -34,7 +35,7 @@ app.get('/health', (_req, res) => {
   res.json({ ok: true, service: 'chaslay-api', time: Date.now() });
 });
 
-/** Digital receipts ù proxy to receipts container (POST from POS lands here too). */
+/** Digital receipts ÔøΩ proxy to receipts container (POST from POS lands here too). */
 app.use(proxyReceiptsRoutes);
 
 /** Android POS licensing */
@@ -43,8 +44,11 @@ app.use('/v1/license', licenseRoutes);
 /** Android POS merchant login (cloud) */
 app.use('/v1/pos/auth', posAuthRoutes);
 
-/** POS sync ù tenant resolved from X-Api-Key */
+/** POS sync ÔøΩ tenant resolved from X-Api-Key */
 app.use('/v1/sync', requireApiKey, syncRoutes);
+
+/** Floor sync ÔøΩ waiter ? main POS */
+app.use('/v1/floor', requireApiKey, floorRoutes);
 
 /** Public online shop API: /v1/shop/{clientName}/menu|orders */
 app.use('/v1/shop', shopRoutes);
@@ -52,13 +56,13 @@ app.use('/v1/shop', shopRoutes);
 /** Legacy single-tenant order routes (default tenant) */
 app.use('/v1/orders', ordersRoutes);
 
-/** Merchant portal API ù must be BEFORE /v1/admin (more specific path first) */
+/** Merchant portal API ÔøΩ must be BEFORE /v1/admin (more specific path first) */
 app.use('/v1/admin/merchant', merchantRoutes);
 
 /** Superadmin API + panel at admin.chaslay.com */
 app.use('/v1/admin', adminRoutes);
 
-/** Admin panel static files ù always at /admin/* (works on localhost and admin.chaslay.com) */
+/** Admin panel static files ÔøΩ always at /admin/* (works on localhost and admin.chaslay.com) */
 app.use('/admin', express.static(adminDir, { index: 'index.html', maxAge: process.env.NODE_ENV === 'production' ? '1h' : 0 }));
 
 /** Host-specific root pages (shop landing, admin login at / on admin domain) */

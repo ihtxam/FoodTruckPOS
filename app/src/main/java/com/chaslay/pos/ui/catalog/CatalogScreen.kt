@@ -138,9 +138,9 @@ fun CatalogScreen(viewModel: CatalogViewModel = hiltViewModel()) {
             addonGroups = state.addonGroups,
             viewModel = viewModel,
             onDismiss = { showProductDialog = false },
-            onSave = { name, price, categoryId, tax, openPrice, sortOrder, variants, modIds, addonIds, barcode, sku, stockQty, lowStock ->
+            onSave = { name, price, categoryId, tax, openPrice, isWeighed, sortOrder, variants, modIds, addonIds, barcode, sku, stockQty, lowStock ->
                 viewModel.saveProduct(
-                    name, price, categoryId, tax, openPrice, sortOrder,
+                    name, price, categoryId, tax, openPrice, isWeighed, sortOrder,
                     variants, modIds, addonIds, barcode, sku, stockQty, lowStock, editingProduct?.id ?: 0
                 )
                 showProductDialog = false
@@ -207,7 +207,11 @@ private fun ProductList(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(product.name, fontWeight = FontWeight.SemiBold)
-                        Text("$categoryName � ${if (product.isOpenPrice) "Open price" else "CHF ${product.price}"}")
+                        Text("$categoryName · ${when {
+                            product.isWeighed -> "${product.price}/kg"
+                            product.isOpenPrice -> "Open price"
+                            else -> "CHF ${product.price}"
+                        }}")
                     }
                     IconButton(onClick = { onDelete(product.id) }) {
                         Icon(Icons.Default.Delete, contentDescription = null)
@@ -271,7 +275,7 @@ private fun ProductDialog(
     viewModel: CatalogViewModel,
     onDismiss: () -> Unit,
     onSave: (
-        String, Double, Long?, Double, Boolean, Int,
+        String, Double, Long?, Double, Boolean, Boolean, Int,
         List<ProductVariantDraft>, List<Long>, List<Long>,
         String?, String?, Int?, Int?
     ) -> Unit
@@ -286,6 +290,7 @@ private fun ProductDialog(
     var tax by remember(product) { mutableStateOf(product?.taxRate?.toString() ?: "2.6") }
     var sortOrder by remember(product) { mutableStateOf((product?.sortOrder ?: 0).toString()) }
     var openPrice by remember(product) { mutableStateOf(product?.isOpenPrice ?: false) }
+    var isWeighed by remember(product) { mutableStateOf(product?.isWeighed ?: false) }
     var selectedCategoryId by remember(product) { mutableStateOf(product?.categoryId ?: categories.firstOrNull()?.id) }
     val variantNames = remember(product) { mutableStateListOf<String>() }
     val variantPrices = remember(product) { mutableStateListOf<String>() }
@@ -351,9 +356,36 @@ private fun ProductDialog(
                 OutlinedTextField(value = sortOrder, onValueChange = { sortOrder = it }, label = { Text(stringResource(R.string.sort_order)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(stringResource(R.string.open_price))
-                    Switch(checked = openPrice, onCheckedChange = { openPrice = it })
+                    Switch(checked = openPrice, onCheckedChange = {
+                        openPrice = it
+                        if (it) isWeighed = false
+                    })
                 }
-                if (!openPrice) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(stringResource(R.string.sold_by_weight))
+                        Text(stringResource(R.string.sold_by_weight_help), fontSize = 11.sp, color = Color.Gray)
+                    }
+                    Switch(checked = isWeighed, onCheckedChange = {
+                        isWeighed = it
+                        if (it) openPrice = false
+                    })
+                }
+                if (isWeighed) {
+                    OutlinedTextField(
+                        value = price,
+                        onValueChange = { price = it },
+                        label = { Text(stringResource(R.string.price_per_kg)) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                if (!openPrice && !isWeighed) {
                     OutlinedTextField(value = price, onValueChange = { price = it }, label = { Text(stringResource(R.string.price)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
                 }
                 OutlinedTextField(value = tax, onValueChange = { tax = it }, label = { Text(stringResource(R.string.tax_rate)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
@@ -426,6 +458,7 @@ private fun ProductDialog(
                     selectedCategoryId,
                     tax.toDoubleOrNull() ?: 0.0,
                     openPrice,
+                    isWeighed,
                     sortOrder.toIntOrNull() ?: 0,
                     variants,
                     selectedModifierIds.toList(),

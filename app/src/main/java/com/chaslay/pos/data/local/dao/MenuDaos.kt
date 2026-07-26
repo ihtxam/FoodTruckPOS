@@ -9,6 +9,8 @@ import com.chaslay.pos.data.local.entity.AddonGroupEntity
 import com.chaslay.pos.data.local.entity.AddonOptionEntity
 import com.chaslay.pos.data.local.entity.ModifierGroupEntity
 import com.chaslay.pos.data.local.entity.ModifierOptionEntity
+import com.chaslay.pos.data.local.entity.ComboSlotEntity
+import com.chaslay.pos.data.local.entity.ComboSlotOptionEntity
 import com.chaslay.pos.data.local.entity.ProductAddonGroupEntity
 import com.chaslay.pos.data.local.entity.ProductModifierGroupEntity
 import kotlinx.coroutines.flow.Flow
@@ -130,4 +132,37 @@ interface ProductAddonGroupDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(links: List<ProductAddonGroupEntity>)
+}
+
+@Dao
+interface ComboSlotDao {
+    @Query("SELECT * FROM combo_slots WHERE comboProductId = :comboProductId ORDER BY sortOrder, name")
+    suspend fun getByComboProduct(comboProductId: Long): List<ComboSlotEntity>
+
+    @Query("SELECT * FROM combo_slots WHERE comboProductId = :comboProductId ORDER BY sortOrder, name")
+    fun observeByComboProduct(comboProductId: Long): Flow<List<ComboSlotEntity>>
+
+    @Query("SELECT cs.* FROM combo_slots cs INNER JOIN products p ON p.id = cs.comboProductId WHERE p.isCombo = 1 AND p.isActive = 1 ORDER BY p.sortOrder, p.name, cs.sortOrder")
+    suspend fun getAllForActiveCombos(): List<ComboSlotEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(slot: ComboSlotEntity): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(slots: List<ComboSlotEntity>)
+
+    @Query("DELETE FROM combo_slots WHERE comboProductId = :comboProductId")
+    suspend fun deleteByComboProduct(comboProductId: Long)
+}
+
+@Dao
+interface ComboSlotOptionDao {
+    @Query("SELECT * FROM combo_slot_options WHERE slotId = :slotId ORDER BY sortOrder")
+    suspend fun getBySlot(slotId: Long): List<ComboSlotOptionEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(options: List<ComboSlotOptionEntity>)
+
+    @Query("DELETE FROM combo_slot_options WHERE slotId IN (SELECT id FROM combo_slots WHERE comboProductId = :comboProductId)")
+    suspend fun deleteByComboProduct(comboProductId: Long)
 }

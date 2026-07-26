@@ -20,7 +20,11 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 
 sealed class AdyenTerminalResponse {
-    data class Approved(val reference: String?) : AdyenTerminalResponse()
+    data class Approved(
+        val reference: String?,
+        val customerReceipt: AdyenTerminalReceipt? = null,
+        val cashierReceipt: AdyenTerminalReceipt? = null
+    ) : AdyenTerminalResponse()
     data class Declined(val message: String) : AdyenTerminalResponse()
     data class Cancelled(val message: String = "Payment cancelled on terminal") : AdyenTerminalResponse()
     data class Error(val message: String) : AdyenTerminalResponse()
@@ -489,7 +493,13 @@ class AdyenTerminalClient @Inject constructor() {
                         ?.getAsJsonObject("POITransactionID")
                         ?.get("TransactionID")
                         ?.asString
-                    AdyenTerminalResponse.Approved(reference = transactionId)
+                    val (customerReceipt, cashierReceipt) =
+                        AdyenPaymentReceiptParser.parsePaymentReceipts(paymentResponse)
+                    AdyenTerminalResponse.Approved(
+                        reference = transactionId,
+                        customerReceipt = customerReceipt,
+                        cashierReceipt = cashierReceipt
+                    )
                 }
                 result.equals("Failure", ignoreCase = true) &&
                     errorCondition.equals("Cancel", ignoreCase = true) -> {
@@ -537,7 +547,8 @@ class AdyenTerminalClient @Inject constructor() {
                         "SaleTransactionID" to mapOf(
                             "TransactionID" to transactionId,
                             "TimeStamp" to timestamp
-                        )
+                        ),
+                        "SaleToAcquirerData" to "tenderOption=ReceiptHandler"
                     ),
                     "PaymentTransaction" to mapOf(
                         "AmountsReq" to mapOf(

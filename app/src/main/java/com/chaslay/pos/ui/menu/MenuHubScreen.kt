@@ -55,8 +55,10 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.chaslay.pos.R
 import com.chaslay.pos.data.local.entity.AddonGroupEntity
+import com.chaslay.pos.data.local.entity.CategoryEntity
 import com.chaslay.pos.data.local.entity.ModifierGroupEntity
 import com.chaslay.pos.data.local.entity.ProductEntity
+import com.chaslay.pos.domain.model.AddonGroupModel
 import com.chaslay.pos.domain.model.AddonOptionModel
 import com.chaslay.pos.domain.model.ModifierOptionModel
 import com.chaslay.pos.ui.catalog.CatalogScreen
@@ -102,8 +104,10 @@ fun MenuHubScreen(viewModel: MenuViewModel = hiltViewModel()) {
                                 MenuSection.PRODUCT_LIST -> R.string.product_list
                                 MenuSection.MENU_ORDER -> R.string.menu_order
                                 MenuSection.MENU_TEMPLATE -> R.string.menu_template
+                                MenuSection.IMPORT_EXPORT -> R.string.menu_import_export
                                 MenuSection.MODIFIERS -> R.string.modifiers
                                 MenuSection.ADDONS -> R.string.addons
+                                MenuSection.COMBOS -> R.string.combos
                             }
                         ),
                         color = if (selected) Color.White else colors.textPrimary,
@@ -126,6 +130,16 @@ fun MenuHubScreen(viewModel: MenuViewModel = hiltViewModel()) {
                     onMoveProductDown = viewModel::moveProductDown
                 )
                 MenuSection.MENU_TEMPLATE -> MenuTemplateSection()
+                MenuSection.IMPORT_EXPORT -> MenuImportSection(
+                    importMode = state.importMode,
+                    importPreview = state.importPreview,
+                    isImporting = state.isImporting,
+                    onModeChange = viewModel::setImportMode,
+                    onPickFile = viewModel::parseImportFile,
+                    onConfirmImport = viewModel::confirmImport,
+                    onDismissPreview = viewModel::dismissImportPreview,
+                    onExportTemplate = viewModel::exportTemplate
+                )
                 MenuSection.MODIFIERS -> ModifierListSection(
                     groups = state.modifierGroups,
                     viewModel = viewModel
@@ -134,9 +148,29 @@ fun MenuHubScreen(viewModel: MenuViewModel = hiltViewModel()) {
                     groups = state.addonGroups,
                     viewModel = viewModel
                 )
+                MenuSection.COMBOS -> CombosSectionHost(viewModel = viewModel)
             }
         }
     }
+}
+
+@Composable
+private fun CombosSectionHost(viewModel: MenuViewModel) {
+    var combos by remember { mutableStateOf<List<ProductEntity>>(emptyList()) }
+    var categories by remember { mutableStateOf<List<CategoryEntity>>(emptyList()) }
+    LaunchedEffect(Unit) {
+        combos = viewModel.getComboProducts()
+        categories = viewModel.getAllCategories()
+    }
+    CombosSection(
+        combos = combos,
+        categories = categories,
+        viewModel = viewModel,
+        onRefresh = {
+            combos = viewModel.getComboProducts()
+            categories = viewModel.getAllCategories()
+        }
+    )
 }
 
 @Composable
@@ -152,9 +186,9 @@ private fun MenuTemplateSection() {
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(stringResource(R.string.receipt_template), fontWeight = FontWeight.SemiBold)
-                Text("ù ${stringResource(R.string.receipt_show_vat)}", fontSize = 13.sp)
-                Text("ù ${stringResource(R.string.kitchen_large_items)}", fontSize = 13.sp)
-                Text("ù ${stringResource(R.string.kitchen_large_header)}", fontSize = 13.sp)
+                Text("? ${stringResource(R.string.receipt_show_vat)}", fontSize = 13.sp)
+                Text("? ${stringResource(R.string.kitchen_large_items)}", fontSize = 13.sp)
+                Text("? ${stringResource(R.string.kitchen_large_header)}", fontSize = 13.sp)
                 Text(stringResource(R.string.receipt_design), fontSize = 12.sp, color = Color.Gray)
             }
         }
@@ -253,7 +287,7 @@ private fun ModifierListSection(groups: List<ModifierGroupEntity>, viewModel: Me
                 items(groups, key = { it.id }) { group ->
                     QuickEditGroupCard(
                         name = group.name,
-                        subtitle = "Pick ${group.limitQuantity} ù ${if (group.required) "Required" else "Optional"}",
+                        subtitle = "Pick ${group.limitQuantity} ? ${if (group.required) "Required" else "Optional"}",
                         onEdit = { editing = group; showDialog = true },
                         onDelete = { viewModel.deleteModifierGroup(group.id) },
                         loadOptions = { viewModel.loadModifierGroup(group.id)?.options.orEmpty() },
@@ -292,7 +326,7 @@ private fun AddonListSection(groups: List<AddonGroupEntity>, viewModel: MenuView
                 items(groups, key = { it.id }) { group ->
                     QuickEditAddonGroupCard(
                         name = group.name,
-                        subtitle = "Pick ${group.limitQuantity} ù Paid extras",
+                        subtitle = "Pick ${group.limitQuantity} ? Paid extras",
                         onEdit = { editing = group; showDialog = true },
                         onDelete = { viewModel.deleteAddonGroup(group.id) },
                         loadOptions = { viewModel.loadAddonGroup(group.id)?.options.orEmpty() },

@@ -5,6 +5,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.HorizontalDivider
+import com.chaslay.pos.domain.model.FloorConnectionMode
+import com.chaslay.pos.domain.model.FloorDeviceRole
 import com.chaslay.pos.domain.model.PosMode
 import com.chaslay.pos.domain.model.PosThemeMode
 import com.chaslay.pos.domain.model.UserAccess
@@ -16,7 +18,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -61,6 +66,7 @@ import com.chaslay.pos.domain.model.PrintTarget
 import com.chaslay.pos.domain.model.SupportedCurrency
 import com.chaslay.pos.printer.DiscoveredPrinter
 import com.chaslay.pos.ui.license.LicenseSettingsSection
+import com.chaslay.pos.ui.tableplan.TablePlanDesignerScreen
 import com.chaslay.pos.ui.theme.ChaslayBrand
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -89,6 +95,12 @@ fun SettingsScreen(
     ) { grants ->
         hasBluetoothPermission = grants.values.all { it }
         viewModel.discoverPrinters(hasBluetoothPermission)
+    }
+
+    var showTablePlanDesigner by remember { mutableStateOf(false) }
+    if (showTablePlanDesigner) {
+        TablePlanDesignerScreen(onBack = { showTablePlanDesigner = false })
+        return
     }
 
     Row(
@@ -335,7 +347,29 @@ fun SettingsScreen(
         )
         Spacer(modifier = Modifier.height(8.dp))
         if (state.posMode == PosMode.RESTAURANT) {
-        Text(stringResource(R.string.table_settings))
+        Text(stringResource(R.string.table_settings), fontWeight = FontWeight.Bold)
+        Text(
+            stringResource(R.string.table_plan_help),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Button(
+            onClick = { showTablePlanDesigner = true },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(stringResource(R.string.open_table_plan_designer))
+        }
+        SettingSwitch(
+            stringResource(R.string.track_covers_seating_plan),
+            state.trackCoversFromSeatingPlan,
+            viewModel::updateTrackCoversFromSeatingPlan
+        )
+        Text(
+            stringResource(R.string.track_covers_help),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(8.dp))
         OutlinedTextField(
             value = state.newTableName,
             onValueChange = viewModel::updateNewTableName,
@@ -535,6 +569,61 @@ fun SettingsScreen(
                 }
             }
         }
+
+        Spacer(modifier = Modifier.height(12.dp))
+        Text(stringResource(R.string.scale_section), fontWeight = FontWeight.Bold, fontSize = 16.sp)
+        Text(stringResource(R.string.scale_help), fontSize = 12.sp, color = Color.Gray)
+        SettingSwitch(stringResource(R.string.scale_enabled), state.scaleEnabled, viewModel::updateScaleEnabled)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = viewModel::scanScaleUsbDevices) {
+                Text(stringResource(R.string.scale_scan_usb))
+            }
+            OutlinedButton(
+                onClick = viewModel::testScaleReading,
+                enabled = state.scaleEnabled && !state.scaleUsbAddress.isNullOrBlank()
+            ) {
+                Text(stringResource(R.string.scale_test_reading))
+            }
+        }
+        state.scaleUsbAddress?.let { selected ->
+            Text("Selected: $selected", fontSize = 12.sp, color = Color(0xFF16A085))
+        }
+        state.scaleTestReading?.let { reading ->
+            Text(reading, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF16A085))
+        }
+        state.scaleDevices.forEach { device ->
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (device.stableAddress == state.scaleUsbAddress) {
+                        Color(0xFFECFDF5)
+                    } else {
+                        MaterialTheme.colorScheme.surfaceVariant
+                    }
+                )
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text(device.displayName, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Button(onClick = { viewModel.requestScalePermission(device.stableAddress) }) {
+                            Text(
+                                if (device.hasPermission) stringResource(R.string.usb_printer_allowed)
+                                else stringResource(R.string.usb_printer_permission),
+                                fontSize = 11.sp
+                            )
+                        }
+                        Button(onClick = { viewModel.selectScaleDevice(device.stableAddress) }) {
+                            Text(stringResource(R.string.scale_select_usb), fontSize = 11.sp)
+                        }
+                    }
+                }
+            }
+        }
         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
         Button(onClick = viewModel::showAddPrinterDialog, modifier = Modifier.fillMaxWidth()) {
             Text(stringResource(R.string.add_printer))
@@ -636,6 +725,113 @@ fun SettingsScreen(
                     }
             }
         }
+        }
+
+        if (state.selectedSection == SettingsSection.FLOOR_DEVICES) {
+            Text(stringResource(R.string.floor_sync_settings), fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            Text(stringResource(R.string.floor_sync_help), style = MaterialTheme.typography.bodySmall)
+            SettingSwitch(
+                label = stringResource(R.string.floor_sync_enabled),
+                checked = state.floorSyncEnabled,
+                onCheckedChange = viewModel::updateFloorSyncEnabled
+            )
+            if (state.floorSyncEnabled) {
+                Text(stringResource(R.string.floor_device_role), fontWeight = FontWeight.SemiBold)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FloorDeviceRole.entries.forEach { role ->
+                        FilterChip(
+                            selected = state.floorDeviceRole == role,
+                            onClick = { viewModel.updateFloorDeviceRole(role) },
+                            label = {
+                                Text(
+                                    when (role) {
+                                        FloorDeviceRole.MAIN_POS -> stringResource(R.string.floor_role_main_pos)
+                                        FloorDeviceRole.WAITER -> stringResource(R.string.floor_role_waiter)
+                                        FloorDeviceRole.STANDARD -> stringResource(R.string.floor_role_standard)
+                                    }
+                                )
+                            }
+                        )
+                    }
+                }
+                if (state.floorDeviceRole == FloorDeviceRole.MAIN_POS) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(stringResource(R.string.local_lan_url), fontWeight = FontWeight.SemiBold)
+                    Text(
+                        state.localLanUrl ?: stringResource(R.string.local_lan_url_unknown),
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(stringResource(R.string.local_lan_url_help), style = MaterialTheme.typography.bodySmall)
+                    TextButton(onClick = viewModel::refreshLocalLanUrl) {
+                        Text(stringResource(R.string.refresh_lan_address))
+                    }
+                }
+                if (state.floorDeviceRole == FloorDeviceRole.WAITER) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(stringResource(R.string.floor_connection_mode), fontWeight = FontWeight.SemiBold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FloorConnectionMode.entries.forEach { mode ->
+                            FilterChip(
+                                selected = state.floorConnectionMode == mode,
+                                onClick = { viewModel.updateFloorConnectionMode(mode) },
+                                label = {
+                                    Text(
+                                        when (mode) {
+                                            FloorConnectionMode.AUTO -> stringResource(R.string.floor_connection_auto)
+                                            FloorConnectionMode.LAN_ONLY -> stringResource(R.string.floor_connection_lan)
+                                            FloorConnectionMode.CLOUD_ONLY -> stringResource(R.string.floor_connection_cloud)
+                                        }
+                                    )
+                                }
+                            )
+                        }
+                    }
+                    Text(stringResource(R.string.floor_connection_mode_help), style = MaterialTheme.typography.bodySmall)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = state.mainPosLanUrl,
+                        onValueChange = viewModel::updateMainPosLanUrl,
+                        label = { Text(stringResource(R.string.main_pos_lan_url)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = { viewModel.commitMainPosLanUrl() })
+                    )
+                    Text(stringResource(R.string.main_pos_lan_url_help), style = MaterialTheme.typography.bodySmall)
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        OutlinedButton(
+                            onClick = viewModel::discoverMainPos,
+                            enabled = !state.isDiscoveringMainPos,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                if (state.isDiscoveringMainPos) {
+                                    stringResource(R.string.discovering_main_pos)
+                                } else {
+                                    stringResource(R.string.discover_main_pos)
+                                }
+                            )
+                        }
+                        OutlinedButton(
+                            onClick = viewModel::testMainPosConnection,
+                            enabled = !state.isTestingMainPos,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                if (state.isTestingMainPos) {
+                                    stringResource(R.string.testing_connection)
+                                } else {
+                                    stringResource(R.string.test_main_pos_connection)
+                                }
+                            )
+                        }
+                    }
+                }
+            }
         }
 
         if (state.selectedSection == SettingsSection.USERS_ACCOUNTS) {

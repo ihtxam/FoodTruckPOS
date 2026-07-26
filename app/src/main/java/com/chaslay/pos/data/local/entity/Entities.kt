@@ -75,6 +75,10 @@ data class ProductEntity(
     val isActive: Boolean = true,
     val onlineVisible: Boolean = true,
     val isOpenPrice: Boolean = false,
+    /** Sold by weight (price is per kg); quantity in cart is stored in grams. */
+    val isWeighed: Boolean = false,
+    /** Fixed-price meal deal with slot-based picks (starter, main, drink, etc.). */
+    val isCombo: Boolean = false,
     val printTarget: PrintTarget? = null,
     val sortOrder: Int = 0,
     val stockQuantity: Int? = null,
@@ -151,6 +155,12 @@ data class TransactionEntity(
     val amountTendered: Double? = null,
     val changeDue: Double? = null,
     val pickupTimeMs: Long? = null,
+    /** Serialized Adyen Terminal API CustomerReceipt for on-demand reprint. */
+    val adyenCustomerReceiptJson: String? = null,
+    /** Serialized Adyen Terminal API CashierReceipt (merchant copy) for on-demand reprint. */
+    val adyenCashierReceiptJson: String? = null,
+    /** Guest / cover count recorded at checkout (dine-in seating plan). */
+    val guestCount: Int? = null,
     val createdAt: Long = System.currentTimeMillis()
 )
 
@@ -241,7 +251,28 @@ data class BusinessSettingsEntity(
     /** 1 = normal, 2 = large (double height), 3 = extra large (double width + height) */
     val kitchenItemTextScale: Int = 2,
     val kitchenHeaderTextScale: Int = 2,
-    val receiptTemplateName: String = "Default"
+    val receiptTemplateName: String = "Default",
+    val scaleEnabled: Boolean = false,
+    /** Stable USB id, e.g. usb:6790:29987 */
+    val scaleUsbAddress: String? = null,
+    /** Enable cloud + LAN floor sync for waiter devices. */
+    val floorSyncEnabled: Boolean = false,
+    /** MAIN_POS, WAITER, or STANDARD */
+    val floorDeviceRole: String = "STANDARD",
+    /** When enabled, staff enter cover count when seating; EOD reports guests served. */
+    val trackCoversFromSeatingPlan: Boolean = false,
+    /** LAN URL of main POS, e.g. http://192.168.1.50:8787 */
+    val mainPosLanUrl: String = "",
+    /** AUTO, LAN, or CLOUD — how floor sync routes when this device is a waiter tablet. */
+    val floorConnectionMode: String = "AUTO"
+)
+
+@Entity(tableName = "table_floors")
+data class TableFloorEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val sortOrder: Int = 0,
+    val isActive: Boolean = true
 )
 
 @Entity(tableName = "restaurant_tables")
@@ -249,7 +280,32 @@ data class RestaurantTableEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
     val sortOrder: Int = 0,
-    val isActive: Boolean = true
+    val isActive: Boolean = true,
+    val floorId: Long = 1,
+    /** Maximum guests / seat count for this table. */
+    val seatCapacity: Int = 4,
+    /** Normalized 0..1 position on floor plan. */
+    val planX: Float = 0f,
+    val planY: Float = 0f,
+    val planWidth: Float = 0.12f,
+    val planHeight: Float = 0.12f,
+    /** ROUND, SQUARE, or RECT */
+    val shape: String = "ROUND",
+    val rotation: Float = 0f
+)
+
+@Entity(tableName = "floor_plan_elements")
+data class FloorPlanElementEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val floorId: Long = 1,
+    /** WALL, BAR, or OBSTACLE */
+    val elementType: String = "WALL",
+    val label: String? = null,
+    val planX: Float = 0.1f,
+    val planY: Float = 0.1f,
+    val planWidth: Float = 0.3f,
+    val planHeight: Float = 0.04f,
+    val rotation: Float = 0f
 )
 
 @Entity(
@@ -276,6 +332,8 @@ data class TableOrderEntity(
     val notes: String? = null,
     val lastSentAt: Long? = null,
     val kitchenRound: Int = 0,
+    /** Current seated guest / cover count for this table order. */
+    val guestCount: Int? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 )
@@ -520,5 +578,51 @@ data class ProductModifierGroupEntity(
 data class ProductAddonGroupEntity(
     val productId: Long,
     val groupId: Long,
+    val sortOrder: Int = 0
+)
+
+@Entity(
+    tableName = "combo_slots",
+    foreignKeys = [
+        ForeignKey(
+            entity = ProductEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["comboProductId"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ],
+    indices = [Index("comboProductId")]
+)
+data class ComboSlotEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val comboProductId: Long,
+    val name: String,
+    val minPick: Int = 1,
+    val maxPick: Int = 1,
+    val sortOrder: Int = 0
+)
+
+@Entity(
+    tableName = "combo_slot_options",
+    foreignKeys = [
+        ForeignKey(
+            entity = ComboSlotEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["slotId"],
+            onDelete = ForeignKey.CASCADE
+        ),
+        ForeignKey(
+            entity = ProductEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["productId"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ],
+    indices = [Index("slotId"), Index("productId")]
+)
+data class ComboSlotOptionEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val slotId: Long,
+    val productId: Long,
     val sortOrder: Int = 0
 )

@@ -21,7 +21,7 @@ import com.chaslay.pos.data.preferences.SessionManager
 import com.chaslay.pos.data.repository.LicenseRepository
 import com.chaslay.pos.domain.model.LicenseGateState
 import com.chaslay.pos.domain.model.PosThemeMode
-import com.chaslay.pos.domain.model.UserAccess
+import com.chaslay.pos.sync.FloorSyncCoordinator
 import com.chaslay.pos.sync.SyncService
 import com.chaslay.pos.ui.license.ActivationScreen
 import com.chaslay.pos.ui.navigation.ChaslayNavHost
@@ -37,6 +37,7 @@ class MainActivity : AppCompatActivity() {
     @Inject lateinit var sessionManager: SessionManager
     @Inject lateinit var syncService: SyncService
     @Inject lateinit var licenseRepository: LicenseRepository
+    @Inject lateinit var floorSyncCoordinator: FloorSyncCoordinator
 
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -51,6 +52,8 @@ class MainActivity : AppCompatActivity() {
             runCatching { licenseRepository.ensureInitialized() }
             runCatching { syncService.syncAll(force = false) }
         }
+
+        floorSyncCoordinator.start(lifecycleScope)
 
         setContent {
             val userAccess by sessionManager.currentUserAccess.collectAsStateWithLifecycle(initialValue = null)
@@ -86,6 +89,11 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    override fun onDestroy() {
+        floorSyncCoordinator.stop()
+        super.onDestroy()
     }
 
     private fun requestNotificationPermissionIfNeeded() {

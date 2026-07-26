@@ -15,3 +15,6 @@
 -keepclasseswithmembers class * {
     @retrofit2.http.* <methods>;
 }
+-dontwarn javax.xml.stream.**
+-keep class org.dhatim.fastexcel.** { *; }
+-keep class fi.iki.elonen.** { *; }

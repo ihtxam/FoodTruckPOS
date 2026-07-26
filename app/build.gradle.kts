@@ -14,8 +14,8 @@ android {
         applicationId = "com.chaslay.pos"
         minSdk = 25
         targetSdk = 35
-        versionCode = 13
-        versionName = "1.0.12"
+        versionCode = 23
+        versionName = "1.0.22"
 
         multiDexEnabled = true
 
@@ -113,7 +113,44 @@ dependencies {
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+    implementation("org.dhatim:fastexcel-reader:0.18.4")
+    implementation("org.dhatim:fastexcel:0.18.4")
+    implementation("com.fasterxml:aalto-xml:1.3.2")
+    implementation("com.github.mik3y:usb-serial-for-android:3.9.0")
+    implementation("org.nanohttpd:nanohttpd:2.3.1")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
+}
+
+/** Copies release/debug APKs to Downloads as chaslaypos-<versionName>.apk for testing. */
+afterEvaluate {
+    fun registerCopyApkTask(taskName: String, assembleTaskName: String, variantFolder: String, suffix: String) {
+        tasks.register(taskName) {
+            dependsOn(assembleTaskName)
+            doLast {
+                val versionName = android.defaultConfig.versionName
+                val apkDir = layout.buildDirectory.dir("outputs/apk/$variantFolder").get().asFile
+                val source = apkDir.listFiles()
+                    ?.filter { it.isFile && it.extension.equals("apk", ignoreCase = true) }
+                    ?.maxByOrNull { it.lastModified() }
+                    ?: error("No APK found in $apkDir — run $assembleTaskName first")
+                val fileName = if (suffix.isEmpty()) {
+                    "chaslaypos-$versionName.apk"
+                } else {
+                    "chaslaypos-$versionName-$suffix.apk"
+                }
+                val dest = rootProject.layout.projectDirectory.file("../$fileName").asFile
+                dest.parentFile?.mkdirs()
+                source.copyTo(dest, overwrite = true)
+                logger.lifecycle("Test APK: ${dest.absolutePath}")
+            }
+        }
+        tasks.named(assembleTaskName) {
+            finalizedBy(taskName)
+        }
+    }
+
+    registerCopyApkTask("copyReleaseApkForTesting", "assembleRelease", "release", suffix = "")
+    registerCopyApkTask("copyDebugApkForTesting", "assembleDebug", "debug", suffix = "debug")
 }
