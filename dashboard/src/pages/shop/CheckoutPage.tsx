@@ -311,6 +311,11 @@ export default function CheckoutPage() {
             productId: i.id,
             quantity: i.quantity,
             selectedExtras: (i.selectedExtras || []).map((e) => ({ id: e.id })),
+            comboSelections: (i.comboSelections || []).map((c) => ({
+              slotId: c.slotId,
+              productId: c.productId,
+              selectedExtras: (c.selectedExtras || []).map((e) => ({ id: e.id })),
+            })),
           })),
           fulfillmentChannel: draft.channel,
           customerName: draft.customerName,
@@ -822,6 +827,11 @@ export default function CheckoutPage() {
                   <li key={i.lineId || i.id} className="flex justify-between gap-3">
                     <span className="min-w-0">
                       {i.quantity}× {i.name}
+                      {!!i.comboSelections?.length && (
+                        <span className="block text-xs text-stone-500 mt-0.5">
+                          {i.comboSelections.map((c) => c.productName).join(' · ')}
+                        </span>
+                      )}
                       {!!i.selectedExtras?.length && (
                         <span className="block text-xs text-stone-500 mt-0.5">
                           {i.selectedExtras.map((e) => e.name).join(', ')}
@@ -856,6 +866,11 @@ export default function CheckoutPage() {
               <li key={i.lineId || i.id} className="flex justify-between gap-2">
                 <span className="min-w-0">
                   {i.quantity}× {i.name}
+                  {!!i.comboSelections?.length && (
+                    <span className="block text-xs text-stone-500 mt-0.5">
+                      {i.comboSelections.map((c) => c.productName).join(' · ')}
+                    </span>
+                  )}
                   {!!i.selectedExtras?.length && (
                     <span className="block text-xs text-stone-500 mt-0.5">
                       {i.selectedExtras.map((e) => e.name).join(', ')}

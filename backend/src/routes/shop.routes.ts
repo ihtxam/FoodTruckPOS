@@ -8,11 +8,17 @@ import { ShopCustomerService } from "@/services/shop-customer.service";
 import { AdyenService } from "@/services/adyen.service";
 import { AuthService } from "@/services/auth.service";
 import { ModifierService } from "@/services/modifier.service";
+import { normalizeComboSlots } from "@/lib/combo";
 import { v4 as uuidv4 } from "uuid";
 
 const router = Router();
 
 type ShopExtraSelection = { id: string; name?: string; price?: number };
+type ShopComboSelectionInput = {
+  slotId: string;
+  productId: string;
+  selectedExtras?: ShopExtraSelection[];
+};
 
 function serializeShopModifierGroup(g: any) {
   const pricingType = g.pricingType || "fixed";
@@ -37,15 +43,50 @@ function serializeShopModifierGroup(g: any) {
 
 function mapShopProduct(
   p: typeof schema.products.$inferSelect,
-  modifierGroups: ReturnType<typeof serializeShopModifierGroup>[]
+  modifierGroups: ReturnType<typeof serializeShopModifierGroup>[],
+  catalogById?: Map<string, typeof schema.products.$inferSelect>,
+  groupsByProduct?: Map<string, ReturnType<typeof serializeShopModifierGroup>[]>
 ) {
   const extras = Array.isArray(p.extras) ? p.extras : [];
+  const isCombo = p.productType === "combo";
+  const slots = isCombo ? normalizeComboSlots(p.comboItems) : [];
+
+  const comboSlots = slots.map((slot) => ({
+    id: slot.id,
+    name: slot.name,
+    minPick: slot.minPick,
+    maxPick: slot.maxPick,
+    options: slot.options
+      .map((opt) => {
+        const child = catalogById?.get(opt.productId);
+        if (!child || child.isActive === false) return null;
+        const childGroups = groupsByProduct?.get(child.id) || [];
+        const childExtras = Array.isArray(child.extras) ? child.extras : [];
+        return {
+          productId: child.id,
+          name: child.name,
+          image: child.imageUrl,
+          description: child.description,
+          extraPrice: roundMoney2(opt.extraPrice),
+          allowExtras: !!child.allowExtras || childGroups.length > 0 || childExtras.length > 0,
+          extras: childExtras.map((e) => ({
+            id: e.id,
+            name: e.name,
+            price: Number(e.price) || 0,
+          })),
+          modifierGroups: childGroups,
+        };
+      })
+      .filter(Boolean),
+  })).filter((s) => s.options.length > 0);
+
   return {
     id: p.id,
     name: p.name,
     price: parseFloat(p.price.toString()),
     description: p.description,
     image: p.imageUrl,
+    productType: p.productType || "standard",
     allowExtras: !!p.allowExtras || modifierGroups.length > 0 || extras.length > 0,
     extras: extras.map((e) => ({
       id: e.id,
@@ -53,7 +94,107 @@ function mapShopProduct(
       price: Number(e.price) || 0,
     })),
     modifierGroups,
+    comboSlots: isCombo ? comboSlots : [],
   };
+}
+
+async function resolveShopComboSelections(
+  merchantId: string,
+  comboProduct: typeof schema.products.$inferSelect,
+  requested: ShopComboSelectionInput[] | undefined
+): Promise<{
+  selections: Array<{
+    slotId: string;
+    slotName: string;
+    productId: string;
+    productName: string;
+    extraPrice: number;
+    selectedExtras: Array<{ id: string; name: string; price: number }>;
+  }>;
+  surcharge: number;
+  error?: string;
+}> {
+  const slots = normalizeComboSlots(comboProduct.comboItems);
+  if (!slots.length) {
+    return { selections: [], surcharge: 0 };
+  }
+
+  const picks = Array.isArray(requested) ? requested : [];
+  const picksBySlot = new Map<string, ShopComboSelectionInput[]>();
+  for (const pick of picks) {
+    if (!pick?.slotId || !pick?.productId) continue;
+    const list = picksBySlot.get(pick.slotId) || [];
+    list.push(pick);
+    picksBySlot.set(pick.slotId, list);
+  }
+
+  const db = getDb();
+  const selections: Array<{
+    slotId: string;
+    slotName: string;
+    productId: string;
+    productName: string;
+    extraPrice: number;
+    selectedExtras: Array<{ id: string; name: string; price: number }>;
+  }> = [];
+  let surcharge = 0;
+
+  for (const slot of slots) {
+    const slotPicks = picksBySlot.get(slot.id) || [];
+    if (slotPicks.length < slot.minPick) {
+      return {
+        selections: [],
+        surcharge: 0,
+        error: `Please choose ${slot.minPick === 1 ? "an option" : `${slot.minPick} options`} for "${slot.name}"`,
+      };
+    }
+    if (slotPicks.length > slot.maxPick) {
+      return {
+        selections: [],
+        surcharge: 0,
+        error: `Too many options selected for "${slot.name}"`,
+      };
+    }
+
+    const optionById = new Map(slot.options.map((o) => [o.productId, o]));
+    for (const pick of slotPicks) {
+      const opt = optionById.get(pick.productId);
+      if (!opt) {
+        return {
+          selections: [],
+          surcharge: 0,
+          error: `Invalid choice for "${slot.name}"`,
+        };
+      }
+      const child = await db.query.products.findFirst({
+        where: and(eq(schema.products.id, pick.productId), eq(schema.products.merchantId, merchantId)),
+      });
+      if (!child || !child.isActive) {
+        return {
+          selections: [],
+          surcharge: 0,
+          error: `Product unavailable in "${slot.name}"`,
+        };
+      }
+      const extrasResolved = await resolveShopLineExtras(merchantId, child, pick.selectedExtras);
+      if (extrasResolved.error) {
+        return { selections: [], surcharge: 0, error: extrasResolved.error };
+      }
+      const extraPrice = roundMoney2(opt.extraPrice);
+      const extrasTotal = roundMoney2(extrasResolved.extras.reduce((s, e) => s + e.price, 0));
+      surcharge = roundMoney2(surcharge + extraPrice + extrasTotal);
+      selections.push({
+        slotId: slot.id,
+        slotName: slot.name,
+        productId: child.id,
+        productName: child.name,
+        extraPrice,
+        selectedExtras: extrasResolved.extras,
+      });
+    }
+  }
+
+  return { selections, surcharge };
 }
 
 async function loadModifierGroupsByProduct(merchantId: string, productIds: string[]) {
@@ -301,9 +442,10 @@ router.get("/:slug/menu", async (req: Request, res: Response) => {
       merchant.id,
       products.map((p) => p.id)
     );
+    const catalogById = new Map(products.map((p) => [p.id, p]));
 
     const toItem = (p: (typeof products)[number]) =>
-      mapShopProduct(p, groupsByProduct.get(p.id) || []);
+      mapShopProduct(p, groupsByProduct.get(p.id) || [], catalogById, groupsByProduct);
 
     const menu = categories.map((cat) => ({
       id: cat.id,
@@ -576,7 +718,12 @@ router.post("/:slug/orders", async (req: Request, res: Response) => {
       scheduledFor,
       guestCheckout = true,
     } = req.body as {
-      items: Array<{ productId: string; quantity: number; selectedExtras?: ShopExtraSelection[] }>;
+      items: Array<{
+        productId: string;
+        quantity: number;
+        selectedExtras?: ShopExtraSelection[];
+        comboSelections?: ShopComboSelectionInput[];
+      }>;
       customerEmail?: string;
       customerPhone?: string;
       customerName?: string;
@@ -666,6 +813,14 @@ router.post("/:slug/orders", async (req: Request, res: Response) => {
       totalPrice: number;
       taxAmount: number;
       selectedExtras: Array<{ id: string; name: string; price: number }>;
+      comboSelections: Array<{
+        slotId: string;
+        slotName: string;
+        productId: string;
+        productName: string;
+        extraPrice: number;
+        selectedExtras?: Array<{ id: string; name: string; price: number }>;
+      }>;
     }> = [];
 
     for (const item of items) {
@@ -678,17 +833,52 @@ router.post("/:slug/orders", async (req: Request, res: Response) => {
       const qty = Number(item.quantity) || 0;
       if (qty <= 0) continue;
 
+      let comboSelections: (typeof lineItems)[number]["comboSelections"] = [];
+      let comboSurcharge = 0;
+      if (product.productType === "combo") {
+        const comboResolved = await resolveShopComboSelections(
+          merchant.id,
+          product,
+          item.comboSelections
+        );
+        if (comboResolved.error) {
+          return res.status(400).json({ error: comboResolved.error });
+        }
+        comboSelections = comboResolved.selections;
+        comboSurcharge = comboResolved.surcharge;
+      }
+
       const resolved = await resolveShopLineExtras(merchant.id, product, item.selectedExtras);
       if (resolved.error) {
         return res.status(400).json({ error: resolved.error });
       }
 
       const extrasTotal = roundMoney2(resolved.extras.reduce((s, e) => s + e.price, 0));
-      const unitPrice = roundMoney2(parseFloat(product.price.toString()) + extrasTotal);
+      const unitPrice = roundMoney2(
+        parseFloat(product.price.toString()) + extrasTotal + comboSurcharge
+      );
       const totalPrice = roundMoney2(unitPrice * qty);
       const lineTax = product.isTaxable ? roundMoney2((totalPrice * taxRate) / 100) : 0;
       subtotal += totalPrice;
       taxAmount += lineTax;
+
+      // Flatten combo picks into selectedExtras for receipts/POS that only read extras
+      const flatExtras = [
+        ...resolved.extras,
+        ...comboSelections.flatMap((sel) => [
+          {
+            id: `combo:${sel.slotId}:${sel.productId}`,
+            name: `${sel.slotName}: ${sel.productName}`,
+            price: sel.extraPrice,
+          },
+          ...(sel.selectedExtras || []).map((e) => ({
+            id: e.id,
+            name: `${sel.productName} · ${e.name}`,
+            price: e.price,
+          })),
+        ]),
+      ];
+
       lineItems.push({
         productId: product.id,
         productName: product.name,
@@ -696,7 +886,8 @@ router.post("/:slug/orders", async (req: Request, res: Response) => {
         unitPrice,
         totalPrice,
         taxAmount: lineTax,
-        selectedExtras: resolved.extras,
+        selectedExtras: flatExtras,
+        comboSelections,
       });
     }
 
@@ -822,6 +1013,7 @@ router.post("/:slug/orders", async (req: Request, res: Response) => {
         totalPrice: line.totalPrice.toFixed(2),
         taxAmount: line.taxAmount.toFixed(2),
         selectedExtras: line.selectedExtras,
+        comboSelections: line.comboSelections,
       });
     }
 

@@ -43,6 +43,19 @@ interface ModifierGroupSummary {
   selectionType?: string;
 }
 
+interface ComboOptionForm {
+  productId: string;
+  extraPrice: number;
+}
+
+interface ComboSlotForm {
+  id: string;
+  name: string;
+  minPick: number;
+  maxPick: number;
+  options: ComboOptionForm[];
+}
+
 interface Product {
   id: string;
   name: string;
@@ -63,6 +76,15 @@ interface Product {
   allowExtras?: boolean;
   sortOrder?: number;
   modifierGroups?: ModifierGroupSummary[];
+  comboItems?: Array<{
+    id?: string;
+    name?: string;
+    minPick?: number;
+    maxPick?: number;
+    options?: Array<{ productId: string; extraPrice?: number }>;
+    productId?: string;
+    quantity?: number;
+  }>;
 }
 
 interface Category {
@@ -80,9 +102,19 @@ type FormState = {
   buttonColor: string;
   isOpenPrice: boolean;
   soldByWeight: boolean;
+  isCombo: boolean;
+  comboSlots: ComboSlotForm[];
   specifications: SpecRow[];
   modifierGroupIds: string[];
 };
+
+const emptySlot = (name = 'Main'): ComboSlotForm => ({
+  id: `slot-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+  name,
+  minPick: 1,
+  maxPick: 1,
+  options: [],
+});
 
 const emptyForm = (): FormState => ({
   name: '',
@@ -94,9 +126,43 @@ const emptyForm = (): FormState => ({
   buttonColor: '#0f172a',
   isOpenPrice: false,
   soldByWeight: false,
+  isCombo: false,
+  comboSlots: [],
   specifications: [{ id: 'default', name: 'Regular', price: 0, saleStatus: 'in_stock', isDefault: true }],
   modifierGroupIds: [],
 });
+
+function normalizeComboSlotsFromProduct(raw: Product['comboItems']): ComboSlotForm[] {
+  if (!Array.isArray(raw) || !raw.length) return [];
+  return raw
+    .map((row, idx) => {
+      if (Array.isArray(row.options) && row.options.length) {
+        return {
+          id: row.id || `slot-${idx + 1}`,
+          name: row.name || `Choice ${idx + 1}`,
+          minPick: Math.max(1, Number(row.minPick) || 1),
+          maxPick: Math.max(1, Number(row.maxPick) || 1),
+          options: row.options
+            .filter((o) => o?.productId)
+            .map((o) => ({
+              productId: o.productId,
+              extraPrice: Math.max(0, Number(o.extraPrice) || 0),
+            })),
+        };
+      }
+      if (row.productId) {
+        return {
+          id: row.id || `legacy-${row.productId}-${idx}`,
+          name: row.name || `Item ${idx + 1}`,
+          minPick: 1,
+          maxPick: 1,
+          options: [{ productId: row.productId, extraPrice: 0 }],
+        };
+      }
+      return null;
+    })
+    .filter(Boolean) as ComboSlotForm[];
+}
 
 const BUTTON_COLORS = ['#ffffff', '#facc15', '#7dd3fc', '#4ade80', '#f9a8d4', '#3370FE', '#0f172a'];
 
@@ -115,6 +181,7 @@ const money = (value: string | number) =>
   new Intl.NumberFormat(undefined, { style: 'currency', currency: 'CHF' }).format(Number(value) || 0);
 
 const productTypeLabel = (product: Product) => {
+  if (product.productType === 'combo' || (product.comboItems && product.comboItems.length)) return 'Combo';
   if (product.soldByWeight) return 'Weighed';
   if (product.isOpenPrice) return 'Open price';
   return product.productType || 'Standard';
@@ -245,6 +312,7 @@ export default function Products() {
                 isDefault: true,
               },
             ];
+      const comboSlots = normalizeComboSlotsFromProduct(full.comboItems);
       setForm({
         name: full.name,
         description: full.description || '',
@@ -255,10 +323,13 @@ export default function Products() {
         buttonColor: full.buttonColor || '#0f172a',
         isOpenPrice: !!full.isOpenPrice,
         soldByWeight: !!full.soldByWeight,
-        specifications: specs,
+        isCombo: full.productType === 'combo' || comboSlots.length > 0,
+        comboSlots,
+        specifications: specs as SpecRow[],
         modifierGroupIds: (full.modifierGroups || []).map((g) => g.id),
       });
     } catch {
+      const comboSlots = normalizeComboSlotsFromProduct(product.comboItems);
       setForm({
         name: product.name,
         description: product.description || '',
@@ -269,6 +340,8 @@ export default function Products() {
         buttonColor: product.buttonColor || '#0f172a',
         isOpenPrice: !!product.isOpenPrice,
         soldByWeight: !!product.soldByWeight,
+        isCombo: product.productType === 'combo' || comboSlots.length > 0,
+        comboSlots,
         specifications: [
           {
             id: 'default',
@@ -299,6 +372,27 @@ export default function Products() {
     const defaultSpec =
       form.specifications.find((s) => s.isDefault) || form.specifications[0];
     const price = Number(defaultSpec?.price ?? form.price) || 0;
+    const comboSlots = form.isCombo
+      ? form.comboSlots
+          .filter((s) => s.name.trim() && s.options.length > 0)
+          .map((s) => ({
+            id: s.id,
+            name: s.name.trim(),
+            minPick: Math.max(1, Number(s.minPick) || 1),
+            maxPick: Math.max(1, Number(s.maxPick) || 1),
+            options: s.options.map((o) => ({
+              productId: o.productId,
+              extraPrice: Math.max(0, Number(o.extraPrice) || 0),
+            })),
+          }))
+      : [];
+    const productType = form.isCombo
+      ? 'combo'
+      : form.soldByWeight
+        ? 'weighed'
+        : form.isOpenPrice
+          ? 'open_price'
+          : 'standard';
     return {
       name: form.name.trim(),
       description: form.description.trim() || undefined,
@@ -307,9 +401,10 @@ export default function Products() {
       sku: form.sku.trim() || undefined,
       categoryId: form.categoryId || undefined,
       buttonColor: form.buttonColor || undefined,
-      isOpenPrice: form.isOpenPrice,
-      soldByWeight: form.soldByWeight,
-      productType: form.soldByWeight ? 'weighed' : form.isOpenPrice ? 'open_price' : 'standard',
+      isOpenPrice: form.isCombo ? false : form.isOpenPrice,
+      soldByWeight: form.isCombo ? false : form.soldByWeight,
+      productType,
+      comboItems: comboSlots,
       specifications: form.specifications
         .filter((s) => s.name.trim())
         .map((s, i) => ({
@@ -330,6 +425,13 @@ export default function Products() {
     if (!form.name.trim()) {
       toast.error('Product name is required');
       return;
+    }
+    if (form.isCombo) {
+      const validSlots = form.comboSlots.filter((s) => s.name.trim() && s.options.length > 0);
+      if (!validSlots.length) {
+        toast.error('Add at least one combo step with products');
+        return;
+      }
     }
     setSaving(true);
     try {
@@ -808,21 +910,209 @@ export default function Products() {
                 <label className="inline-flex items-center gap-2">
                   <input
                     type="checkbox"
-                    checked={form.isOpenPrice}
-                    onChange={(e) => setForm({ ...form, isOpenPrice: e.target.checked })}
+                    checked={form.isCombo}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        isCombo: e.target.checked,
+                        isOpenPrice: e.target.checked ? false : form.isOpenPrice,
+                        soldByWeight: e.target.checked ? false : form.soldByWeight,
+                        comboSlots:
+                          e.target.checked && form.comboSlots.length === 0
+                            ? [emptySlot('Main'), emptySlot('Side'), emptySlot('Drink')]
+                            : form.comboSlots,
+                      })
+                    }
                   />
-                  {t('openPriceItem')}
+                  {t('comboMeal')}
                 </label>
-                <label className="inline-flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={form.soldByWeight}
-                    onChange={(e) => setForm({ ...form, soldByWeight: e.target.checked })}
-                  />
-                  {t('weighingProduct')}
-                </label>
+                {!form.isCombo && (
+                  <>
+                    <label className="inline-flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={form.isOpenPrice}
+                        onChange={(e) => setForm({ ...form, isOpenPrice: e.target.checked })}
+                      />
+                      {t('openPriceItem')}
+                    </label>
+                    <label className="inline-flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={form.soldByWeight}
+                        onChange={(e) => setForm({ ...form, soldByWeight: e.target.checked })}
+                      />
+                      {t('weighingProduct')}
+                    </label>
+                  </>
+                )}
               </div>
 
+              {form.isCombo && (
+                <div className="rounded-md border border-[var(--border)] p-3 space-y-3">
+                  <Field label={`${t('salePrice')} (combo)`}>
+                    <div className="relative max-w-xs">
+                      <input
+                        className="field-input pr-12"
+                        type="number"
+                        step="0.05"
+                        min="0"
+                        value={form.price}
+                        onChange={(e) => {
+                          const price = e.target.value;
+                          setForm({
+                            ...form,
+                            price,
+                            specifications: form.specifications.map((s, i) =>
+                              i === 0 || s.isDefault ? { ...s, price: Number(price) || 0 } : s
+                            ),
+                          });
+                        }}
+                      />
+                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] muted">
+                        CHF
+                      </span>
+                    </div>
+                  </Field>
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <h3 className="text-sm font-semibold">{t('comboSteps')}</h3>
+                      <p className="text-[11px] muted mt-0.5">{t('comboStepsHint')}</p>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn-primary !py-1 !text-xs"
+                      onClick={() =>
+                        setForm({
+                          ...form,
+                          comboSlots: [...form.comboSlots, emptySlot(`Choice ${form.comboSlots.length + 1}`)],
+                        })
+                      }
+                    >
+                      <Plus size={14} /> {t('addStep')}
+                    </button>
+                  </div>
+
+                  <div className="space-y-3">
+                    {form.comboSlots.map((slot, slotIdx) => (
+                      <div key={slot.id} className="rounded-md border border-[var(--border)] p-2.5 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] font-semibold muted w-14 shrink-0">
+                            #{slotIdx + 1}
+                          </span>
+                          <input
+                            className="field-input"
+                            placeholder={t('stepName')}
+                            value={slot.name}
+                            onChange={(e) => {
+                              const next = [...form.comboSlots];
+                              next[slotIdx] = { ...next[slotIdx], name: e.target.value };
+                              setForm({ ...form, comboSlots: next });
+                            }}
+                          />
+                          <button
+                            type="button"
+                            className="rounded-md p-1.5 text-[var(--danger)] hover:bg-[var(--bg-muted)]"
+                            onClick={() =>
+                              setForm({
+                                ...form,
+                                comboSlots: form.comboSlots.filter((_, i) => i !== slotIdx),
+                              })
+                            }
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          {slot.options.map((opt, optIdx) => {
+                            const prod = products.find((p) => p.id === opt.productId);
+                            return (
+                              <div
+                                key={`${slot.id}-${opt.productId}-${optIdx}`}
+                                className="grid grid-cols-[1fr_5.5rem_auto] gap-1.5 items-center"
+                              >
+                                <div className="text-sm truncate px-2 py-1.5 rounded-md bg-[var(--bg-muted)]">
+                                  {prod?.name || opt.productId}
+                                </div>
+                                <div className="relative">
+                                  <input
+                                    className="field-input pr-9"
+                                    type="number"
+                                    step="0.05"
+                                    min="0"
+                                    title={t('extraPrice')}
+                                    value={opt.extraPrice}
+                                    onChange={(e) => {
+                                      const next = [...form.comboSlots];
+                                      const options = [...next[slotIdx].options];
+                                      options[optIdx] = {
+                                        ...options[optIdx],
+                                        extraPrice: Number(e.target.value) || 0,
+                                      };
+                                      next[slotIdx] = { ...next[slotIdx], options };
+                                      setForm({ ...form, comboSlots: next });
+                                    }}
+                                  />
+                                  <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] muted">
+                                    +
+                                  </span>
+                                </div>
+                                <button
+                                  type="button"
+                                  className="rounded-md p-1.5 text-[var(--danger)] hover:bg-[var(--bg-muted)]"
+                                  onClick={() => {
+                                    const next = [...form.comboSlots];
+                                    next[slotIdx] = {
+                                      ...next[slotIdx],
+                                      options: next[slotIdx].options.filter((_, i) => i !== optIdx),
+                                    };
+                                    setForm({ ...form, comboSlots: next });
+                                  }}
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        <select
+                          className="field-input text-sm"
+                          value=""
+                          onChange={(e) => {
+                            const productId = e.target.value;
+                            if (!productId) return;
+                            if (slot.options.some((o) => o.productId === productId)) return;
+                            const next = [...form.comboSlots];
+                            next[slotIdx] = {
+                              ...next[slotIdx],
+                              options: [...next[slotIdx].options, { productId, extraPrice: 0 }],
+                            };
+                            setForm({ ...form, comboSlots: next });
+                          }}
+                        >
+                          <option value="">{t('addProductToStep')}</option>
+                          {products
+                            .filter(
+                              (p) =>
+                                p.id !== editingId &&
+                                p.productType !== 'combo' &&
+                                !slot.options.some((o) => o.productId === p.id)
+                            )
+                            .map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.name} · {money(p.price)}
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {!form.isCombo && (
               <div className="rounded-md border border-[var(--border)] p-3 space-y-2.5">
                 <div className="flex items-center justify-between gap-2">
                   <div>
@@ -935,12 +1225,17 @@ export default function Products() {
                   ))}
                 </div>
               </div>
+              )}
 
               <div className="rounded-md border border-[var(--border)] p-3 space-y-2.5">
                 <div className="flex items-center justify-between gap-2">
                   <div>
-                    <h3 className="text-sm font-semibold">{t('modifiersAddons')}</h3>
-                    <p className="text-[11px] muted mt-0.5">{t('modifiersHint')}</p>
+                    <h3 className="text-sm font-semibold">
+                      {form.isCombo ? t('comboExtrasOptional') : t('modifiersAddons')}
+                    </h3>
+                    <p className="text-[11px] muted mt-0.5">
+                      {form.isCombo ? t('comboExtrasHint') : t('modifiersHint')}
+                    </p>
                   </div>
                   <button
                     type="button"
