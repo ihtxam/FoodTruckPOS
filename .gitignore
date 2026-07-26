@@ -12,3 +12,12 @@
 *.aab
 app/build/
 .kotlin/
+backend-chaslay-legacy/
+
+.env
+.env.*
+!.env.production.example
+!.env.example
+
+node_modules/
+**/node_modules/

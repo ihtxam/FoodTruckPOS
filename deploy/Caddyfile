@@ -1,0 +1,54 @@
+{
+	email {$ACME_EMAIL}
+	# Per-subdomain certs on first request (no DNS-01 wildcard needed)
+	on_demand_tls {
+		ask http://api:3000/api/shop/tls-ask
+	}
+}
+
+{$DOMAIN} {
+	encode gzip zstd
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		X-Frame-Options DENY
+		-Server
+	}
+
+	handle /health {
+		reverse_proxy api:3000
+	}
+
+	handle /api/* {
+		reverse_proxy api:3000
+	}
+
+	handle {
+		reverse_proxy dashboard:80
+	}
+}
+
+# Merchant shops: https://{subdomain}.{$DOMAIN}
+*.{$DOMAIN} {
+	tls {
+		on_demand
+	}
+
+	encode gzip zstd
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		X-Frame-Options DENY
+		-Server
+	}
+
+	handle /api/* {
+		reverse_proxy api:3000
+	}
+
+	handle {
+		reverse_proxy dashboard:80
+	}
+}

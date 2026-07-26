@@ -1,0 +1,97 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-manupos}
+      POSTGRES_USER: ${POSTGRES_USER:-manupos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-manupos} -d ${POSTGRES_DB:-manupos}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-manupos}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-manupos}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET}
+      JWT_EXPIRY: ${JWT_EXPIRY:-24h}
+      PUBLIC_APP_URL: ${PUBLIC_APP_URL:-https://manupos.webprintmedia.swiss}
+      SUPERADMIN_URL: ${PUBLIC_APP_URL:-https://manupos.webprintmedia.swiss}
+      MERCHANT_DASHBOARD_URL: ${PUBLIC_APP_URL:-https://manupos.webprintmedia.swiss}
+      WEB_SHOP_URL: ${PUBLIC_APP_URL:-https://manupos.webprintmedia.swiss}
+      CORS_ALLOW_ALL: ${CORS_ALLOW_ALL:-true}
+      ADYEN_API_KEY: ${ADYEN_API_KEY:-}
+      ADYEN_MERCHANT_ACCOUNT: ${ADYEN_MERCHANT_ACCOUNT:-}
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY:-}
+      SENDGRID_FROM_EMAIL: ${SENDGRID_FROM_EMAIL:-}
+      SEED_SUPERADMIN_EMAIL: ${SEED_SUPERADMIN_EMAIL:-admin@manupos.webprintmedia.swiss}
+      SEED_SUPERADMIN_PASSWORD: ${SEED_SUPERADMIN_PASSWORD:-}
+      SEED_SUPERADMIN_NAME: ${SEED_SUPERADMIN_NAME:-ManuPOS Admin}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  migrate:
+    build:
+      context: ./backend
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-manupos}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-manupos}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET}
+      SEED_SUPERADMIN_EMAIL: ${SEED_SUPERADMIN_EMAIL:-admin@manupos.webprintmedia.swiss}
+      SEED_SUPERADMIN_PASSWORD: ${SEED_SUPERADMIN_PASSWORD:-ChangeMeNow!123}
+      SEED_SUPERADMIN_NAME: ${SEED_SUPERADMIN_NAME:-ManuPOS Admin}
+    command: >
+      sh -c "npx drizzle-kit push --force &&
+             npx tsx src/db/seed.ts || true"
+    restart: "no"
+
+  dashboard:
+    build:
+      context: ./dashboard
+      args:
+        VITE_API_URL: /api
+        VITE_PUBLIC_DOMAIN: ${DOMAIN:-manupos.webprintmedia.swiss}
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+
+  caddy:
+    image: caddy:2.9-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:-admin@${DOMAIN}}
+    volumes:
+      - ./deploy/Caddyfile.chaslay:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - dashboard
+      - api
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:

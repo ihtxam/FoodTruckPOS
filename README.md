@@ -1,3 +1,21 @@
+# FoodTruckPOS (ChaslayPOS)
+
+Native **Android POS** (`app/`) plus **ManuPOS** backend panel, online shop, and `/v1/*` API compatibility.
+
+## Stack
+
+| Piece | Path |
+|-------|------|
+| Android POS | `app/` (unchanged) |
+| API (TypeScript / Drizzle) | `backend/` |
+| Superadmin + merchant + shop UI | `dashboard/` |
+| Chaslay domains | `deploy/Caddyfile.chaslay` |
+| Compose | `docker-compose.yml` |
+
+See **[INTEGRATION.md](./INTEGRATION.md)** for deploy and Android `SYNC_API_KEY` / license setup.
+
+---
+
 # ChaslayPOS
 
 A native Android Point of Sale app built for Chaslays and small businesses. Optimized for fast touchscreen checkout � similar simplicity to SumUp mPOS.
