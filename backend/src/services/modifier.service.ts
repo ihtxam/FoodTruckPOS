@@ -271,9 +271,18 @@ export class ModifierService {
   }
 
   static async getGroupsForProduct(merchantId: string, productId: string) {
+    const map = await this.getGroupsForProducts(merchantId, [productId]);
+    return map.get(productId) || [];
+  }
+
+  /** Batch-load modifier groups for many products (WebPOS / catalog). */
+  static async getGroupsForProducts(merchantId: string, productIds: string[]) {
+    const byProduct = new Map<string, any[]>();
+    if (!productIds.length) return byProduct;
+
     const db = getDb();
     const links = await db.query.productModifierGroups.findMany({
-      where: eq(schema.productModifierGroups.productId, productId),
+      where: inArray(schema.productModifierGroups.productId, productIds),
       with: {
         group: {
           with: {
@@ -284,9 +293,14 @@ export class ModifierService {
       orderBy: [asc(schema.productModifierGroups.sortOrder)],
     });
 
-    return links
-      .filter((l) => l.group && l.group.merchantId === merchantId)
-      .map((l) => this.serializeGroup(l.group as any));
+    for (const link of links) {
+      const g = link.group as any;
+      if (!g || g.merchantId !== merchantId || g.isActive === false) continue;
+      const list = byProduct.get(link.productId) || [];
+      list.push(this.serializeGroup(g));
+      byProduct.set(link.productId, list);
+    }
+    return byProduct;
   }
 
   private static async replaceOptions(
