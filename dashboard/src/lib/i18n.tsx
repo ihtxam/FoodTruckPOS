@@ -7,10 +7,14 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { shopDe, shopEn, shopFr } from '@/lib/shop-i18n';
 
 export type Locale = 'en' | 'fr' | 'de';
 
 type Dict = Record<string, string>;
+
+export const PANEL_LANG_KEY = 'manupos_panel_lang';
+export const SHOP_LANG_KEY = 'manupos_shop_lang';
 
 const en: Dict = {
   overview: 'Overview',
@@ -177,6 +181,7 @@ const en: Dict = {
   languageSaved: 'Language saved',
   plan: 'Plan',
   status: 'Status',
+  ...shopEn,
 };
 
 const fr: Dict = {
@@ -345,6 +350,7 @@ const fr: Dict = {
   languageSaved: 'Langue enregistrée',
   plan: 'Offre',
   status: 'Statut',
+  ...shopFr,
 };
 
 const de: Dict = {
@@ -513,6 +519,7 @@ const de: Dict = {
   languageSaved: 'Sprache gespeichert',
   plan: 'Plan',
   status: 'Status',
+  ...shopDe,
 };
 
 const dictionaries: Record<Locale, Dict> = { en, fr, de };
@@ -524,46 +531,69 @@ interface I18nContextValue {
 }
 
 const I18nContext = createContext<I18nContextValue | null>(null);
-const STORAGE_KEY = 'manupos_panel_lang';
 
-function isLocale(value: unknown): value is Locale {
+export function isLocale(value: unknown): value is Locale {
   return value === 'en' || value === 'fr' || value === 'de';
 }
 
-export function I18nProvider({ children, initialLocale }: { children: ReactNode; initialLocale?: Locale }) {
+export function detectBrowserLocale(): Locale {
+  try {
+    const lang = (navigator.language || '').toLowerCase();
+    if (lang.startsWith('fr')) return 'fr';
+    if (lang.startsWith('de')) return 'de';
+  } catch {
+    // ignore
+  }
+  return 'en';
+}
+
+export function I18nProvider({
+  children,
+  initialLocale,
+  storageKey = PANEL_LANG_KEY,
+}: {
+  children: ReactNode;
+  initialLocale?: Locale;
+  /** Separate keys so merchant panel language ≠ customer shop language */
+  storageKey?: string;
+}) {
   const [locale, setLocaleState] = useState<Locale>(() => {
     try {
-      const stored = localStorage.getItem(STORAGE_KEY);
+      const stored = localStorage.getItem(storageKey);
       if (isLocale(stored)) return stored;
     } catch {
       // ignore
     }
-    return isLocale(initialLocale) ? initialLocale : 'en';
+    if (isLocale(initialLocale)) return initialLocale;
+    return storageKey === SHOP_LANG_KEY ? detectBrowserLocale() : 'en';
   });
 
-  const setLocale = useCallback((next: Locale) => {
-    if (!isLocale(next)) return;
-    setLocaleState(next);
-    try {
-      localStorage.setItem(STORAGE_KEY, next);
-    } catch {
-      // ignore
-    }
-  }, []);
+  const setLocale = useCallback(
+    (next: Locale) => {
+      if (!isLocale(next)) return;
+      setLocaleState(next);
+      try {
+        localStorage.setItem(storageKey, next);
+      } catch {
+        // ignore
+      }
+    },
+    [storageKey]
+  );
 
   useEffect(() => {
     if (!isLocale(initialLocale)) return;
     try {
-      const stored = localStorage.getItem(STORAGE_KEY);
+      const stored = localStorage.getItem(storageKey);
       if (!isLocale(stored)) {
         setLocaleState(initialLocale);
-        localStorage.setItem(STORAGE_KEY, initialLocale);
+        localStorage.setItem(storageKey, initialLocale);
       }
     } catch {
       setLocaleState(initialLocale);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [initialLocale, storageKey]);
 
   const value = useMemo(
     () => ({

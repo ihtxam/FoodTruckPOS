@@ -22,11 +22,14 @@ import {
   type StoreHours,
 } from '@/lib/shop-hours';
 import { roundMoney2, roundTo005, roundingAdjustment } from '@/lib/money';
+import { isLocale, useI18n } from '@/lib/i18n';
+import ShopLangSwitcher from '@/components/shop/ShopLangSwitcher';
 
 type Step = 'account' | 'details' | 'payment' | 'review';
 type WhenMode = 'asap' | 'later';
 
 export default function CheckoutPage() {
+  const { t, setLocale, locale } = useI18n();
   const { merchantSlug } = useParams<{ merchantSlug: string }>();
   const shopKey = useMemo(() => resolveShopKey(merchantSlug), [merchantSlug]);
   const navigate = useNavigate();
@@ -65,6 +68,14 @@ export default function CheckoutPage() {
         ]);
         setMerchant(shopRes.data.data);
         setPaymentOptions(payRes.data.options);
+        if (isLocale(shopRes.data.data?.language)) {
+          try {
+            const stored = localStorage.getItem('manupos_shop_lang');
+            if (!isLocale(stored)) setLocale(shopRes.data.data.language);
+          } catch {
+            setLocale(shopRes.data.data.language);
+          }
+        }
 
         const token = loadCustomerToken(shopKey);
         if (token) {
@@ -89,7 +100,7 @@ export default function CheckoutPage() {
           }
         }
       } catch (e: any) {
-        setError(e.response?.data?.error || 'Failed to load checkout');
+        setError(e.response?.data?.error || t('shopFailedCheckout'));
       } finally {
         setLoading(false);
       }
@@ -101,6 +112,10 @@ export default function CheckoutPage() {
     if (!shopKey || !draft.items.length) return;
     saveCart(shopKey, draft);
   }, [draft, shopKey]);
+
+  useEffect(() => {
+    document.documentElement.lang = locale;
+  }, [locale]);
 
   const taxRate = useMemo(() => {
     if (!merchant) return 0;
@@ -269,7 +284,7 @@ export default function CheckoutPage() {
   const goPayment = async () => {
     setError(null);
     if (!draft.customerName.trim() || !draft.customerPhone.trim()) {
-      setError('Name and phone are required');
+      setError(t('shopNamePhoneRequired'));
       return;
     }
     if (whenMode === 'asap' && !channelOpen) {
@@ -281,7 +296,7 @@ export default function CheckoutPage() {
       return;
     }
     if (whenMode === 'later' && scheduleDays.length === 0) {
-      setError('No opening hours available for scheduling — try another order type');
+      setError(t('shopNoOpeningHours'));
       return;
     }
     if (draft.channel === 'delivery') {
@@ -361,29 +376,32 @@ export default function CheckoutPage() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#f6f5f2] text-stone-600">
-        Loading checkout…
+        {t('shopLoadingCheckout')}
       </div>
     );
   }
 
   const steps: { id: Step; label: string }[] = [
-    { id: 'account', label: 'Account' },
-    { id: 'details', label: 'Details' },
-    { id: 'payment', label: 'Payment' },
-    { id: 'review', label: 'Place order' },
+    { id: 'account', label: t('shopStepAccount') },
+    { id: 'details', label: t('shopStepDetails') },
+    { id: 'payment', label: t('shopStepPayment') },
+    { id: 'review', label: t('shopStepReview') },
   ];
 
   const channelLabel =
-    draft.channel === 'delivery' ? 'Delivery' : draft.channel === 'dine_in' ? 'Dine in' : 'Pickup';
+    draft.channel === 'delivery' ? t('shopDelivery') : draft.channel === 'dine_in' ? t('shopDineIn') : t('shopPickup');
 
   return (
     <div className="min-h-screen bg-[#f6f5f2] text-stone-900">
       <header className="bg-white border-b border-stone-200">
-        <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
-          <Link to={`${shopBasePath(shopKey) || '/'}`} className="font-bold tracking-tight">
-            ← {merchant?.name || 'Back to menu'}
+        <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between gap-3">
+          <Link to={`${shopBasePath(shopKey) || '/'}`} className="font-bold tracking-tight min-w-0 truncate">
+            ← {merchant?.name || t('shopBackToMenu')}
           </Link>
-          <span className="text-sm text-stone-500">{channelLabel} checkout</span>
+          <div className="flex items-center gap-3 shrink-0">
+            <ShopLangSwitcher />
+            <span className="hidden sm:inline text-sm text-stone-500">{channelLabel} {t('shopCheckout')}</span>
+          </div>
         </div>
       </header>
 
@@ -413,22 +431,22 @@ export default function CheckoutPage() {
 
           {step === 'account' && (
             <section className="bg-white border border-stone-200 p-5 space-y-5">
-              <h1 className="text-2xl font-bold tracking-tight">How would you like to continue?</h1>
+              <h1 className="text-2xl font-bold tracking-tight">{t('shopHowContinue')}</h1>
               <button
                 type="button"
                 className="w-full border-2 border-stone-900 py-4 font-semibold hover:bg-stone-50"
                 onClick={onGuestContinue}
               >
-                Continue as guest
+                {t('shopContinueGuest')}
               </button>
 
               <div className="grid md:grid-cols-2 gap-4 pt-2">
                 <form onSubmit={onLogin} className="border border-stone-200 p-4 space-y-3">
-                  <h2 className="font-semibold">Log in</h2>
+                  <h2 className="font-semibold">{t('shopLogIn')}</h2>
                   <input
                     className="w-full border border-stone-300 px-3 py-2 text-sm"
                     type="email"
-                    placeholder="Email"
+                    placeholder={t('shopEmail')}
                     value={loginEmail}
                     onChange={(e) => setLoginEmail(e.target.value)}
                     required
@@ -436,21 +454,21 @@ export default function CheckoutPage() {
                   <input
                     className="w-full border border-stone-300 px-3 py-2 text-sm"
                     type="password"
-                    placeholder="Password"
+                    placeholder={t('shopPassword')}
                     value={loginPassword}
                     onChange={(e) => setLoginPassword(e.target.value)}
                     required
                   />
                   <button type="submit" className="w-full bg-stone-900 text-white py-2.5 font-semibold">
-                    Log in
+                    {t('shopLogIn')}
                   </button>
                 </form>
 
                 <form onSubmit={onRegister} className="border border-stone-200 p-4 space-y-3">
-                  <h2 className="font-semibold">Create account</h2>
+                  <h2 className="font-semibold">{t('shopCreateAccount')}</h2>
                   <input
                     className="w-full border border-stone-300 px-3 py-2 text-sm"
-                    placeholder="Full name"
+                    placeholder={t('shopFullName')}
                     value={draft.customerName}
                     onChange={(e) => patch({ customerName: e.target.value })}
                     required
@@ -458,33 +476,33 @@ export default function CheckoutPage() {
                   <input
                     className="w-full border border-stone-300 px-3 py-2 text-sm"
                     type="email"
-                    placeholder="Email"
+                    placeholder={t('shopEmail')}
                     value={draft.customerEmail}
                     onChange={(e) => patch({ customerEmail: e.target.value })}
                     required
                   />
                   <input
                     className="w-full border border-stone-300 px-3 py-2 text-sm"
-                    placeholder="Phone"
+                    placeholder={t('shopPhone')}
                     value={draft.customerPhone}
                     onChange={(e) => patch({ customerPhone: e.target.value })}
                   />
                   <input
                     className="w-full border border-stone-300 px-3 py-2 text-sm"
                     type="password"
-                    placeholder="Password (min 6)"
+                    placeholder={t('shopPasswordMin6')}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
                   />
                   <button type="submit" className="w-full bg-stone-900 text-white py-2.5 font-semibold">
-                    Register & continue
+                    {t('shopRegisterContinue')}
                   </button>
                 </form>
               </div>
               {customer && (
                 <p className="text-sm text-teal-800">
-                  Logged in as {customer.name || customer.email}.{' '}
+                  {t('shopLoggedInAs')} {customer.name || customer.email}.{' '}
                   <button
                     type="button"
                     className="underline"
@@ -493,7 +511,7 @@ export default function CheckoutPage() {
                       setCustomer(null);
                     }}
                   >
-                    Log out
+                    {t('shopLogOut')}
                   </button>
                 </p>
               )}
@@ -503,12 +521,12 @@ export default function CheckoutPage() {
           {step === 'details' && (
             <section className="bg-white border border-stone-200 p-5 space-y-4">
               <h1 className="text-2xl font-bold tracking-tight">
-                {draft.channel === 'delivery' ? 'Delivery details' : 'Pickup details'}
+                {draft.channel === 'delivery' ? t('shopDeliveryDetails') : t('shopPickupDetails')}
               </h1>
               <p className="text-sm text-stone-500">
                 {draft.channel === 'delivery'
-                  ? 'Where should we deliver your order?'
-                  : `Collect from ${merchant?.address || 'the restaurant'}${
+                  ? t('shopWhereDeliver')
+                  : `${t('shopCollectFrom')} ${merchant?.address || t('shopRestaurant')}${
                       merchant?.city ? `, ${merchant.city}` : ''
                     }`}
               </p>
@@ -516,14 +534,14 @@ export default function CheckoutPage() {
               <div className="grid md:grid-cols-2 gap-3">
                 <input
                   className="border border-stone-300 px-3 py-2 text-sm md:col-span-2"
-                  placeholder="Full name *"
+                  placeholder={t('shopFullNameRequired')}
                   value={draft.customerName}
                   onChange={(e) => patch({ customerName: e.target.value })}
                   required
                 />
                 <input
                   className="border border-stone-300 px-3 py-2 text-sm"
-                  placeholder="Phone *"
+                  placeholder={t('shopPhoneRequired')}
                   value={draft.customerPhone}
                   onChange={(e) => patch({ customerPhone: e.target.value })}
                   required
@@ -531,7 +549,7 @@ export default function CheckoutPage() {
                 <input
                   className="border border-stone-300 px-3 py-2 text-sm"
                   type="email"
-                  placeholder="Email (receipt)"
+                  placeholder={t('shopEmailReceipt')}
                   value={draft.customerEmail}
                   onChange={(e) => patch({ customerEmail: e.target.value })}
                 />
@@ -541,20 +559,20 @@ export default function CheckoutPage() {
                 <div className="space-y-3 border-t border-stone-100 pt-4">
                   <input
                     className="w-full border border-stone-300 px-3 py-2 text-sm"
-                    placeholder="Street address *"
+                    placeholder={t('shopStreetAddressRequired')}
                     value={draft.address}
                     onChange={(e) => patch({ address: e.target.value })}
                   />
                   <div className="grid grid-cols-2 gap-3">
                     <input
                       className="border border-stone-300 px-3 py-2 text-sm"
-                      placeholder="ZIP"
+                      placeholder={t('shopZip')}
                       value={draft.zipCode}
                       onChange={(e) => patch({ zipCode: e.target.value })}
                     />
                     <input
                       className="border border-stone-300 px-3 py-2 text-sm"
-                      placeholder="City"
+                      placeholder={t('shopCity')}
                       value={draft.city}
                       onChange={(e) => patch({ city: e.target.value })}
                     />
@@ -565,13 +583,13 @@ export default function CheckoutPage() {
                     onClick={checkDelivery}
                     disabled={checkingZone}
                   >
-                    {checkingZone ? 'Checking…' : 'Verify delivery zone'}
+                    {checkingZone ? t('shopChecking') : t('shopVerifyDeliveryZone')}
                   </button>
                   {deliveryInfo?.deliverable && (
                     <p className="text-sm text-teal-800">
-                      {deliveryInfo.zone.name}: fee CHF {Number(deliveryInfo.zone.deliveryFee).toFixed(2)}
+                      {deliveryInfo.zone.name}: {t('shopFee')} CHF {Number(deliveryInfo.zone.deliveryFee).toFixed(2)}
                       {deliveryInfo.zone.minOrderAmount > 0
-                        ? ` · min CHF ${Number(deliveryInfo.zone.minOrderAmount).toFixed(2)}`
+                        ? ` · ${t('shopMin')} CHF ${Number(deliveryInfo.zone.minOrderAmount).toFixed(2)}`
                         : ''}
                     </p>
                   )}
@@ -579,14 +597,14 @@ export default function CheckoutPage() {
               )}
 
               <div className="border-t border-stone-100 pt-4 space-y-3">
-                <label className="block text-sm font-medium">When?</label>
+                <label className="block text-sm font-medium">{t('shopWhen')}</label>
                 {!channelOpen && (
                   <p className="text-sm text-amber-700 bg-amber-50 border border-amber-100 px-3 py-2">
-                    Store is closed now
+                    {t('shopStoreClosedNow')}
                     {merchant?.channels?.[draft.channel]?.todayLabel
                       ? ` · ${merchant.channels[draft.channel].todayLabel}`
                       : ''}
-                    . Choose a later slot (tomorrow or day after tomorrow).
+                    . {t('shopChooseLaterSlot')}
                   </p>
                 )}
                 <div className="flex flex-wrap gap-2">
@@ -601,7 +619,7 @@ export default function CheckoutPage() {
                         patch({ scheduledFor: '' });
                       }}
                     >
-                      ASAP
+                      {t('shopAsap')}
                     </button>
                   )}
                   <button
@@ -611,7 +629,7 @@ export default function CheckoutPage() {
                     }`}
                     onClick={() => setWhenMode('later')}
                   >
-                    Schedule for later
+                    {t('shopScheduleLater')}
                   </button>
                 </div>
 
@@ -619,7 +637,7 @@ export default function CheckoutPage() {
                   <div className="space-y-3 rounded-lg border border-stone-200 bg-stone-50 p-3">
                     {scheduleDays.length === 0 ? (
                       <p className="text-sm text-red-600">
-                        No open hours in the next days for this option. Check store hours or try another channel.
+                        {t('shopNoOpenHours')}
                       </p>
                     ) : (
                       <>
@@ -647,7 +665,7 @@ export default function CheckoutPage() {
                         </div>
                         <div>
                           <p className="text-xs text-stone-500 mb-2">
-                            Time slots every 15 min during opening hours
+                            {t('shopTimeSlotsHint')}
                           </p>
                           <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-48 overflow-y-auto">
                             {(activeScheduleDay?.slots || []).map((slot) => (
@@ -674,7 +692,7 @@ export default function CheckoutPage() {
                 <textarea
                   className="w-full border border-stone-300 px-3 py-2 text-sm"
                   rows={2}
-                  placeholder="Order notes (allergies, door code…)"
+                  placeholder={t('shopOrderNotes')}
                   value={draft.notes}
                   onChange={(e) => patch({ notes: e.target.value })}
                 />
@@ -685,14 +703,14 @@ export default function CheckoutPage() {
                 className="w-full bg-stone-900 text-white py-3 font-semibold"
                 onClick={goPayment}
               >
-                Continue to payment
+                {t('shopContinuePayment')}
               </button>
             </section>
           )}
 
           {step === 'payment' && (
             <section className="bg-white border border-stone-200 p-5 space-y-4">
-              <h1 className="text-2xl font-bold tracking-tight">Payment</h1>
+              <h1 className="text-2xl font-bold tracking-tight">{t('shopPayment')}</h1>
               <div className="space-y-3">
                 <label
                   className={`flex items-start gap-3 border p-4 cursor-pointer ${
@@ -707,9 +725,9 @@ export default function CheckoutPage() {
                   />
                   <div>
                     <div className="font-semibold">
-                      Cash {draft.channel === 'delivery' ? 'on delivery' : 'on pickup'}
+                      {draft.channel === 'delivery' ? t('shopCashOnDelivery') : t('shopCashOnPickup')}
                     </div>
-                    <p className="text-sm text-stone-500">Pay the courier or at the counter.</p>
+                    <p className="text-sm text-stone-500">{t('shopCashPayHint')}</p>
                   </div>
                 </label>
                 <label
@@ -724,18 +742,18 @@ export default function CheckoutPage() {
                     onChange={() => patch({ paymentMethod: 'card' })}
                   />
                   <div>
-                    <div className="font-semibold">Card (Adyen)</div>
+                    <div className="font-semibold">{t('shopCardAdyen')}</div>
                     <p className="text-sm text-stone-500">
                       {paymentOptions?.cardReady
-                        ? 'Secure online payment with Adyen.'
-                        : 'Online card payment — merchant Adyen credentials will be used when configured.'}
+                        ? t('shopCardReady')
+                        : t('shopCardNotReady')}
                     </p>
                   </div>
                 </label>
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-2">Tip</label>
+                <label className="block text-sm font-medium mb-2">{t('shopTip')}</label>
                 <div className="flex flex-wrap gap-2 mb-2">
                   {[0, 5, 10, 15].map((pct) => (
                     <button
@@ -763,21 +781,21 @@ export default function CheckoutPage() {
                 className="w-full bg-stone-900 text-white py-3 font-semibold"
                 onClick={() => setStep('review')}
               >
-                Review order
+                {t('shopReviewOrder')}
               </button>
             </section>
           )}
 
           {step === 'review' && (
             <section className="bg-white border border-stone-200 p-5 space-y-4">
-              <h1 className="text-2xl font-bold tracking-tight">Review & place order</h1>
+              <h1 className="text-2xl font-bold tracking-tight">{t('shopReviewPlace')}</h1>
               <dl className="text-sm space-y-2">
                 <div className="flex justify-between gap-4">
-                  <dt className="text-stone-500">Type</dt>
+                  <dt className="text-stone-500">{t('shopType')}</dt>
                   <dd className="font-medium">{channelLabel}</dd>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <dt className="text-stone-500">Customer</dt>
+                  <dt className="text-stone-500">{t('shopCustomer')}</dt>
                   <dd className="font-medium text-right">
                     {draft.customerName}
                     <br />
@@ -792,7 +810,7 @@ export default function CheckoutPage() {
                 </div>
                 <div className="flex justify-between gap-4">
                   <dt className="text-stone-500">
-                    {draft.channel === 'delivery' ? 'Deliver to' : 'Pickup at'}
+                    {draft.channel === 'delivery' ? t('shopDeliverTo') : t('shopPickupAt')}
                   </dt>
                   <dd className="font-medium text-right max-w-xs">
                     {draft.channel === 'delivery'
@@ -801,23 +819,23 @@ export default function CheckoutPage() {
                   </dd>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <dt className="text-stone-500">When</dt>
+                  <dt className="text-stone-500">{t('shopWhen')}</dt>
                   <dd className="font-medium">
                     {whenMode === 'later' && draft.scheduledFor
-                      ? new Date(localDateTimeToIso(draft.scheduledFor) || draft.scheduledFor).toLocaleString('en-CH', {
+                      ? new Date(localDateTimeToIso(draft.scheduledFor) || draft.scheduledFor).toLocaleString(locale === 'de' ? 'de-CH' : locale === 'fr' ? 'fr-CH' : 'en-CH', {
                           timeZone: 'Europe/Zurich',
                         })
-                      : 'ASAP'}
+                      : t('shopAsap')}
                   </dd>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <dt className="text-stone-500">Payment</dt>
+                  <dt className="text-stone-500">{t('shopPayment')}</dt>
                   <dd className="font-medium">
                     {draft.paymentMethod === 'card'
-                      ? 'Card (Adyen)'
+                      ? t('shopCardAdyen')
                       : draft.channel === 'delivery'
-                        ? 'Cash on delivery'
-                        : 'Cash on pickup'}
+                        ? t('shopCashOnDelivery')
+                        : t('shopCashOnPickup')}
                   </dd>
                 </div>
               </dl>
@@ -850,17 +868,17 @@ export default function CheckoutPage() {
                 onClick={placeOrder}
               >
                 {submitting
-                  ? 'Placing order…'
+                  ? t('shopPlacingOrder')
                   : draft.paymentMethod === 'card'
-                    ? `Pay CHF ${total.toFixed(2)}`
-                    : `Place order · CHF ${total.toFixed(2)}`}
+                    ? `${t('shopPayAmount')} CHF ${total.toFixed(2)}`
+                    : `${t('shopPlaceOrder')} · CHF ${total.toFixed(2)}`}
               </button>
             </section>
           )}
         </div>
 
         <aside className="bg-white border border-stone-200 p-5 h-fit sticky top-4 space-y-3">
-          <h2 className="font-bold text-lg">Your order</h2>
+          <h2 className="font-bold text-lg">{t('shopYourOrder')}</h2>
           <ul className="text-sm space-y-2">
             {draft.items.map((i) => (
               <li key={i.lineId || i.id} className="flex justify-between gap-2">
@@ -883,35 +901,35 @@ export default function CheckoutPage() {
           </ul>
           <div className="border-t border-stone-100 pt-3 text-sm space-y-1">
             <div className="flex justify-between">
-              <span className="text-stone-500">Subtotal</span>
+              <span className="text-stone-500">{t('shopSubtotal')}</span>
               <span>CHF {subtotal.toFixed(2)}</span>
             </div>
             {deliveryFee > 0 && (
               <div className="flex justify-between">
-                <span className="text-stone-500">Delivery</span>
+                <span className="text-stone-500">{t('shopDelivery')}</span>
                 <span>CHF {deliveryFee.toFixed(2)}</span>
               </div>
             )}
             {tip > 0 && (
               <div className="flex justify-between">
-                <span className="text-stone-500">Tip</span>
+                <span className="text-stone-500">{t('shopTip')}</span>
                 <span>CHF {tip.toFixed(2)}</span>
               </div>
             )}
             <div className="flex justify-between">
-              <span className="text-stone-500">Tax ({taxRate}%)</span>
+              <span className="text-stone-500">{t('shopTax')} ({taxRate}%)</span>
               <span>CHF {tax.toFixed(2)}</span>
             </div>
             {rounding !== 0 && (
               <div className="flex justify-between">
-                <span className="text-stone-500">Rounding</span>
+                <span className="text-stone-500">{t('shopRounding')}</span>
                 <span>
                   {rounding > 0 ? '+' : ''}CHF {rounding.toFixed(2)}
                 </span>
               </div>
             )}
             <div className="flex justify-between font-bold text-base pt-1">
-              <span>Total</span>
+              <span>{t('shopTotal')}</span>
               <span>CHF {total.toFixed(2)}</span>
             </div>
           </div>

@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { useAuthStore } from '@/store/auth';
+import { I18nProvider, SHOP_LANG_KEY } from '@/lib/i18n';
 
 import LoginPage from '@/pages/LoginPage';
 import SetPasswordPage from '@/pages/SetPasswordPage';
@@ -12,6 +13,10 @@ import CheckoutPage from '@/pages/shop/CheckoutPage';
 import OrderConfirmationPage from '@/pages/shop/OrderConfirmationPage';
 import ReceiptPage from '@/pages/ReceiptPage';
 import ProtectedRoute from '@/components/ProtectedRoute';
+
+function ShopRoutes({ children }: { children: React.ReactNode }) {
+  return <I18nProvider storageKey={SHOP_LANG_KEY}>{children}</I18nProvider>;
+}
 
 const MAIN_HOST = (
   import.meta.env.VITE_PUBLIC_DOMAIN ||
@@ -49,27 +54,104 @@ function App() {
           {!shopMode && <Route path="/login" element={<LoginPage />} />}
           {!shopMode && <Route path="/set-password" element={<SetPasswordPage />} />}
           <Route path="/receipt/:saleId" element={<ReceiptPage />} />
-          <Route path="/shop/:merchantSlug" element={<OrderingPage />} />
-          <Route path="/shop/:merchantSlug/checkout" element={<CheckoutPage />} />
-          <Route path="/shop/:merchantSlug/order/:orderId" element={<OrderConfirmationPage />} />
+          <Route
+            path="/shop/:merchantSlug"
+            element={
+              <ShopRoutes>
+                <OrderingPage />
+              </ShopRoutes>
+            }
+          />
+          <Route
+            path="/shop/:merchantSlug/checkout"
+            element={
+              <ShopRoutes>
+                <CheckoutPage />
+              </ShopRoutes>
+            }
+          />
+          <Route
+            path="/shop/:merchantSlug/order/:orderId"
+            element={
+              <ShopRoutes>
+                <OrderConfirmationPage />
+              </ShopRoutes>
+            }
+          />
 
           {/* shop.domain/{slug} — Chaslay-style path shops */}
           {shopHub && (
             <>
-              <Route path="/:merchantSlug/checkout" element={<CheckoutPage />} />
-              <Route path="/:merchantSlug/order/:orderId" element={<OrderConfirmationPage />} />
-              <Route path="/:merchantSlug" element={<OrderingPage />} />
-              <Route path="/" element={<OrderingPage />} />
+              <Route
+                path="/:merchantSlug/checkout"
+                element={
+                  <ShopRoutes>
+                    <CheckoutPage />
+                  </ShopRoutes>
+                }
+              />
+              <Route
+                path="/:merchantSlug/order/:orderId"
+                element={
+                  <ShopRoutes>
+                    <OrderConfirmationPage />
+                  </ShopRoutes>
+                }
+              />
+              <Route
+                path="/:merchantSlug"
+                element={
+                  <ShopRoutes>
+                    <OrderingPage />
+                  </ShopRoutes>
+                }
+              />
+              <Route
+                path="/"
+                element={
+                  <ShopRoutes>
+                    <OrderingPage />
+                  </ShopRoutes>
+                }
+              />
             </>
           )}
 
           {/* {slug}.domain — merchant subdomain shops */}
           {merchantSubdomain && (
             <>
-              <Route path="/checkout" element={<CheckoutPage />} />
-              <Route path="/order/:orderId" element={<OrderConfirmationPage />} />
-              <Route path="/" element={<OrderingPage />} />
-              <Route path="*" element={<OrderingPage />} />
+              <Route
+                path="/checkout"
+                element={
+                  <ShopRoutes>
+                    <CheckoutPage />
+                  </ShopRoutes>
+                }
+              />
+              <Route
+                path="/order/:orderId"
+                element={
+                  <ShopRoutes>
+                    <OrderConfirmationPage />
+                  </ShopRoutes>
+                }
+              />
+              <Route
+                path="/"
+                element={
+                  <ShopRoutes>
+                    <OrderingPage />
+                  </ShopRoutes>
+                }
+              />
+              <Route
+                path="*"
+                element={
+                  <ShopRoutes>
+                    <OrderingPage />
+                  </ShopRoutes>
+                }
+              />
             </>
           )}
 
