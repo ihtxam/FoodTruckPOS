@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { clearCart, resolveShopKey, shopBasePath } from '@/lib/shop-cart';
+import { useI18n } from '@/lib/i18n';
+import ShopLangSwitcher from '@/components/shop/ShopLangSwitcher';
 import { roundMoney2 } from '@/lib/money';
 
 type OrderItem = {
@@ -56,6 +58,7 @@ const money = (v: string | number) =>
   new Intl.NumberFormat(undefined, { style: 'currency', currency: 'CHF' }).format(Number(v));
 
 export default function OrderConfirmationPage() {
+  const { t, locale } = useI18n();
   const { merchantSlug, orderId = '' } = useParams<{ merchantSlug?: string; orderId?: string }>();
   const shopKey = useMemo(() => resolveShopKey(merchantSlug), [merchantSlug]);
   const [searchParams] = useSearchParams();
@@ -161,7 +164,7 @@ export default function OrderConfirmationPage() {
           clientKey: session.clientKey,
           session: { id: session.id, sessionData: session.sessionData },
           onPaymentCompleted: async () => {
-            setPayMsg('Payment completed');
+            setPayMsg(t('shopPaymentCompleted'));
             await axios.post(`/api/shop/${shopKey}/orders/${orderId}/confirm-payment`, {
               resultCode: 'Authorised',
             });
@@ -170,7 +173,7 @@ export default function OrderConfirmationPage() {
             await load();
           },
           onError: (err: { message?: string }) =>
-            setPayMsg(err.message || 'Payment failed. Try again or choose cash next time.'),
+            setPayMsg(err.message || t('shopPaymentFailed')),
         } as any);
 
         checkout.create('dropin').mount(dropinRef.current);
@@ -197,10 +200,10 @@ export default function OrderConfirmationPage() {
       });
       sessionStorage.removeItem(`manupos_pay_${orderId}`);
       clearCart(shopKey);
-      setPayMsg('Payment confirmed');
+      setPayMsg(t('shopPaymentConfirmed'));
       await load();
     } catch (e: any) {
-      setPayMsg(e.response?.data?.error || 'Confirm failed');
+      setPayMsg(e.response?.data?.error || t('shopConfirmFailed'));
     } finally {
       setPaying(false);
     }
@@ -209,7 +212,7 @@ export default function OrderConfirmationPage() {
   if (loading && !order) {
     return (
       <div className="min-h-screen bg-[#f6f5f2] flex items-center justify-center text-stone-500">
-        Loading order…
+        {t('shopLoadingOrder')}
       </div>
     );
   }
@@ -217,9 +220,9 @@ export default function OrderConfirmationPage() {
   if (error || !order) {
     return (
       <div className="min-h-screen bg-[#f6f5f2] flex flex-col items-center justify-center gap-3 p-6">
-        <p className="text-red-600">{error || 'Order not found'}</p>
+        <p className="text-red-600">{error || t('shopOrderNotFound')}</p>
         <Link to={`${shopBasePath(shopKey) || '/'}`} className="text-stone-900 font-semibold underline">
-          Back to menu
+          {t('shopBackToMenu')}
         </Link>
       </div>
     );
@@ -233,22 +236,25 @@ export default function OrderConfirmationPage() {
 
   const channelLabel =
     order.fulfillmentChannel === 'delivery'
-      ? 'Delivery'
+      ? t('shopDelivery')
       : order.fulfillmentChannel === 'dine_in'
-        ? 'Dine in'
-        : 'Pickup';
+        ? t('shopDineIn')
+        : t('shopPickup');
 
   return (
     <div className="min-h-screen bg-[#f6f5f2] text-stone-900">
       <header className="bg-white border-b border-stone-200">
-        <div className="max-w-2xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div>
-            <p className="text-xs uppercase tracking-wide text-stone-400">Order confirmation</p>
+        <div className="max-w-2xl mx-auto px-4 py-4 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-xs uppercase tracking-wide text-stone-400">{t('shopOrderConfirmation')}</p>
             <h1 className="text-xl font-bold">#{order.orderNumber}</h1>
           </div>
-          <Link to={`${shopBasePath(shopKey) || '/'}`} className="text-sm font-semibold text-stone-900 underline">
-            Order again
-          </Link>
+          <div className="flex items-center gap-3 shrink-0">
+            <ShopLangSwitcher />
+            <Link to={`${shopBasePath(shopKey) || '/'}`} className="text-sm font-semibold text-stone-900 underline">
+              {t('shopOrderAgain')}
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -257,7 +263,7 @@ export default function OrderConfirmationPage() {
           <div className="flex flex-wrap gap-2">
             <StatusPill label={order.status} tone={statusTone(order.status)} />
             <StatusPill
-              label={`Payment: ${isCash ? 'cash' : order.paymentStatus || '—'}`}
+              label={`${t('shopPaymentLabel')}: ${isCash ? t('shopCash') : order.paymentStatus || '—'}`}
               tone={paid ? 'green' : 'amber'}
             />
             <StatusPill label={channelLabel} tone="stone" />
@@ -265,22 +271,26 @@ export default function OrderConfirmationPage() {
           <p className="text-sm text-stone-600">
             {paid
               ? isCash
-                ? 'Pay cash on pickup / delivery. Your order is already in the restaurant POS.'
-                : 'Payment received. Your order is already in the restaurant POS.'
-              : 'Complete payment to confirm your order with the restaurant.'}
+                ? t('shopPayCashPos')
+                : t('shopPaymentReceived')
+              : t('shopCompletePayment')}
           </p>
           {order.scheduledFor && (
             <p className="text-sm font-medium">
-              Scheduled for {new Date(order.scheduledFor).toLocaleString()}
+              {t('shopScheduledFor')}{' '}
+              {new Date(order.scheduledFor).toLocaleString(
+                locale === 'de' ? 'de-CH' : locale === 'fr' ? 'fr-CH' : 'en-CH',
+                { timeZone: 'Europe/Zurich' }
+              )}
             </p>
           )}
         </section>
 
         {needsPayment && (
           <section className="bg-white border border-stone-900 p-5 space-y-3">
-            <h2 className="font-semibold text-lg">Complete card payment</h2>
+            <h2 className="font-semibold text-lg">{t('shopCompleteCardPayment')}</h2>
             <p className="text-sm text-stone-600">
-              Amount due: <strong>{money(order.total)}</strong>
+              {t('shopAmountDue')}: <strong>{money(order.total)}</strong>
             </p>
             {session && !demoMode && <div ref={dropinRef} className="min-h-[120px]" />}
             {(demoMode || !session) && (
@@ -290,7 +300,7 @@ export default function OrderConfirmationPage() {
                 onClick={() => void confirmDemoPayment()}
                 className="w-full bg-emerald-700 text-white font-semibold py-3 disabled:opacity-50"
               >
-                {paying ? 'Confirming…' : 'Confirm payment (demo / test)'}
+                {paying ? t('shopConfirming') : t('shopConfirmPaymentDemo')}
               </button>
             )}
             {payMsg && <p className="text-sm text-stone-700">{payMsg}</p>}
@@ -298,31 +308,31 @@ export default function OrderConfirmationPage() {
         )}
 
         <section className="bg-white border border-stone-200 p-5 space-y-2 text-sm">
-          <h2 className="font-semibold text-base mb-2">Customer</h2>
+          <h2 className="font-semibold text-base mb-2">{t('shopCustomer')}</h2>
           <p className="font-medium">{order.customerName}</p>
           {order.customerPhone && <p className="text-stone-600">{order.customerPhone}</p>}
           {order.customerEmail && <p className="text-stone-600">{order.customerEmail}</p>}
           <p className="text-stone-700 pt-1">
             {order.fulfillmentChannel === 'delivery'
-              ? `Deliver to: ${order.shippingAddress || '—'}`
-              : `Pickup at: ${order.store?.address || order.shippingAddress || 'restaurant'}${
+              ? `${t('shopDeliverTo')}: ${order.shippingAddress || '—'}`
+              : `${t('shopPickupAt')}: ${order.store?.address || order.shippingAddress || t('shopRestaurant')}${
                   order.store?.city ? `, ${order.store.city}` : ''
                 }`}
           </p>
           {order.notes?.replace(/\[Rounding[^\]]*\]/g, '').trim() && (
             <p className="text-stone-500 italic">
-              Note: {order.notes.replace(/\[Rounding[^\]]*\]/g, '').trim()}
+              {t('shopNote')}: {order.notes.replace(/\[Rounding[^\]]*\]/g, '').trim()}
             </p>
           )}
         </section>
 
         <section className="bg-white border border-stone-200 p-5">
-          <h2 className="font-semibold mb-3">Items</h2>
+          <h2 className="font-semibold mb-3">{t('shopItems')}</h2>
           <ul className="space-y-2">
             {(order.items || []).map((it) => (
               <li key={it.id} className="flex justify-between gap-3 text-sm">
                 <span className="min-w-0">
-                  {Number(it.quantity)}× {it.productName || 'Item'}
+                  {Number(it.quantity)}× {it.productName || t('shopItem')}
                   {!!it.comboSelections?.length && (
                     <span className="block text-xs text-stone-500 mt-0.5">
                       {it.comboSelections
@@ -345,10 +355,10 @@ export default function OrderConfirmationPage() {
             ))}
           </ul>
           <div className="mt-4 pt-3 border-t border-stone-100 space-y-1 text-sm">
-            <Row label="Subtotal" value={money(order.subtotal)} />
-            <Row label="Tax" value={money(order.taxAmount)} />
-            <Row label="Delivery" value={money(order.deliveryFee || 0)} />
-            <Row label="Tip" value={money(order.tipAmount || 0)} />
+            <Row label={t('shopSubtotal')} value={money(order.subtotal)} />
+            <Row label={t('shopTax')} value={money(order.taxAmount)} />
+            <Row label={t('shopDelivery')} value={money(order.deliveryFee || 0)} />
+            <Row label={t('shopTip')} value={money(order.tipAmount || 0)} />
             {(() => {
               const parts =
                 Number(order.subtotal || 0) +
@@ -359,12 +369,12 @@ export default function OrderConfirmationPage() {
               if (!roundAdj) return null;
               return (
                 <Row
-                  label="Rounding"
+                  label={t('shopRounding')}
                   value={`${roundAdj > 0 ? '+' : ''}${money(roundAdj)}`}
                 />
               );
             })()}
-            <Row label="Total" value={money(order.total)} bold />
+            <Row label={t('shopTotal')} value={money(order.total)} bold />
           </div>
         </section>
       </main>

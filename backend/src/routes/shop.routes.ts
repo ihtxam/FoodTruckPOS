@@ -409,6 +409,8 @@ router.get("/:slug", async (req: Request, res: Response) => {
           cardReady: !!(merchant.adyenMerchantAccount && merchant.adyenApiKey && merchant.adyenClientId),
           currency: "CHF",
         },
+        /** Merchant panel language — used as shop default when customer has no preference */
+        language: merchant.panelLanguage || "en",
       },
     });
   } catch (error) {

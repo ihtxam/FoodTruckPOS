@@ -26,6 +26,8 @@ import ShopComboWizard, {
   type ComboSlot,
   type ShopComboProduct,
 } from '@/components/shop/ShopComboWizard';
+import { isLocale, useI18n } from '@/lib/i18n';
+import ShopLangSwitcher from '@/components/shop/ShopLangSwitcher';
 
 interface Product {
   id: string;
@@ -54,6 +56,7 @@ interface ChannelInfo {
 }
 
 export default function OrderingPage() {
+  const { t, setLocale, locale } = useI18n();
   const { merchantSlug } = useParams<{ merchantSlug: string }>();
   const shopKey = useMemo(() => resolveShopKey(merchantSlug), [merchantSlug]);
   const navigate = useNavigate();
@@ -73,7 +76,7 @@ export default function OrderingPage() {
   useEffect(() => {
     if (!shopKey) {
       setLoading(false);
-      setError('Shop not found');
+      setError(t('shopNotFound'));
       return;
     }
 
@@ -90,6 +93,14 @@ export default function OrderingPage() {
         setMerchant(data);
         setMenu(menuRes.data.data || []);
         setSelectedCategory(menuRes.data.data?.[0]?.id || '');
+        if (isLocale(data.language)) {
+          try {
+            const stored = localStorage.getItem('manupos_shop_lang');
+            if (!isLocale(stored)) setLocale(data.language);
+          } catch {
+            setLocale(data.language);
+          }
+        }
         const channels = data.channels || {};
         const preferred: ShopChannel[] = ['takeaway', 'delivery', 'dine_in'];
         const first = preferred.find((c) => channels[c]?.enabled);
@@ -100,7 +111,7 @@ export default function OrderingPage() {
         });
         setError(null);
       } catch (e: any) {
-        setError(e.response?.data?.error || 'Failed to load shop');
+        setError(e.response?.data?.error || t('shopFailedLoad'));
       } finally {
         setLoading(false);
       }
@@ -112,6 +123,10 @@ export default function OrderingPage() {
     if (!shopKey || loading) return;
     saveCart(shopKey, draft);
   }, [draft, shopKey, loading]);
+
+  useEffect(() => {
+    document.documentElement.lang = locale;
+  }, [locale]);
 
   const channels: Record<ShopChannel, ChannelInfo> = merchant?.channels || {
     takeaway: { enabled: true, open: true, todayLabel: '', etaMinutes: 25 },
@@ -219,7 +234,7 @@ export default function OrderingPage() {
 
   const checkDeliveryPreview = async () => {
     if (!draft.address.trim()) {
-      setError('Enter a delivery address to check your zone');
+      setError(t('shopEnterDeliveryAddress'));
       return;
     }
     setCheckingDelivery(true);
@@ -237,10 +252,10 @@ export default function OrderingPage() {
         subtotal: cartTotal,
       });
       setDeliveryInfo(res.data);
-      if (!res.data.deliverable) setError(res.data.error || 'Outside delivery area');
+      if (!res.data.deliverable) setError(res.data.error || t('shopOutsideDelivery'));
       else if (!res.data.meetsMinOrder) setError(res.data.message);
     } catch (e: any) {
-      setError(e.response?.data?.error || 'Could not verify address');
+      setError(e.response?.data?.error || t('shopCouldNotVerifyAddress'));
       setDeliveryInfo(null);
     } finally {
       setCheckingDelivery(false);
@@ -250,11 +265,11 @@ export default function OrderingPage() {
   const goCheckout = () => {
     if (!cart.length) return;
     if (channel === 'delivery' && deliveryInfo && !deliveryInfo.deliverable) {
-      setError('Outside delivery area — change address or switch to pickup');
+      setError(t('shopOutsideDeliverySwitch'));
       return;
     }
     if (channel === 'delivery' && deliveryInfo && !deliveryInfo.meetsMinOrder) {
-      setError(deliveryInfo.message || 'Minimum order not met');
+      setError(deliveryInfo.message || t('shopMinOrderNotMet'));
       return;
     }
     // Closed now is OK — checkout will offer schedule for later (ASAP hidden when closed).
@@ -274,7 +289,7 @@ export default function OrderingPage() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-stone-50 text-stone-600">
-        Loading shop…
+        {t('shopLoading')}
       </div>
     );
   }
@@ -289,16 +304,16 @@ export default function OrderingPage() {
 
   const visibleItems = menu.find((c) => c.id === selectedCategory)?.items || [];
   const allChannels: { id: ShopChannel; label: string }[] = [
-    { id: 'takeaway', label: 'Pickup' },
-    { id: 'delivery', label: 'Delivery' },
-    { id: 'dine_in', label: 'Dine in' },
+    { id: 'takeaway', label: t('shopPickup') },
+    { id: 'delivery', label: t('shopDelivery') },
+    { id: 'dine_in', label: t('shopDineIn') },
   ];
   const channelButtons = allChannels.filter((c) => channels[c.id]?.enabled);
 
   const Basket = (
     <aside className="bg-white border border-stone-200 flex flex-col h-full">
       <div className="px-5 py-4 border-b border-stone-200">
-        <h2 className="text-xl font-bold tracking-tight">Basket</h2>
+        <h2 className="text-xl font-bold tracking-tight">{t('shopBasket')}</h2>
         <p className="text-sm text-stone-500 mt-1">
           {channelButtons.find((c) => c.id === channel)?.label} · {channelMeta?.etaMinutes || 30}–
           {(channelMeta?.etaMinutes || 30) + 10} min
@@ -307,7 +322,7 @@ export default function OrderingPage() {
 
       <div className="flex-1 overflow-y-auto px-5 py-4">
         {cart.length === 0 ? (
-          <p className="text-stone-500 text-sm py-8 text-center">No items added yet.</p>
+          <p className="text-stone-500 text-sm py-8 text-center">{t('shopNoItems')}</p>
         ) : (
           <ul className="space-y-3">
             {cart.map((item) => (
@@ -358,23 +373,23 @@ export default function OrderingPage() {
       <div className="border-t border-stone-200 px-5 py-4 space-y-3">
         {channel === 'delivery' && (
           <div className="space-y-2 pb-2 border-b border-stone-100">
-            <p className="text-xs text-stone-500">Optional: check if we deliver to you</p>
+            <p className="text-xs text-stone-500">{t('shopCheckDeliverHint')}</p>
             <input
               className="w-full border border-stone-300 px-3 py-2 text-sm"
-              placeholder="Street address"
+              placeholder={t('shopStreetAddress')}
               value={draft.address}
               onChange={(e) => patch({ address: e.target.value })}
             />
             <div className="flex gap-2">
               <input
                 className="w-28 border border-stone-300 px-3 py-2 text-sm"
-                placeholder="ZIP"
+                placeholder={t('shopZip')}
                 value={draft.zipCode}
                 onChange={(e) => patch({ zipCode: e.target.value })}
               />
               <input
                 className="flex-1 border border-stone-300 px-3 py-2 text-sm"
-                placeholder="City"
+                placeholder={t('shopCity')}
                 value={draft.city}
                 onChange={(e) => patch({ city: e.target.value })}
               />
@@ -385,13 +400,13 @@ export default function OrderingPage() {
               className="w-full border border-stone-900 text-sm font-semibold py-2"
               disabled={checkingDelivery}
             >
-              {checkingDelivery ? 'Checking…' : 'Check delivery zone'}
+              {checkingDelivery ? t('shopChecking') : t('shopCheckDeliveryZone')}
             </button>
             {deliveryInfo?.deliverable && (
               <p className="text-xs text-teal-800">
-                {deliveryInfo.zone.name}: fee CHF {Number(deliveryInfo.zone.deliveryFee).toFixed(2)}
+                {deliveryInfo.zone.name}: {t('shopFee')} CHF {Number(deliveryInfo.zone.deliveryFee).toFixed(2)}
                 {deliveryInfo.zone.minOrderAmount > 0
-                  ? ` · min CHF ${Number(deliveryInfo.zone.minOrderAmount).toFixed(2)}`
+                  ? ` · ${t('shopMin')} CHF ${Number(deliveryInfo.zone.minOrderAmount).toFixed(2)}`
                   : ''}
               </p>
             )}
@@ -400,29 +415,29 @@ export default function OrderingPage() {
 
         <div className="text-sm space-y-1 pt-1">
           <div className="flex justify-between">
-            <span className="text-stone-500">Subtotal</span>
+            <span className="text-stone-500">{t('shopSubtotal')}</span>
             <span>CHF {cartTotal.toFixed(2)}</span>
           </div>
           {deliveryFee > 0 && (
             <div className="flex justify-between">
-              <span className="text-stone-500">Delivery</span>
+              <span className="text-stone-500">{t('shopDelivery')}</span>
               <span>CHF {deliveryFee.toFixed(2)}</span>
             </div>
           )}
           <div className="flex justify-between">
-            <span className="text-stone-500">Tax ({taxRate}%)</span>
+            <span className="text-stone-500">{t('shopTax')} ({taxRate}%)</span>
             <span>CHF {tax.toFixed(2)}</span>
           </div>
           {rounding !== 0 && (
             <div className="flex justify-between">
-              <span className="text-stone-500">Rounding</span>
+              <span className="text-stone-500">{t('shopRounding')}</span>
               <span>
                 {rounding > 0 ? '+' : ''}CHF {rounding.toFixed(2)}
               </span>
             </div>
           )}
           <div className="flex justify-between font-bold text-base pt-1">
-            <span>Est. total</span>
+            <span>{t('shopEstTotal')}</span>
             <span>CHF {total.toFixed(2)}</span>
           </div>
         </div>
@@ -430,7 +445,7 @@ export default function OrderingPage() {
         {error && <p className="text-red-600 text-sm">{error}</p>}
         {!channelMeta?.open && (
           <p className="text-amber-700 text-sm">
-            Closed now · {channelMeta?.todayLabel || '—'} — continue to schedule for later
+            {t('shopClosedNow')} · {channelMeta?.todayLabel || '—'} — {t('shopContinueScheduleLater')}
           </p>
         )}
 
@@ -440,10 +455,10 @@ export default function OrderingPage() {
           onClick={goCheckout}
           className="w-full bg-stone-900 text-white py-3 font-semibold disabled:opacity-40"
         >
-          {channelMeta?.open ? 'Go to checkout' : 'Schedule & checkout'}
+          {channelMeta?.open ? t('shopGoCheckout') : t('shopScheduleCheckout')}
         </button>
         <p className="text-[11px] text-stone-400 text-center">
-          Guest or login · address · cash or Adyen
+          {t('shopCheckoutHint')}
         </p>
       </div>
     </aside>
@@ -463,16 +478,19 @@ export default function OrderingPage() {
             )}
             <span className="font-bold tracking-tight truncate">{merchant?.name}</span>
           </div>
-          <nav className="hidden sm:flex items-center gap-6 text-sm font-medium">
-            <span className="text-stone-900 border-b-2 border-stone-900 pb-0.5">Order</span>
-          </nav>
-          <button
-            type="button"
-            className="lg:hidden bg-stone-900 text-white px-4 py-2 text-sm font-semibold"
-            onClick={() => setMobileBasket(true)}
-          >
-            Basket ({itemCount})
-          </button>
+          <div className="flex items-center gap-2 sm:gap-4">
+            <ShopLangSwitcher />
+            <nav className="hidden sm:flex items-center gap-6 text-sm font-medium">
+              <span className="text-stone-900 border-b-2 border-stone-900 pb-0.5">{t('shopOrder')}</span>
+            </nav>
+            <button
+              type="button"
+              className="lg:hidden bg-stone-900 text-white px-4 py-2 text-sm font-semibold"
+              onClick={() => setMobileBasket(true)}
+            >
+              {t('shopBasketCount')} ({itemCount})
+            </button>
+          </div>
         </div>
       </header>
 
@@ -493,20 +511,20 @@ export default function OrderingPage() {
                 <>
                   {' · '}
                   <a href={mapsUrl} target="_blank" rel="noreferrer" className="underline text-stone-900">
-                    Open maps
+                    {t('shopOpenMaps')}
                   </a>
                 </>
               )}
             </span>
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-3 text-sm">
-            <span className="font-medium">{channelMeta?.todayLabel || 'Hours not set'}</span>
+            <span className="font-medium">{channelMeta?.todayLabel || t('shopHoursNotSet')}</span>
             <span
               className={`px-2 py-0.5 text-xs font-semibold ${
                 channelMeta?.open ? 'bg-teal-100 text-teal-900' : 'bg-stone-200 text-stone-700'
               }`}
             >
-              {channelMeta?.open ? 'Open now' : 'Closed'}
+              {channelMeta?.open ? t('shopOpenNow') : t('shopClosed')}
             </span>
           </div>
 
@@ -596,7 +614,7 @@ export default function OrderingPage() {
               </button>
             ))}
             {visibleItems.length === 0 && (
-              <p className="text-stone-500 py-12 text-center">No products in this category.</p>
+              <p className="text-stone-500 py-12 text-center">{t('shopNoProducts')}</p>
             )}
           </div>
         </div>
@@ -613,7 +631,7 @@ export default function OrderingPage() {
             <div className="h-full flex flex-col">
               <div className="flex justify-end p-3">
                 <button type="button" className="text-sm font-semibold" onClick={() => setMobileBasket(false)}>
-                  Close
+                  {t('shopClose')}
                 </button>
               </div>
               <div className="flex-1 min-h-0">{Basket}</div>
