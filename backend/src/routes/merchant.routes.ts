@@ -177,6 +177,12 @@ router.post("/products", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Name and price are required" });
     }
 
+    const { sanitizeComboSlotsInput } = await import("@/lib/combo");
+    const normalizedComboItems =
+      productType === "combo" || (Array.isArray(comboItems) && comboItems.length)
+        ? sanitizeComboSlotsInput(comboItems)
+        : comboItems || [];
+
     const product = await ProductService.createProduct(
       merchantId,
       name,
@@ -190,13 +196,13 @@ router.post("/products", async (req: Request, res: Response) => {
       description,
       imageUrl,
       {
-        productType,
+        productType: productType === "combo" || normalizedComboItems.length ? "combo" : productType,
         isOpenPrice,
         soldByWeight,
         weightUnit,
         bulkPricing,
         extras,
-        comboItems,
+        comboItems: normalizedComboItems,
         allowExtras,
         clientId,
         specifications,
@@ -241,6 +247,14 @@ router.put("/products/:productId", async (req: Request, res: Response) => {
     // Coerce numeric fields commonly sent as numbers from the dashboard
     if (updates.price !== undefined) updates.price = String(updates.price);
     if (updates.cost !== undefined && updates.cost !== null) updates.cost = String(updates.cost);
+
+    if (updates.comboItems !== undefined || updates.productType === "combo") {
+      const { sanitizeComboSlotsInput } = await import("@/lib/combo");
+      updates.comboItems = sanitizeComboSlotsInput(updates.comboItems || []);
+      if (updates.productType === "combo" || (updates.comboItems as unknown[]).length) {
+        updates.productType = "combo";
+      }
+    }
 
     const product = await ProductService.updateProduct(merchantId, productId, updates);
 

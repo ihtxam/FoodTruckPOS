@@ -8,6 +8,16 @@ export interface ShopSelectedExtra {
   groupTitle?: string;
 }
 
+export interface ShopComboSelection {
+  slotId: string;
+  slotName: string;
+  productId: string;
+  productName: string;
+  image?: string | null;
+  extraPrice: number;
+  selectedExtras: ShopSelectedExtra[];
+}
+
 export interface ShopCartItem {
   /** Unique cart line (same product can appear twice with different extras). */
   lineId: string;
@@ -22,6 +32,7 @@ export interface ShopCartItem {
   description?: string;
   image?: string;
   selectedExtras?: ShopSelectedExtra[];
+  comboSelections?: ShopComboSelection[];
 }
 
 export interface ShopCheckoutDraft {
@@ -50,9 +61,10 @@ export function cartStorageKey(shopKey: string) {
 
 function normalizeCartItem(item: Partial<ShopCartItem> & { id: string; name: string; price: number; quantity: number }): ShopCartItem {
   const selectedExtras = Array.isArray(item.selectedExtras) ? item.selectedExtras : [];
+  const comboSelections = Array.isArray(item.comboSelections) ? item.comboSelections : [];
   const basePrice = typeof item.basePrice === 'number' ? item.basePrice : item.price;
   return {
-    lineId: item.lineId || `${item.id}-${selectedExtras.map((e) => e.id).sort().join(',') || 'plain'}`,
+    lineId: item.lineId || `${item.id}-${lineSignature(selectedExtras, comboSelections)}`,
     id: item.id,
     name: item.name,
     price: item.price,
@@ -61,6 +73,7 @@ function normalizeCartItem(item: Partial<ShopCartItem> & { id: string; name: str
     description: item.description,
     image: item.image,
     selectedExtras,
+    comboSelections,
   };
 }
 
@@ -113,6 +126,22 @@ export function extrasSignature(extras?: ShopSelectedExtra[]) {
     .map((e) => e.id)
     .sort()
     .join(',');
+}
+
+export function comboSignature(combo?: ShopComboSelection[]) {
+  return (combo || [])
+    .map(
+      (c) =>
+        `${c.slotId}:${c.productId}:${extrasSignature(c.selectedExtras)}`
+    )
+    .sort()
+    .join('|');
+}
+
+export function lineSignature(extras?: ShopSelectedExtra[], combo?: ShopComboSelection[]) {
+  const e = extrasSignature(extras);
+  const c = comboSignature(combo);
+  return [e || 'plain', c || ''].filter(Boolean).join('~') || 'plain';
 }
 
 export function newCartLineId() {

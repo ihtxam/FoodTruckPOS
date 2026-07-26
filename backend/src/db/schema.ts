@@ -260,8 +260,21 @@ export const products = pgTable(
     bulkPricing: json("bulk_pricing").$type<Array<{ minQty: number; price: number }>>().default([]),
     // [{ id, name, price }] legacy flat extras (kept for POS sync; prefer modifier groups)
     extras: json("extras").$type<Array<{ id: string; name: string; price: number }>>().default([]),
-    // [{ productId, quantity, name? }] combo components
-    comboItems: json("combo_items").$type<Array<{ productId: string; quantity: number; name?: string }>>().default([]),
+    // Combo slots: [{ id, name, minPick, maxPick, options: [{ productId, extraPrice? }] }]
+    // Legacy fixed components also supported: [{ productId, quantity, name? }]
+    comboItems: json("combo_items")
+      .$type<
+        Array<{
+          id?: string;
+          name?: string;
+          minPick?: number;
+          maxPick?: number;
+          options?: Array<{ productId: string; extraPrice?: number }>;
+          productId?: string;
+          quantity?: number;
+        }>
+      >()
+      .default([]),
     // [{ id, name, price, saleStatus, isDefault, sortOrder }] size/spec variants
     specifications: json("specifications")
       .$type<
@@ -481,6 +494,19 @@ export const orderItems = pgTable(
     taxAmount: decimal("tax_amount", { precision: 10, scale: 2 }).notNull(),
     weightKg: decimal("weight_kg", { precision: 12, scale: 3 }),
     selectedExtras: json("selected_extras").$type<Array<{ id: string; name: string; price: number }>>().default([]),
+    // Combo meal picks: [{ slotId, slotName, productId, productName, extraPrice, selectedExtras }]
+    comboSelections: json("combo_selections")
+      .$type<
+        Array<{
+          slotId: string;
+          slotName: string;
+          productId: string;
+          productName: string;
+          extraPrice: number;
+          selectedExtras?: Array<{ id: string; name: string; price: number }>;
+        }>
+      >()
+      .default([]),
     isOpenPrice: boolean("is_open_price").default(false).notNull(),
     // 1-based seat / person index when pax ordering is on (kitchen: "Person 1")
     seatNumber: integer("seat_number"),

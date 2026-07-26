@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import axios from 'axios';
 import {
   emptyDraft,
-  extrasSignature,
+  lineSignature,
   loadCart,
   newCartLineId,
   resolveShopKey,
@@ -12,6 +12,7 @@ import {
   type ShopCartItem,
   type ShopChannel,
   type ShopCheckoutDraft,
+  type ShopComboSelection,
   type ShopSelectedExtra,
 } from '@/lib/shop-cart';
 import { roundMoney2, roundTo005, roundingAdjustment } from '@/lib/money';
@@ -20,6 +21,11 @@ import ShopProductModifiersModal, {
   type ShopModifierGroup,
   type ShopProductForModifiers,
 } from '@/components/shop/ShopProductModifiersModal';
+import ShopComboWizard, {
+  productHasComboSlots,
+  type ComboSlot,
+  type ShopComboProduct,
+} from '@/components/shop/ShopComboWizard';
 
 interface Product {
   id: string;
@@ -27,9 +33,11 @@ interface Product {
   price: number;
   description?: string;
   image?: string;
+  productType?: string;
   allowExtras?: boolean;
   extras?: Array<{ id: string; name: string; price: number }>;
   modifierGroups?: ShopModifierGroup[];
+  comboSlots?: ComboSlot[];
 }
 
 interface Category {
@@ -60,6 +68,7 @@ export default function OrderingPage() {
   const [checkingDelivery, setCheckingDelivery] = useState(false);
   const [deliveryInfo, setDeliveryInfo] = useState<any>(null);
   const [pendingProduct, setPendingProduct] = useState<ShopProductForModifiers | null>(null);
+  const [pendingCombo, setPendingCombo] = useState<ShopComboProduct | null>(null);
 
   useEffect(() => {
     if (!shopKey) {
@@ -142,19 +151,27 @@ export default function OrderingPage() {
   const patch = (p: Partial<ShopCheckoutDraft>) => setDraft((d) => ({ ...d, ...p }));
 
   const addConfiguredItem = (
-    product: Product | ShopProductForModifiers,
+    product: Product | ShopProductForModifiers | ShopComboProduct,
     extras: ShopSelectedExtra[] = [],
-    unitPrice?: number
+    unitPrice?: number,
+    comboSelections: ShopComboSelection[] = []
   ) => {
-    const price = roundMoney2(unitPrice ?? product.price + extras.reduce((s, e) => s + e.price, 0));
-    const sig = extrasSignature(extras);
+    const price = roundMoney2(
+      unitPrice ??
+        product.price +
+          extras.reduce((s, e) => s + e.price, 0) +
+          comboSelections.reduce(
+            (s, c) => s + c.extraPrice + c.selectedExtras.reduce((x, e) => x + e.price, 0),
+            0
+          )
+    );
+    const sig = lineSignature(extras, comboSelections);
     setDraft((prev) => {
-      const existing =
-        !extras.length
-          ? prev.items.find((item) => item.id === product.id && !item.selectedExtras?.length)
-          : prev.items.find(
-              (item) => item.id === product.id && extrasSignature(item.selectedExtras) === sig
-            );
+      const existing = prev.items.find(
+        (item) =>
+          item.id === product.id &&
+          lineSignature(item.selectedExtras, item.comboSelections) === sig
+      );
       const items: ShopCartItem[] = existing
         ? prev.items.map((item) =>
             item.lineId === existing.lineId ? { ...item, quantity: item.quantity + 1 } : item
@@ -171,6 +188,7 @@ export default function OrderingPage() {
               description: product.description,
               image: product.image,
               selectedExtras: extras,
+              comboSelections,
             },
           ];
       return { ...prev, items };
@@ -178,6 +196,10 @@ export default function OrderingPage() {
   };
 
   const handleProductClick = (product: Product) => {
+    if (productHasComboSlots(product)) {
+      setPendingCombo(product as ShopComboProduct);
+      return;
+    }
     if (productHasModifiers(product)) {
       setPendingProduct(product);
       return;
@@ -292,6 +314,17 @@ export default function OrderingPage() {
               <li key={item.lineId} className="flex gap-3 text-sm">
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-stone-900">{item.name}</div>
+                  {!!item.comboSelections?.length && (
+                    <p className="text-xs text-stone-500 mt-0.5 leading-snug">
+                      {item.comboSelections
+                        .map((c) =>
+                          c.selectedExtras?.length
+                            ? `${c.productName} (${c.selectedExtras.map((e) => e.name).join(', ')})`
+                            : c.productName
+                        )
+                        .join(' · ')}
+                    </p>
+                  )}
                   {!!item.selectedExtras?.length && (
                     <p className="text-xs text-stone-500 mt-0.5 leading-snug">
                       {item.selectedExtras.map((e) => e.name).join(', ')}
@@ -542,9 +575,11 @@ export default function OrderingPage() {
                   )}
                   <div className="mt-2 flex items-center gap-2 flex-wrap">
                     <span className="font-semibold">CHF {product.price.toFixed(2)}</span>
-                    {productHasModifiers(product) && (
+                    {productHasComboSlots(product) ? (
+                      <span className="text-xs font-medium text-teal-800">Build combo</span>
+                    ) : productHasModifiers(product) ? (
                       <span className="text-xs font-medium text-stone-500">Customize</span>
-                    )}
+                    ) : null}
                   </div>
                 </div>
                 {product.image ? (
@@ -594,6 +629,17 @@ export default function OrderingPage() {
           onConfirm={(extras, unitPrice) => {
             addConfiguredItem(pendingProduct, extras, unitPrice);
             setPendingProduct(null);
+          }}
+        />
+      )}
+
+      {pendingCombo && (
+        <ShopComboWizard
+          product={pendingCombo}
+          onClose={() => setPendingCombo(null)}
+          onConfirm={({ comboSelections, selectedExtras, unitPrice }) => {
+            addConfiguredItem(pendingCombo, selectedExtras, unitPrice, comboSelections);
+            setPendingCombo(null);
           }}
         />
       )}
