@@ -86,7 +86,7 @@ export class MerchantInviteService {
     let emailed = false;
     let emailError: string | undefined;
 
-    if (EmailService.isConfigured()) {
+    if (await EmailService.isConfigured()) {
       try {
         await EmailService.send({
           to: merchant.email,
@@ -101,7 +101,7 @@ export class MerchantInviteService {
       }
     } else {
       emailError =
-        "Email is not configured (BREVO_API_KEY / BREVO_FROM_EMAIL). Copy the invite link instead.";
+        "Email is not configured. Add Brevo in Superadmin → Settings (or BREVO_API_KEY / BREVO_FROM_EMAIL). Copy the invite link instead.";
       console.warn(`Invite email skipped (Brevo/SendGrid not configured). Link: ${inviteUrl}`);
     }
 

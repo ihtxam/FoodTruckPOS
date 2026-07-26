@@ -9,6 +9,12 @@ export const PLATFORM_ADYEN_KEYS = {
   hmacKey: "adyen_hmac_key",
 } as const;
 
+export const PLATFORM_BREVO_KEYS = {
+  apiKey: "brevo_api_key",
+  fromEmail: "brevo_from_email",
+  fromName: "brevo_from_name",
+} as const;
+
 export type PlatformAdyenSettings = {
   apiKey?: string | null;
   merchantAccount?: string | null;
@@ -120,6 +126,60 @@ export class PlatformSettingsService {
       await this.set(PLATFORM_ADYEN_KEYS.hmacKey, input.hmacKey.trim());
     }
     return this.getAdyenSettingsPublic();
+  }
+
+  static async getBrevoSettings() {
+    const rows = await this.getMany(Object.values(PLATFORM_BREVO_KEYS));
+    return {
+      apiKey: rows[PLATFORM_BREVO_KEYS.apiKey],
+      fromEmail: rows[PLATFORM_BREVO_KEYS.fromEmail],
+      fromName: rows[PLATFORM_BREVO_KEYS.fromName],
+    };
+  }
+
+  static async getBrevoSettingsPublic() {
+    const s = await this.getBrevoSettings();
+    const envKey =
+      process.env.BREVO_API_KEY ||
+      process.env.SENDINBLUE_API_KEY ||
+      process.env.SIB_API_KEY ||
+      "";
+    const envFrom =
+      process.env.BREVO_FROM_EMAIL ||
+      process.env.BREVO_SENDER_EMAIL ||
+      process.env.SENDINBLUE_FROM_EMAIL ||
+      process.env.FROM_EMAIL ||
+      process.env.MAIL_FROM ||
+      "";
+    const envName = process.env.BREVO_FROM_NAME || process.env.SENDINBLUE_FROM_NAME || "Chaslay";
+    const apiKey = s.apiKey || envKey;
+    const fromEmail = s.fromEmail || envFrom;
+    return {
+      fromEmail: fromEmail || "",
+      fromName: s.fromName || envName,
+      apiKeyMasked: maskSecret(apiKey),
+      apiKeySet: !!apiKey,
+      usingEnvFallback: !s.apiKey && !!envKey,
+      configured: !!(apiKey && fromEmail),
+      provider: apiKey && fromEmail ? "brevo" : null,
+    };
+  }
+
+  static async updateBrevoSettings(input: {
+    apiKey?: string;
+    fromEmail?: string;
+    fromName?: string;
+  }) {
+    if (input.fromEmail !== undefined) {
+      await this.set(PLATFORM_BREVO_KEYS.fromEmail, input.fromEmail.trim() || null);
+    }
+    if (input.fromName !== undefined) {
+      await this.set(PLATFORM_BREVO_KEYS.fromName, input.fromName.trim() || null);
+    }
+    if (input.apiKey !== undefined && input.apiKey.trim() && !input.apiKey.includes("••••")) {
+      await this.set(PLATFORM_BREVO_KEYS.apiKey, input.apiKey.trim());
+    }
+    return this.getBrevoSettingsPublic();
   }
 
   /**

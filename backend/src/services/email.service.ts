@@ -10,16 +10,19 @@ export type SendEmailInput = {
 
 type EmailProvider = "brevo" | "sendgrid" | null;
 
+type ResolvedEmailConfig = {
+  provider: EmailProvider;
+  apiKey: string;
+  fromEmail: string;
+  fromName: string;
+  source: "database" | "env" | "none";
+};
+
 /**
- * Prefer Brevo (already used across Chaslay environments), fall back to SendGrid.
- * Accepted env aliases:
- *   BREVO_API_KEY | SENDINBLUE_API_KEY | SIB_API_KEY
- *   BREVO_FROM_EMAIL | BREVO_SENDER_EMAIL | SENDINBLUE_FROM_EMAIL | FROM_EMAIL | MAIL_FROM
- *   BREVO_FROM_NAME | SENDINBLUE_FROM_NAME | MAIL_FROM_NAME
- *   SENDGRID_API_KEY + SENDGRID_FROM_EMAIL
+ * Prefer Brevo (DB platform settings → env aliases), fall back to SendGrid.
  */
 export class EmailService {
-  static brevoApiKey() {
+  private static envBrevoApiKey() {
     return (
       process.env.BREVO_API_KEY ||
       process.env.SENDINBLUE_API_KEY ||
@@ -28,7 +31,7 @@ export class EmailService {
     ).trim();
   }
 
-  static fromAddress() {
+  private static envFromAddress() {
     return (
       process.env.BREVO_FROM_EMAIL ||
       process.env.BREVO_SENDER_EMAIL ||
@@ -40,7 +43,7 @@ export class EmailService {
     ).trim();
   }
 
-  static fromName() {
+  private static envFromName() {
     return (
       process.env.BREVO_FROM_NAME ||
       process.env.SENDINBLUE_FROM_NAME ||
@@ -50,59 +53,109 @@ export class EmailService {
     ).trim();
   }
 
-  static provider(): EmailProvider {
-    if (this.brevoApiKey() && this.fromAddress()) return "brevo";
-    if (process.env.SENDGRID_API_KEY && process.env.SENDGRID_FROM_EMAIL) return "sendgrid";
-    return null;
+  static async resolveConfig(): Promise<ResolvedEmailConfig> {
+    let dbApiKey = "";
+    let dbFromEmail = "";
+    let dbFromName = "";
+
+    try {
+      const { PlatformSettingsService } = await import("@/services/platform-settings.service");
+      const s = await PlatformSettingsService.getBrevoSettings();
+      dbApiKey = (s.apiKey || "").trim();
+      dbFromEmail = (s.fromEmail || "").trim();
+      dbFromName = (s.fromName || "").trim();
+    } catch {
+      /* platform settings table may be unavailable in some contexts */
+    }
+
+    const apiKey = dbApiKey || this.envBrevoApiKey();
+    const fromEmail = dbFromEmail || this.envFromAddress();
+    const fromName = dbFromName || this.envFromName();
+    const source: ResolvedEmailConfig["source"] = dbApiKey
+      ? "database"
+      : this.envBrevoApiKey() || process.env.SENDGRID_API_KEY
+        ? "env"
+        : "none";
+
+    if (apiKey && fromEmail) {
+      return { provider: "brevo", apiKey, fromEmail, fromName, source };
+    }
+
+    if (process.env.SENDGRID_API_KEY && process.env.SENDGRID_FROM_EMAIL) {
+      return {
+        provider: "sendgrid",
+        apiKey: process.env.SENDGRID_API_KEY,
+        fromEmail: process.env.SENDGRID_FROM_EMAIL,
+        fromName: fromName || "Chaslay",
+        source: dbApiKey ? "database" : "env",
+      };
+    }
+
+    return { provider: null, apiKey: "", fromEmail, fromName, source: "none" };
   }
 
-  static isConfigured() {
-    return this.provider() !== null;
+  static async isConfigured() {
+    const cfg = await this.resolveConfig();
+    return cfg.provider !== null;
   }
 
-  static status() {
-    const provider = this.provider();
+  static async status() {
+    const cfg = await this.resolveConfig();
+    let apiKeyMasked = "";
+    let apiKeySet = false;
+    try {
+      const { PlatformSettingsService } = await import("@/services/platform-settings.service");
+      const pub = await PlatformSettingsService.getBrevoSettingsPublic();
+      apiKeyMasked = pub.apiKeyMasked;
+      apiKeySet = pub.apiKeySet;
+    } catch {
+      apiKeySet = !!(cfg.apiKey || this.envBrevoApiKey() || process.env.SENDGRID_API_KEY);
+    }
+
     return {
-      configured: provider !== null,
-      provider,
-      fromEmail: this.fromAddress(),
-      fromName: this.fromName(),
-      brevoKeySet: !!this.brevoApiKey(),
+      configured: cfg.provider !== null,
+      provider: cfg.provider,
+      fromEmail: cfg.fromEmail,
+      fromName: cfg.fromName,
+      source: cfg.source,
+      apiKeySet,
+      apiKeyMasked,
+      brevoKeySet: cfg.provider === "brevo" || !!this.envBrevoApiKey() || apiKeySet,
       sendgridKeySet: !!process.env.SENDGRID_API_KEY,
     };
   }
 
   static async send(input: SendEmailInput) {
-    const provider = this.provider();
-    if (!provider) {
+    const cfg = await this.resolveConfig();
+    if (!cfg.provider) {
       throw new Error(
-        "Email is not configured. Set BREVO_API_KEY (or SENDINBLUE_API_KEY) and BREVO_FROM_EMAIL on the server."
+        "Email is not configured. Add Brevo in Superadmin → Settings, or set BREVO_API_KEY + BREVO_FROM_EMAIL."
       );
     }
 
-    if (provider === "brevo") {
-      await this.sendViaBrevo(input);
+    if (cfg.provider === "brevo") {
+      await this.sendViaBrevo(cfg, input);
       return;
     }
 
-    sgMail.setApiKey(process.env.SENDGRID_API_KEY!);
+    sgMail.setApiKey(cfg.apiKey);
     await sgMail.send({
       to: input.to,
-      from: this.fromAddress(),
+      from: cfg.fromEmail,
       subject: input.subject,
       html: input.html,
       text: input.text || input.html.replace(/<[^>]+>/g, " "),
     });
   }
 
-  private static async sendViaBrevo(input: SendEmailInput) {
+  private static async sendViaBrevo(cfg: ResolvedEmailConfig, input: SendEmailInput) {
     try {
       await axios.post(
         "https://api.brevo.com/v3/smtp/email",
         {
           sender: {
-            name: this.fromName(),
-            email: this.fromAddress(),
+            name: cfg.fromName || "Chaslay",
+            email: cfg.fromEmail,
           },
           to: [{ email: input.to }],
           subject: input.subject,
@@ -111,7 +164,7 @@ export class EmailService {
         },
         {
           headers: {
-            "api-key": this.brevoApiKey(),
+            "api-key": cfg.apiKey,
             "Content-Type": "application/json",
             Accept: "application/json",
           },
