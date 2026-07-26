@@ -15,6 +15,7 @@ import { ShopLoyaltyService } from "@/services/shop-loyalty.service";
 import { AdyenService } from "@/services/adyen.service";
 import { AuthService } from "@/services/auth.service";
 import { ModifierService } from "@/services/modifier.service";
+import { CmsService } from "@/services/cms.service";
 import { normalizeComboSlots } from "@/lib/combo";
 import { v4 as uuidv4 } from "uuid";
 
@@ -393,10 +394,13 @@ async function findMatchingZone(merchantId: string, lng?: number, lat?: number, 
  */
 router.get("/tls-ask", async (req: Request, res: Response) => {
   try {
-    const domain = String(req.query.domain || "").toLowerCase();
+    const domain = String(req.query.domain || "").toLowerCase().split(":")[0];
     if (!domain) return res.status(400).end();
     const merchant = await resolveMerchant(domain);
-    if (merchant?.shopEnabled && merchant.subdomain) {
+    if (
+      merchant?.shopEnabled &&
+      (merchant.subdomain || merchant.customDomain === domain || merchant.slug)
+    ) {
       return res.status(200).end();
     }
     return res.status(404).end();
@@ -442,6 +446,8 @@ router.get("/:slug", async (req: Request, res: Response) => {
         name: merchant.name,
         slug: merchant.slug,
         subdomain: merchant.subdomain,
+        customDomain: merchant.customDomain,
+        cmsHomepageEnabled: !!merchant.cmsHomepageEnabled,
         address: merchant.address,
         city: merchant.city,
         phone: merchant.phone,
@@ -470,6 +476,101 @@ router.get("/:slug", async (req: Request, res: Response) => {
     });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : "Failed to load shop" });
+  }
+});
+
+/**
+ * GET /api/shop/:slug/pages/home — published CMS homepage
+ */
+router.get("/:slug/pages/home", async (req: Request, res: Response) => {
+  try {
+    const merchant = await resolveMerchant(req.params.slug);
+    if (!merchant?.shopEnabled) {
+      return res.status(404).json({ error: "Shop not found or closed" });
+    }
+    const page = await CmsService.getPublishedHomepage(merchant.id);
+    if (!page || !merchant.cmsHomepageEnabled) {
+      return res.status(404).json({ error: "Homepage not published" });
+    }
+    res.json({
+      success: true,
+      data: {
+        id: page.id,
+        title: page.title,
+        slug: page.slug,
+        isHomepage: page.isHomepage,
+        blocks: page.blocks || [],
+        theme: page.theme || null,
+        seoTitle: page.seoTitle,
+        seoDescription: page.seoDescription,
+        publishedAt: page.publishedAt,
+        merchant: {
+          id: merchant.id,
+          name: merchant.name,
+          slug: merchant.slug,
+          subdomain: merchant.subdomain,
+          customDomain: merchant.customDomain,
+          shopLogoUrl: merchant.shopLogoUrl,
+          shopBannerUrl: merchant.shopBannerUrl,
+          storeHours: merchant.storeHours || {},
+          address: merchant.address,
+          city: merchant.city,
+          phone: merchant.phone,
+        },
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : "Failed to load homepage" });
+  }
+});
+
+/**
+ * GET /api/shop/:slug/pages/:pageSlug — published CMS page by slug
+ */
+router.get("/:slug/pages/:pageSlug", async (req: Request, res: Response) => {
+  try {
+    const merchant = await resolveMerchant(req.params.slug);
+    if (!merchant?.shopEnabled) {
+      return res.status(404).json({ error: "Shop not found or closed" });
+    }
+    if (req.params.pageSlug === "home") {
+      const home = await CmsService.getPublishedHomepage(merchant.id);
+      if (!home || !merchant.cmsHomepageEnabled) {
+        return res.status(404).json({ error: "Page not found" });
+      }
+      return res.json({
+        success: true,
+        data: {
+          id: home.id,
+          title: home.title,
+          slug: home.slug,
+          isHomepage: home.isHomepage,
+          blocks: home.blocks || [],
+          theme: home.theme || null,
+          seoTitle: home.seoTitle,
+          seoDescription: home.seoDescription,
+          publishedAt: home.publishedAt,
+        },
+      });
+    }
+    const page = await CmsService.getPublishedBySlug(merchant.id, req.params.pageSlug);
+    if (!page) return res.status(404).json({ error: "Page not found" });
+    res.json({
+      success: true,
+      data: {
+        id: page.id,
+        title: page.title,
+        slug: page.slug,
+        isHomepage: page.isHomepage,
+        blocks: page.blocks || [],
+        theme: page.theme || null,
+        seoTitle: page.seoTitle,
+        seoDescription: page.seoDescription,
+        publishedAt: page.publishedAt,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : "Failed to load page" });
   }
 });
 

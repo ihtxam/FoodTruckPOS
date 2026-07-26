@@ -25,7 +25,9 @@ interface SettingsData {
   taxDeliveryRate?: string | null;
   slug?: string | null;
   subdomain?: string | null;
+  customDomain?: string | null;
   shopEnabled?: boolean;
+  shopCustomDomainUrl?: string | null;
   floorPlanEnabled?: boolean;
   paxOrderingEnabled?: boolean;
   shopPathUrl?: string | null;
@@ -188,6 +190,7 @@ export default function Settings() {
           settings.taxDeliveryRate != null ? Number(settings.taxDeliveryRate) : undefined,
         slug: settings.slug || undefined,
         subdomain: settings.subdomain || undefined,
+        customDomain: settings.customDomain?.trim() || null,
         shopEnabled: !!settings.shopEnabled,
         floorPlanEnabled: !!settings.floorPlanEnabled,
         paxOrderingEnabled: !!settings.paxOrderingEnabled,
@@ -463,6 +466,17 @@ export default function Settings() {
                       placeholder="mycafe"
                     />
                   </Field>
+                  <Field
+                    label={t('cmsCustomDomain')}
+                    hint={settings.shopCustomDomainUrl || t('cmsCustomDomainHint')}
+                  >
+                    <input
+                      className="input"
+                      value={settings.customDomain || ''}
+                      onChange={(e) => setSettings({ ...settings, customDomain: e.target.value })}
+                      placeholder="www.mycafe.ch"
+                    />
+                  </Field>
                 </div>
               </Section>
               <div className="flex justify-end border-t border-[var(--border)] pt-4">
@@ -531,7 +545,7 @@ export default function Settings() {
                         className="input"
                         value={merchantAccount}
                         onChange={(e) => setMerchantAccount(e.target.value)}
-                        placeholder="ChaslayPOS"
+                        placeholder="ManuPOS_COM"
                       />
                     </Field>
                     <Field label={t('clientId')}>

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { useAuthStore } from '@/store/auth';
@@ -15,8 +15,20 @@ import AccountPage from '@/pages/shop/AccountPage';
 import ReceiptPage from '@/pages/ReceiptPage';
 import ProtectedRoute from '@/components/ProtectedRoute';
 
+const ShopEntry = lazy(() => import('@/pages/shop/ShopEntry'));
+
 function ShopRoutes({ children }: { children: React.ReactNode }) {
-  return <I18nProvider storageKey={SHOP_LANG_KEY}>{children}</I18nProvider>;
+  return (
+    <I18nProvider storageKey={SHOP_LANG_KEY}>
+      <Suspense
+        fallback={
+          <div className="min-h-screen flex items-center justify-center text-stone-500">…</div>
+        }
+      >
+        {children}
+      </Suspense>
+    </I18nProvider>
+  );
 }
 
 const MAIN_HOST = (
@@ -30,7 +42,7 @@ const RESERVED_SUBDOMAINS = new Set(['admin', 'api', 'pay', 'www', 'app', 'panel
 function hostParts() {
   const host = window.location.hostname.toLowerCase();
   if (host === MAIN_HOST) return { host, kind: 'main' as const, label: '' };
-  if (!host.endsWith(`.${MAIN_HOST}`)) return { host, kind: 'other' as const, label: '' };
+  if (!host.endsWith(`.${MAIN_HOST}`)) return { host, kind: 'custom_domain' as const, label: host };
   const label = host.slice(0, -(MAIN_HOST.length + 1));
   if (label === 'shop') return { host, kind: 'shop_hub' as const, label };
   if (RESERVED_SUBDOMAINS.has(label)) return { host, kind: 'reserved' as const, label };
@@ -42,7 +54,8 @@ function App() {
   const { kind } = hostParts();
   const shopHub = kind === 'shop_hub';
   const merchantSubdomain = kind === 'merchant_subdomain';
-  const shopMode = shopHub || merchantSubdomain;
+  const customDomain = kind === 'custom_domain';
+  const shopMode = shopHub || merchantSubdomain || customDomain;
 
   useEffect(() => {
     hydrate();
@@ -57,6 +70,14 @@ function App() {
           <Route path="/receipt/:saleId" element={<ReceiptPage />} />
           <Route
             path="/shop/:merchantSlug"
+            element={
+              <ShopRoutes>
+                <ShopEntry />
+              </ShopRoutes>
+            }
+          />
+          <Route
+            path="/shop/:merchantSlug/menu"
             element={
               <ShopRoutes>
                 <OrderingPage />
@@ -92,6 +113,14 @@ function App() {
           {shopHub && (
             <>
               <Route
+                path="/:merchantSlug/menu"
+                element={
+                  <ShopRoutes>
+                    <OrderingPage />
+                  </ShopRoutes>
+                }
+              />
+              <Route
                 path="/:merchantSlug/checkout"
                 element={
                   <ShopRoutes>
@@ -119,7 +148,7 @@ function App() {
                 path="/:merchantSlug"
                 element={
                   <ShopRoutes>
-                    <OrderingPage />
+                    <ShopEntry />
                   </ShopRoutes>
                 }
               />
@@ -127,7 +156,7 @@ function App() {
                 path="/"
                 element={
                   <ShopRoutes>
-                    <OrderingPage />
+                    <ShopEntry />
                   </ShopRoutes>
                 }
               />
@@ -137,6 +166,14 @@ function App() {
           {/* {slug}.domain — merchant subdomain shops */}
           {merchantSubdomain && (
             <>
+              <Route
+                path="/menu"
+                element={
+                  <ShopRoutes>
+                    <OrderingPage />
+                  </ShopRoutes>
+                }
+              />
               <Route
                 path="/checkout"
                 element={
@@ -165,7 +202,7 @@ function App() {
                 path="/"
                 element={
                   <ShopRoutes>
-                    <OrderingPage />
+                    <ShopEntry />
                   </ShopRoutes>
                 }
               />
@@ -173,7 +210,61 @@ function App() {
                 path="*"
                 element={
                   <ShopRoutes>
+                    <ShopEntry />
+                  </ShopRoutes>
+                }
+              />
+            </>
+          )}
+
+          {/* Custom merchant domain (apex / www) */}
+          {customDomain && (
+            <>
+              <Route
+                path="/menu"
+                element={
+                  <ShopRoutes>
                     <OrderingPage />
+                  </ShopRoutes>
+                }
+              />
+              <Route
+                path="/checkout"
+                element={
+                  <ShopRoutes>
+                    <CheckoutPage />
+                  </ShopRoutes>
+                }
+              />
+              <Route
+                path="/order/:orderId"
+                element={
+                  <ShopRoutes>
+                    <OrderConfirmationPage />
+                  </ShopRoutes>
+                }
+              />
+              <Route
+                path="/account"
+                element={
+                  <ShopRoutes>
+                    <AccountPage />
+                  </ShopRoutes>
+                }
+              />
+              <Route
+                path="/"
+                element={
+                  <ShopRoutes>
+                    <ShopEntry />
+                  </ShopRoutes>
+                }
+              />
+              <Route
+                path="*"
+                element={
+                  <ShopRoutes>
+                    <ShopEntry />
                   </ShopRoutes>
                 }
               />

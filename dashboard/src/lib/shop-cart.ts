@@ -189,6 +189,7 @@ function subdomainLabel() {
  * Resolve public shop key:
  * - /shop/:slug or shop.domain/:slug → param slug
  * - {slug}.domain → subdomain label (not reserved)
+ * - custom domain → full hostname (backend matches merchants.custom_domain)
  */
 export function resolveShopKey(paramSlug?: string) {
   if (paramSlug) return paramSlug;
@@ -196,16 +197,24 @@ export function resolveShopKey(paramSlug?: string) {
   if (label && !RESERVED_SUBDOMAINS.has(label)) return label;
   if (label === 'shop') {
     const seg = window.location.pathname.split('/').filter(Boolean)[0];
-    if (seg && !['checkout', 'order', 'account', 'api', 'assets'].includes(seg)) return seg;
+    if (seg && !['checkout', 'order', 'account', 'menu', 'api', 'assets'].includes(seg)) return seg;
+  }
+  const host = window.location.hostname.toLowerCase();
+  const main = publicDomain();
+  if (host && host !== main && !host.endsWith(`.${main}`)) {
+    return host; // custom domain
   }
   return '';
 }
 
-/** Frontend path prefix for a shop (Chaslay shop hub vs /shop/:slug vs subdomain root). */
+/** Frontend path prefix for a shop (Chaslay shop hub vs /shop/:slug vs subdomain / custom domain root). */
 export function shopBasePath(shopKey: string) {
   const label = subdomainLabel();
   if (label && !RESERVED_SUBDOMAINS.has(label)) return ''; // {slug}.domain → /
   if (label === 'shop') return `/${shopKey}`; // shop.domain/{slug}
+  const host = window.location.hostname.toLowerCase();
+  const main = publicDomain();
+  if (host && host !== main && !host.endsWith(`.${main}`)) return ''; // custom domain → /
   return `/shop/${shopKey}`;
 }
 
