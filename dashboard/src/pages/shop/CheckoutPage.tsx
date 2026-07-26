@@ -25,7 +25,7 @@ import { roundMoney2, roundTo005, roundingAdjustment } from '@/lib/money';
 import { isLocale, useI18n } from '@/lib/i18n';
 import ShopLangSwitcher from '@/components/shop/ShopLangSwitcher';
 
-type Step = 'account' | 'details' | 'payment' | 'review';
+type Step = 'details' | 'payment' | 'review';
 type WhenMode = 'asap' | 'later';
 
 export default function CheckoutPage() {
@@ -36,7 +36,7 @@ export default function CheckoutPage() {
 
   const [draft, setDraft] = useState<ShopCheckoutDraft>(emptyDraft());
   const [merchant, setMerchant] = useState<any>(null);
-  const [step, setStep] = useState<Step>('account');
+  const [step, setStep] = useState<Step>('details');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,6 +44,8 @@ export default function CheckoutPage() {
   const [checkingZone, setCheckingZone] = useState(false);
   const [customer, setCustomer] = useState<any>(null);
   const [password, setPassword] = useState('');
+  const [wantCreateAccount, setWantCreateAccount] = useState(false);
+  const [showLogin, setShowLogin] = useState(false);
   const [paymentOptions, setPaymentOptions] = useState<any>(null);
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
@@ -94,7 +96,8 @@ export default function CheckoutPage() {
               zipCode: me.data.customer.defaultZip || d.zipCode,
               city: me.data.customer.defaultCity || d.city,
             }));
-            setStep('details');
+            setWantCreateAccount(false);
+            setShowLogin(false);
           } catch {
             clearCustomerToken(shopKey);
           }
@@ -136,6 +139,8 @@ export default function CheckoutPage() {
     return Number.isFinite(eta) && eta > 0 ? Math.max(15, eta) : 30;
   }, [merchant, draft.channel]);
 
+  const shopLocale = locale === 'fr' ? 'fr-CH' : locale === 'de' ? 'de-CH' : 'en-CH';
+
   const scheduleDays = useMemo(() => {
     if (!merchant) return [];
     return buildScheduleDays({
@@ -144,8 +149,16 @@ export default function CheckoutPage() {
       leadMinutes,
       intervalMinutes: 15,
       horizonDays: 2,
+      locale: shopLocale,
     });
-  }, [merchant, draft.channel, leadMinutes]);
+  }, [merchant, draft.channel, leadMinutes, shopLocale]);
+
+  const scheduleDayTitle = (offset: number) => {
+    if (offset === 0) return t('shopToday');
+    if (offset === 1) return t('shopTomorrow');
+    if (offset === 2) return t('shopDayAfterTomorrow');
+    return t('shopPlusDays').replace('{n}', String(offset));
+  };
 
   const activeScheduleDay = useMemo(() => {
     if (!scheduleDays.length) return null;
@@ -190,7 +203,7 @@ export default function CheckoutPage() {
   const checkDelivery = async () => {
     if (draft.channel !== 'delivery') return true;
     if (!draft.address.trim()) {
-      setError('Enter your delivery address');
+      setError(t('shopEnterDeliveryAddress'));
       return false;
     }
     setCheckingZone(true);
@@ -210,7 +223,7 @@ export default function CheckoutPage() {
       });
       setDeliveryInfo(res.data);
       if (!res.data.deliverable) {
-        setError(res.data.error || 'Outside delivery area');
+        setError(res.data.error || t('shopOutsideDelivery'));
         return false;
       }
       if (!res.data.meetsMinOrder) {
@@ -219,16 +232,11 @@ export default function CheckoutPage() {
       }
       return true;
     } catch (e: any) {
-      setError(e.response?.data?.error || 'Could not verify address');
+      setError(e.response?.data?.error || t('shopCouldNotVerifyAddress'));
       return false;
     } finally {
       setCheckingZone(false);
     }
-  };
-
-  const onGuestContinue = () => {
-    patch({ authMode: 'guest' });
-    setStep('details');
   };
 
   const onLogin = async (e: FormEvent) => {
@@ -241,6 +249,9 @@ export default function CheckoutPage() {
       });
       saveCustomerToken(shopKey, res.data.token);
       setCustomer(res.data.customer);
+      setWantCreateAccount(false);
+      setShowLogin(false);
+      setPassword('');
       patch({
         authMode: 'login',
         customerName: res.data.customer.name || '',
@@ -250,18 +261,15 @@ export default function CheckoutPage() {
         zipCode: res.data.customer.defaultZip || draft.zipCode,
         city: res.data.customer.defaultCity || draft.city,
       });
-      setStep('details');
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Login failed');
+      setError(err.response?.data?.error || t('shopLoginFailed'));
     }
   };
 
-  const onRegister = async (e: FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    if (!draft.customerEmail || password.length < 6) {
-      setError('Email and password (min 6 characters) are required');
-      return;
+  const registerAccount = async () => {
+    if (!draft.customerEmail.trim() || password.length < 6) {
+      setError(t('shopEmailPasswordRequired'));
+      return false;
     }
     try {
       const names = draft.customerName.trim().split(/\s+/);
@@ -274,10 +282,13 @@ export default function CheckoutPage() {
       });
       saveCustomerToken(shopKey, res.data.token);
       setCustomer(res.data.customer);
+      setWantCreateAccount(false);
+      setPassword('');
       patch({ authMode: 'register' });
-      setStep('details');
+      return true;
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Could not create account');
+      setError(err.response?.data?.error || t('shopCouldNotCreateAccount'));
+      return false;
     }
   };
 
@@ -287,12 +298,18 @@ export default function CheckoutPage() {
       setError(t('shopNamePhoneRequired'));
       return;
     }
+    if (!customer && wantCreateAccount) {
+      const ok = await registerAccount();
+      if (!ok) return;
+    } else if (!customer) {
+      patch({ authMode: 'guest' });
+    }
     if (whenMode === 'asap' && !channelOpen) {
-      setError('Store is closed — please choose a later time slot');
+      setError(t('shopClosedChooseLater'));
       return;
     }
     if (whenMode === 'later' && !draft.scheduledFor) {
-      setError('Please choose a day and time slot');
+      setError(t('shopChooseDayAndTime'));
       return;
     }
     if (whenMode === 'later' && scheduleDays.length === 0) {
@@ -367,7 +384,7 @@ export default function CheckoutPage() {
 
       navigate(`${shopBasePath(shopKey)}/order/${order.id}`);
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Checkout failed');
+      setError(err.response?.data?.error || t('shopCheckoutFailed'));
     } finally {
       setSubmitting(false);
     }
@@ -382,7 +399,6 @@ export default function CheckoutPage() {
   }
 
   const steps: { id: Step; label: string }[] = [
-    { id: 'account', label: t('shopStepAccount') },
     { id: 'details', label: t('shopStepDetails') },
     { id: 'payment', label: t('shopStepPayment') },
     { id: 'review', label: t('shopStepReview') },
@@ -416,7 +432,7 @@ export default function CheckoutPage() {
                   step === s.id ? 'bg-stone-900 text-white border-stone-900' : 'bg-white border-stone-300'
                 }`}
                 onClick={() => {
-                  const order = ['account', 'details', 'payment', 'review'] as Step[];
+                  const order = ['details', 'payment', 'review'] as Step[];
                   if (order.indexOf(s.id) <= order.indexOf(step)) setStep(s.id);
                 }}
               >
@@ -427,95 +443,6 @@ export default function CheckoutPage() {
 
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3">{error}</div>
-          )}
-
-          {step === 'account' && (
-            <section className="bg-white border border-stone-200 p-5 space-y-5">
-              <h1 className="text-2xl font-bold tracking-tight">{t('shopHowContinue')}</h1>
-              <button
-                type="button"
-                className="w-full border-2 border-stone-900 py-4 font-semibold hover:bg-stone-50"
-                onClick={onGuestContinue}
-              >
-                {t('shopContinueGuest')}
-              </button>
-
-              <div className="grid md:grid-cols-2 gap-4 pt-2">
-                <form onSubmit={onLogin} className="border border-stone-200 p-4 space-y-3">
-                  <h2 className="font-semibold">{t('shopLogIn')}</h2>
-                  <input
-                    className="w-full border border-stone-300 px-3 py-2 text-sm"
-                    type="email"
-                    placeholder={t('shopEmail')}
-                    value={loginEmail}
-                    onChange={(e) => setLoginEmail(e.target.value)}
-                    required
-                  />
-                  <input
-                    className="w-full border border-stone-300 px-3 py-2 text-sm"
-                    type="password"
-                    placeholder={t('shopPassword')}
-                    value={loginPassword}
-                    onChange={(e) => setLoginPassword(e.target.value)}
-                    required
-                  />
-                  <button type="submit" className="w-full bg-stone-900 text-white py-2.5 font-semibold">
-                    {t('shopLogIn')}
-                  </button>
-                </form>
-
-                <form onSubmit={onRegister} className="border border-stone-200 p-4 space-y-3">
-                  <h2 className="font-semibold">{t('shopCreateAccount')}</h2>
-                  <input
-                    className="w-full border border-stone-300 px-3 py-2 text-sm"
-                    placeholder={t('shopFullName')}
-                    value={draft.customerName}
-                    onChange={(e) => patch({ customerName: e.target.value })}
-                    required
-                  />
-                  <input
-                    className="w-full border border-stone-300 px-3 py-2 text-sm"
-                    type="email"
-                    placeholder={t('shopEmail')}
-                    value={draft.customerEmail}
-                    onChange={(e) => patch({ customerEmail: e.target.value })}
-                    required
-                  />
-                  <input
-                    className="w-full border border-stone-300 px-3 py-2 text-sm"
-                    placeholder={t('shopPhone')}
-                    value={draft.customerPhone}
-                    onChange={(e) => patch({ customerPhone: e.target.value })}
-                  />
-                  <input
-                    className="w-full border border-stone-300 px-3 py-2 text-sm"
-                    type="password"
-                    placeholder={t('shopPasswordMin6')}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                  />
-                  <button type="submit" className="w-full bg-stone-900 text-white py-2.5 font-semibold">
-                    {t('shopRegisterContinue')}
-                  </button>
-                </form>
-              </div>
-              {customer && (
-                <p className="text-sm text-teal-800">
-                  {t('shopLoggedInAs')} {customer.name || customer.email}.{' '}
-                  <button
-                    type="button"
-                    className="underline"
-                    onClick={() => {
-                      clearCustomerToken(shopKey);
-                      setCustomer(null);
-                    }}
-                  >
-                    {t('shopLogOut')}
-                  </button>
-                </p>
-              )}
-            </section>
           )}
 
           {step === 'details' && (
@@ -549,11 +476,118 @@ export default function CheckoutPage() {
                 <input
                   className="border border-stone-300 px-3 py-2 text-sm"
                   type="email"
-                  placeholder={t('shopEmailReceipt')}
+                  placeholder={
+                    wantCreateAccount ? `${t('shopEmail')} *` : t('shopEmailReceipt')
+                  }
                   value={draft.customerEmail}
-                  onChange={(e) => patch({ customerEmail: e.target.value })}
+                  onChange={(e) => {
+                    patch({ customerEmail: e.target.value });
+                    if (!showLogin) setLoginEmail(e.target.value);
+                  }}
                 />
               </div>
+
+              {customer ? (
+                <p className="text-sm text-teal-800 border border-teal-100 bg-teal-50 px-3 py-2">
+                  {t('shopLoggedInAs')} {customer.name || customer.email}.{' '}
+                  <button
+                    type="button"
+                    className="underline font-medium"
+                    onClick={() => {
+                      clearCustomerToken(shopKey);
+                      setCustomer(null);
+                      patch({ authMode: 'guest' });
+                    }}
+                  >
+                    {t('shopLogOut')}
+                  </button>
+                </p>
+              ) : (
+                <div className="grid md:grid-cols-2 gap-4 border border-stone-100 bg-stone-50/60 p-4">
+                  <div className="space-y-3">
+                    <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="rounded border-stone-300"
+                        checked={wantCreateAccount}
+                        onChange={(e) => {
+                          setWantCreateAccount(e.target.checked);
+                          if (e.target.checked) setShowLogin(false);
+                          if (!e.target.checked) setPassword('');
+                        }}
+                      />
+                      {t('shopCreateAccount')}
+                    </label>
+                    {wantCreateAccount && (
+                      <input
+                        className="w-full border border-stone-300 px-3 py-2 text-sm bg-white"
+                        type="password"
+                        placeholder={t('shopPasswordMin6')}
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        autoComplete="new-password"
+                      />
+                    )}
+                  </div>
+
+                  <div className="space-y-3 md:border-l md:border-stone-200 md:pl-4">
+                    {!showLogin ? (
+                      <div className="space-y-1">
+                        <p className="text-sm text-stone-500">{t('shopHaveAccount')}</p>
+                        <button
+                          type="button"
+                          className="text-sm font-semibold underline underline-offset-2"
+                          onClick={() => {
+                            setShowLogin(true);
+                            setWantCreateAccount(false);
+                            setPassword('');
+                            if (draft.customerEmail) setLoginEmail(draft.customerEmail);
+                          }}
+                        >
+                          {t('shopLogIn')}
+                        </button>
+                      </div>
+                    ) : (
+                      <form onSubmit={onLogin} className="space-y-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <h2 className="font-semibold text-sm">{t('shopLogIn')}</h2>
+                          <button
+                            type="button"
+                            className="text-xs text-stone-500 underline"
+                            onClick={() => setShowLogin(false)}
+                          >
+                            {t('cancel')}
+                          </button>
+                        </div>
+                        <input
+                          className="w-full border border-stone-300 px-3 py-2 text-sm bg-white"
+                          type="email"
+                          placeholder={t('shopEmail')}
+                          value={loginEmail}
+                          onChange={(e) => setLoginEmail(e.target.value)}
+                          required
+                          autoComplete="email"
+                        />
+                        <input
+                          className="w-full border border-stone-300 px-3 py-2 text-sm bg-white"
+                          type="password"
+                          placeholder={t('shopPassword')}
+                          value={loginPassword}
+                          onChange={(e) => setLoginPassword(e.target.value)}
+                          required
+                          autoComplete="current-password"
+                        />
+                        <button
+                          type="submit"
+                          className="w-full bg-stone-900 text-white py-2.5 text-sm font-semibold"
+                        >
+                          {t('shopLogIn')}
+                        </button>
+                      </form>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {draft.channel === 'delivery' && (
                 <div className="space-y-3 border-t border-stone-100 pt-4">
@@ -641,12 +675,12 @@ export default function CheckoutPage() {
                       </p>
                     ) : (
                       <>
-                        <div className="flex flex-wrap gap-2">
+                        <div className="grid grid-cols-3 gap-2">
                           {scheduleDays.map((day) => (
                             <button
                               key={day.offset}
                               type="button"
-                              className={`px-3 py-2 text-sm border rounded-md ${
+                              className={`min-w-0 px-1.5 py-2 text-center border rounded-md ${
                                 activeScheduleDay?.offset === day.offset
                                   ? 'bg-stone-900 text-white border-stone-900'
                                   : 'bg-white border-stone-300'
@@ -656,8 +690,10 @@ export default function CheckoutPage() {
                                 patch({ scheduledFor: day.slots[0]?.value || '' });
                               }}
                             >
-                              <span className="font-semibold block">{day.label}</span>
-                              <span className="text-[11px] opacity-80">
+                              <span className="font-semibold block text-xs sm:text-sm leading-tight">
+                                {scheduleDayTitle(day.offset)}
+                              </span>
+                              <span className="text-[10px] sm:text-[11px] opacity-80 block truncate">
                                 {day.weekday} {day.dateLabel}
                               </span>
                             </button>
