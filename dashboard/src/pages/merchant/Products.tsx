@@ -92,7 +92,7 @@ const emptyForm = (): FormState => ({
   buttonColor: '#0f172a',
   isOpenPrice: false,
   soldByWeight: false,
-  specifications: [{ id: 'default', name: 'Default', price: 0, saleStatus: 'in_stock', isDefault: true }],
+  specifications: [{ id: 'default', name: 'Regular', price: 0, saleStatus: 'in_stock', isDefault: true }],
   modifierGroupIds: [],
 });
 
@@ -373,46 +373,46 @@ export default function Products() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20 text-slate-500">
+      <div className="flex items-center justify-center py-12 muted text-sm">
         Loading products…
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+    <div className="space-y-3">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">{t('products')}</h1>
-          <p className="text-slate-600 mt-1">
-            Live catalog — categories, extras, bulk tiers, Excel import
+          <h1 className="page-title">{t('products')}</h1>
+          <p className="page-sub">
+            Catalog, sizes, modifiers, Excel import
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-1.5">
           <button
             type="button"
             onClick={() => void downloadTemplate()}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            className="btn-secondary"
           >
-            <Download size={18} />
+            <Download size={14} />
             Template
           </button>
           <button
             type="button"
             disabled={importing}
             onClick={() => fileRef.current?.click()}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            className="btn-secondary"
           >
-            <FileSpreadsheet size={18} />
-            {importing ? 'Importing…' : 'Import Excel'}
+            <FileSpreadsheet size={14} />
+            {importing ? 'Importing…' : 'Import'}
           </button>
           <button
             type="button"
             onClick={openCreate}
-            className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
+            className="btn-primary"
           >
-            <Plus size={18} />
-            Add Product
+            <Plus size={14} />
+            Add
           </button>
           <input
             ref={fileRef}
@@ -428,76 +428,76 @@ export default function Products() {
       </div>
 
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 muted" size={14} />
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search name, SKU, category…"
-          className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-900/10"
+          className="input pl-8"
         />
       </div>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 mb-3">
+      <section className="card">
+        <h2 className="text-[11px] font-semibold uppercase tracking-wide muted mb-2">
           Categories
         </h2>
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+        <div className="grid grid-cols-3 sm:grid-cols-4 xl:grid-cols-6 gap-1.5">
           <button
             type="button"
             onClick={() => setSelectedCategory(null)}
-            className={`rounded-xl border p-4 text-left transition ${
+            className={`rounded-md border p-2 text-left transition ${
               selectedCategory === null
-                ? 'border-slate-900 bg-slate-900 text-white'
-                : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
+                ? 'border-transparent bg-[var(--accent)] text-white'
+                : 'border-[var(--border)] bg-[var(--bg-muted)] hover:opacity-90'
             }`}
           >
-            <div className="text-xs opacity-80">All</div>
-            <div className="mt-1 text-2xl font-bold">{products.length}</div>
+            <div className="text-[10px] opacity-80">All</div>
+            <div className="mt-0.5 text-base font-semibold tabular-nums">{products.length}</div>
           </button>
           {categories.map((cat, idx) => (
             <button
               key={cat.id}
               type="button"
               onClick={() => setSelectedCategory(cat.id)}
-              className={`rounded-xl border p-4 text-left transition ${
+              className={`rounded-md border p-2 text-left transition ${
                 selectedCategory === cat.id
-                  ? 'border-slate-900 bg-slate-900 text-white'
+                  ? 'border-transparent bg-[var(--accent)] text-white'
                   : `${CATEGORY_COLORS[idx % CATEGORY_COLORS.length]} hover:opacity-90`
               }`}
             >
-              <div className="text-xs opacity-80 truncate">{cat.name}</div>
-              <div className="mt-1 text-2xl font-bold">{categoryCounts.get(cat.id) || 0}</div>
+              <div className="text-[10px] opacity-80 truncate">{cat.name}</div>
+              <div className="mt-0.5 text-base font-semibold tabular-nums">{categoryCounts.get(cat.id) || 0}</div>
             </button>
           ))}
           {(categoryCounts.get('__none__') || 0) > 0 && (
             <button
               type="button"
               onClick={() => setSelectedCategory('__none__')}
-              className={`rounded-xl border p-4 text-left transition ${
+              className={`rounded-md border p-2 text-left transition ${
                 selectedCategory === '__none__'
-                  ? 'border-slate-900 bg-slate-900 text-white'
-                  : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                  ? 'border-transparent bg-[var(--accent)] text-white'
+                  : 'border-[var(--border)] bg-[var(--bg-elevated)] hover:bg-[var(--bg-muted)]'
               }`}
             >
-              <div className="text-xs opacity-80">Uncategorized</div>
-              <div className="mt-1 text-2xl font-bold">{categoryCounts.get('__none__') || 0}</div>
+              <div className="text-[10px] opacity-80">Uncategorized</div>
+              <div className="mt-0.5 text-base font-semibold tabular-nums">{categoryCounts.get('__none__') || 0}</div>
             </button>
           )}
         </div>
       </section>
 
-      <section className="space-y-3">
+      <section className="space-y-2">
         {filteredProducts.length === 0 && (
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
-            <Package className="mx-auto text-slate-300" size={40} />
-            <p className="mt-3 font-semibold text-slate-800">No products found</p>
-            <p className="text-sm text-slate-500 mt-1">Create one or import an Excel catalog.</p>
+          <div className="card border-dashed px-4 py-10 text-center">
+            <Package className="mx-auto muted" size={28} />
+            <p className="mt-2 text-sm font-semibold">No products found</p>
+            <p className="text-xs muted mt-1">Create one or import an Excel catalog.</p>
             <button
               type="button"
               onClick={openCreate}
-              className="mt-4 inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+              className="btn-primary mt-3"
             >
-              <Plus size={16} />
+              <Plus size={14} />
               Add Product
             </button>
           </div>
@@ -506,15 +506,16 @@ export default function Products() {
         {filteredProducts.map((product) => {
           const extras = product.extras || [];
           const tiers = product.bulkPricing || [];
+          const sizes = product.specifications || [];
           const expanded = expandedProduct === product.id;
           const stockOk = product.stock > 20;
 
           return (
             <article
               key={product.id}
-              className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+              className="overflow-hidden card !p-0"
             >
-              <div className="flex items-stretch gap-2 p-4 md:p-5">
+              <div className="flex items-stretch gap-2 p-3">
                 <button
                   type="button"
                   className="flex flex-1 items-center gap-4 text-left min-w-0"
@@ -579,18 +580,38 @@ export default function Products() {
               </div>
 
               {expanded && (
-                <div className="border-t border-slate-100 bg-slate-50 p-5 space-y-5">
+                <div className="border-t border-[var(--border)] bg-[var(--bg-muted)] p-3 space-y-3">
+                  {sizes.length > 0 && (
+                    <div>
+                      <h4 className="mb-1.5 text-xs font-semibold">Sizes</h4>
+                      <div className="grid gap-1.5 sm:grid-cols-2">
+                        {sizes.map((size, idx) => (
+                          <div
+                            key={size.id || `${product.id}-size-${idx}`}
+                            className="flex items-center justify-between rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-1.5 text-xs"
+                          >
+                            <span>
+                              {size.name || 'Size'}
+                              {size.isDefault ? ' · default' : ''}
+                            </span>
+                            <span className="font-semibold">{money(size.price)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {tiers.length > 0 && (
                     <div>
-                      <h4 className="mb-2 text-sm font-semibold text-slate-900">Bulk pricing tiers</h4>
-                      <div className="grid gap-2 sm:grid-cols-2">
+                      <h4 className="mb-1.5 text-xs font-semibold">Bulk pricing</h4>
+                      <div className="grid gap-1.5 sm:grid-cols-2">
                         {tiers.map((tier, idx) => (
                           <div
                             key={`${product.id}-tier-${idx}`}
-                            className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm"
+                            className="flex items-center justify-between rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-1.5 text-xs"
                           >
-                            <span className="text-slate-700">From {tier.minQty} units</span>
-                            <span className="font-semibold text-slate-900">{money(tier.price)}</span>
+                            <span>From {tier.minQty} units</span>
+                            <span className="font-semibold">{money(tier.price)}</span>
                           </div>
                         ))}
                       </div>
@@ -599,26 +620,26 @@ export default function Products() {
 
                   {extras.length > 0 && (
                     <div>
-                      <h4 className="mb-2 text-sm font-semibold text-slate-900">Add-ons (extras)</h4>
-                      <div className="grid gap-2 sm:grid-cols-2">
+                      <h4 className="mb-1.5 text-xs font-semibold">Add-ons</h4>
+                      <div className="grid gap-1.5 sm:grid-cols-2">
                         {extras.map((extra) => (
                           <div
                             key={extra.id}
-                            className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm"
+                            className="flex items-center justify-between rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-1.5 text-xs"
                           >
-                            <span className="text-slate-700">{extra.name}</span>
-                            <span className="font-semibold text-slate-900">+{money(extra.price)}</span>
+                            <span>{extra.name}</span>
+                            <span className="font-semibold">+{money(extra.price)}</span>
                           </div>
                         ))}
                       </div>
                     </div>
                   )}
 
-                  {!tiers.length && !extras.length && (
-                    <p className="text-sm text-slate-500">No extras or bulk tiers configured.</p>
+                  {!sizes.length && !tiers.length && !extras.length && (
+                    <p className="text-xs muted">No sizes, extras, or bulk tiers configured.</p>
                   )}
 
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-1.5 text-sm">
                     <InfoCard label="Category" value={categoryName(product.categoryId)} />
                     <InfoCard label="Type" value={productTypeLabel(product)} />
                     <InfoCard label="Stock" value={`${product.stock} units`} />
@@ -632,22 +653,22 @@ export default function Products() {
       </section>
 
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-xl">
-            <div className="sticky top-0 flex items-center justify-between border-b border-slate-100 bg-white px-6 py-4">
-              <h2 className="text-xl font-bold text-slate-900">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-3">
+          <div className="max-h-[94vh] w-full max-w-2xl overflow-y-auto rounded-t-lg sm:rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] shadow-xl">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[var(--border)] bg-[var(--bg-elevated)] px-4 py-3">
+              <h2 className="text-base font-semibold">
                 {editingId ? 'Edit product' : 'Add product'}
               </h2>
               <button
                 type="button"
                 onClick={closeModal}
-                className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
+                className="rounded-md p-1.5 muted hover:bg-[var(--bg-muted)]"
               >
-                <X size={18} />
+                <X size={16} />
               </button>
             </div>
 
-            <form onSubmit={onSubmit} className="space-y-4 px-6 py-5">
+            <form onSubmit={onSubmit} className="space-y-3 px-4 py-3">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <Field label="Product Name *">
                   <input
@@ -691,40 +712,40 @@ export default function Products() {
 
               <Field label="Description">
                 <textarea
-                  className="field-input min-h-[80px]"
-                  rows={3}
+                  className="field-input min-h-[64px]"
+                  rows={2}
                   value={form.description}
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
                 />
               </Field>
 
               <div>
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide muted">
                   Button color
                 </p>
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center gap-1.5">
                   {BUTTON_COLORS.map((color) => (
                     <button
                       key={color}
                       type="button"
                       onClick={() => setForm({ ...form, buttonColor: color })}
-                      className={`h-8 w-8 rounded-full border-2 ${
-                        form.buttonColor === color ? 'border-slate-900' : 'border-slate-200'
+                      className={`h-6 w-6 rounded-full border ${
+                        form.buttonColor === color ? 'border-[var(--text)] ring-1 ring-[var(--text)]' : 'border-[var(--border)]'
                       }`}
                       style={{ backgroundColor: color }}
                       title={color}
                     />
                   ))}
                   <input
-                    className="field-input w-28"
+                    className="field-input w-24"
                     value={form.buttonColor}
                     onChange={(e) => setForm({ ...form, buttonColor: e.target.value })}
                   />
                 </div>
               </div>
 
-              <div className="flex flex-wrap gap-5 text-sm">
-                <label className="inline-flex items-center gap-2 text-slate-700">
+              <div className="flex flex-wrap gap-4 text-sm">
+                <label className="inline-flex items-center gap-2">
                   <input
                     type="checkbox"
                     checked={form.isOpenPrice}
@@ -732,7 +753,7 @@ export default function Products() {
                   />
                   Open price item
                 </label>
-                <label className="inline-flex items-center gap-2 text-slate-700">
+                <label className="inline-flex items-center gap-2">
                   <input
                     type="checkbox"
                     checked={form.soldByWeight}
@@ -742,19 +763,22 @@ export default function Products() {
                 </label>
               </div>
 
-              <div className="rounded-xl border border-slate-200 p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-semibold text-slate-900">Price / Specifications</h3>
+              <div className="rounded-md border border-[var(--border)] p-3 space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-sm font-semibold">Sizes</h3>
+                    <p className="text-[11px] muted">e.g. Small / Regular / Large — each with its own price</p>
+                  </div>
                   <button
                     type="button"
-                    className="inline-flex items-center gap-1 rounded-md bg-teal-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-teal-700"
+                    className="btn-primary !py-1 !text-xs"
                     onClick={() =>
                       setForm({
                         ...form,
                         specifications: [
                           ...form.specifications,
                           {
-                            id: `spec-${Date.now()}`,
+                            id: `size-${Date.now()}`,
                             name: '',
                             price: Number(form.price) || 0,
                             saleStatus: 'in_stock',
@@ -764,18 +788,18 @@ export default function Products() {
                       })
                     }
                   >
-                    <Plus size={16} /> Specification
+                    <Plus size={14} /> Size
                   </button>
                 </div>
                 <div className="space-y-2">
                   {form.specifications.map((spec, idx) => (
                     <div
                       key={spec.id || idx}
-                      className="grid grid-cols-[1fr_8rem_8rem_auto_auto] gap-2 items-center"
+                      className="grid grid-cols-1 sm:grid-cols-[1fr_6.5rem_7rem_auto_auto] gap-1.5 items-center"
                     >
                       <input
                         className="field-input"
-                        placeholder="Item name"
+                        placeholder="Size name (Small, Large…)"
                         value={spec.name}
                         onChange={(e) => {
                           const next = [...form.specifications];
@@ -785,7 +809,7 @@ export default function Products() {
                       />
                       <div className="relative">
                         <input
-                          className="field-input pr-12"
+                          className="field-input pr-10"
                           type="number"
                           step="0.01"
                           value={spec.price}
@@ -795,7 +819,7 @@ export default function Products() {
                             setForm({ ...form, specifications: next, price: e.target.value });
                           }}
                         />
-                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-400">
+                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] muted">
                           CHF
                         </span>
                       </div>
@@ -814,7 +838,7 @@ export default function Products() {
                         <option value="in_stock">In stock</option>
                         <option value="out_of_stock">Out of stock</option>
                       </select>
-                      <label className="inline-flex items-center gap-1 text-xs text-slate-600">
+                      <label className="inline-flex items-center gap-1 text-[11px] muted">
                         <input
                           type="radio"
                           name="defaultSpec"
@@ -834,7 +858,7 @@ export default function Products() {
                       </label>
                       <button
                         type="button"
-                        className="rounded-lg p-2 text-red-600 hover:bg-red-50"
+                        className="rounded-md p-1.5 text-[var(--danger)] hover:bg-[var(--bg-muted)] justify-self-start sm:justify-self-auto"
                         onClick={() =>
                           setForm({
                             ...form,
@@ -845,46 +869,46 @@ export default function Products() {
                           })
                         }
                       >
-                        <Trash2 size={16} />
+                        <Trash2 size={14} />
                       </button>
                     </div>
                   ))}
                 </div>
               </div>
 
-              <div className="rounded-xl border border-slate-200 p-4 space-y-3">
-                <div className="flex items-center justify-between">
+              <div className="rounded-md border border-[var(--border)] p-3 space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
                   <div>
-                    <h3 className="font-semibold text-slate-900">Modifiers / Add-ons</h3>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Link groups created under Modifiers. Manage options there.
+                    <h3 className="text-sm font-semibold">Modifiers / Add-ons</h3>
+                    <p className="text-[11px] muted mt-0.5">
+                      Link groups from Modifiers.
                     </p>
                   </div>
                   <button
                     type="button"
                     onClick={() => setModifierPickerOpen(true)}
-                    className="inline-flex items-center gap-1 rounded-md bg-teal-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-teal-700"
+                    className="btn-primary !py-1 !text-xs"
                   >
-                    <Plus size={16} /> Add modifiers
+                    <Plus size={14} /> Add
                   </button>
                 </div>
-                <div className="divide-y rounded-lg border border-slate-200">
+                <div className="divide-y divide-[var(--border)] rounded-md border border-[var(--border)]">
                   {linkedModifierGroups.length === 0 && (
-                    <p className="px-4 py-6 text-center text-sm text-slate-400">
+                    <p className="px-3 py-4 text-center text-xs muted">
                       No modifiers linked yet.
                     </p>
                   )}
                   {linkedModifierGroups.map((g) => (
-                    <div key={g.id} className="flex items-center justify-between px-4 py-3">
-                      <div>
-                        <p className="font-medium text-slate-800">{g.title}</p>
-                        <p className="text-xs text-slate-500">
+                    <div key={g.id} className="flex items-center justify-between px-3 py-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">{g.title}</p>
+                        <p className="text-[11px] muted truncate">
                           {(g.options || []).map((o) => o.name).join(' · ') || 'No options'}
                         </p>
                       </div>
                       <button
                         type="button"
-                        className="rounded-lg p-2 text-red-600 hover:bg-red-50"
+                        className="rounded-md p-1.5 text-[var(--danger)] hover:bg-[var(--bg-muted)]"
                         onClick={() =>
                           setForm({
                             ...form,
@@ -892,25 +916,25 @@ export default function Products() {
                           })
                         }
                       >
-                        <Trash2 size={16} />
+                        <Trash2 size={14} />
                       </button>
                     </div>
                   ))}
                 </div>
               </div>
 
-              <div className="flex gap-3 pt-2">
+              <div className="flex gap-2 pt-1 sticky bottom-0 bg-[var(--bg-elevated)] pb-1">
                 <button
                   type="button"
                   onClick={closeModal}
-                  className="flex-1 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                  className="btn-secondary flex-1"
                 >
                   {t('cancel')}
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
-                  className="flex-1 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-50"
+                  className="btn-primary flex-1"
                 >
                   {saving ? 'Saving…' : editingId ? t('save') : 'Create product'}
                 </button>
@@ -921,21 +945,21 @@ export default function Products() {
       )}
 
       {modifierPickerOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl">
-            <div className="flex items-center justify-between border-b px-5 py-4">
-              <h3 className="font-bold text-slate-900">Add modifiers</h3>
+        <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
+          <div className="w-full max-w-lg rounded-t-lg sm:rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] shadow-xl">
+            <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3">
+              <h3 className="text-sm font-semibold">Add modifiers</h3>
               <button
                 type="button"
                 onClick={() => setModifierPickerOpen(false)}
-                className="rounded-lg p-2 hover:bg-slate-100"
+                className="rounded-md p-1.5 hover:bg-[var(--bg-muted)]"
               >
-                <X size={18} />
+                <X size={16} />
               </button>
             </div>
-            <div className="max-h-80 overflow-y-auto divide-y">
+            <div className="max-h-72 overflow-y-auto divide-y divide-[var(--border)]">
               {allModifierGroups.filter((g) => !form.modifierGroupIds.includes(g.id)).length === 0 && (
-                <p className="p-8 text-center text-sm text-slate-400">
+                <p className="p-6 text-center text-xs muted">
                   No more groups available. Create one under Modifiers.
                 </p>
               )}
@@ -945,7 +969,7 @@ export default function Products() {
                   <button
                     key={g.id}
                     type="button"
-                    className="flex w-full items-center justify-between px-5 py-3 text-left hover:bg-slate-50"
+                    className="flex w-full items-center justify-between px-4 py-2.5 text-left hover:bg-[var(--bg-muted)]"
                     onClick={() =>
                       setForm({
                         ...form,
@@ -954,20 +978,20 @@ export default function Products() {
                     }
                   >
                     <span>
-                      <span className="block font-medium text-slate-800">{g.title}</span>
-                      <span className="text-xs text-slate-500">
+                      <span className="block text-sm font-medium">{g.title}</span>
+                      <span className="text-[11px] muted">
                         {g.selectionType || 'optional'} · {(g.options || []).length} options
                       </span>
                     </span>
-                    <Plus size={16} className="text-teal-600" />
+                    <Plus size={14} className="muted" />
                   </button>
                 ))}
             </div>
-            <div className="flex justify-end border-t px-5 py-4">
+            <div className="flex justify-end border-t border-[var(--border)] px-4 py-3">
               <button
                 type="button"
                 onClick={() => setModifierPickerOpen(false)}
-                className="rounded-lg bg-teal-600 px-5 py-2 text-sm font-semibold text-white"
+                className="btn-primary"
               >
                 Done
               </button>
@@ -979,16 +1003,17 @@ export default function Products() {
       <style>{`
         .field-input {
           width: 100%;
-          border-radius: 0.75rem;
-          border: 1px solid #e2e8f0;
-          padding: 0.625rem 0.875rem;
-          font-size: 0.875rem;
-          background: #fff;
+          border-radius: 0.375rem;
+          border: 1px solid var(--border);
+          padding: 0.4rem 0.625rem;
+          font-size: 0.8125rem;
+          background: var(--bg-elevated);
+          color: var(--text);
         }
         .field-input:focus {
           outline: none;
-          box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.08);
-          border-color: #94a3b8;
+          box-shadow: 0 0 0 2px color-mix(in srgb, var(--ring) 40%, transparent);
+          border-color: var(--ring);
         }
       `}</style>
     </div>
@@ -997,8 +1022,8 @@ export default function Products() {
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <label className="block space-y-1.5">
-      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</span>
+    <label className="block space-y-1">
+      <span className="text-[11px] font-semibold uppercase tracking-wide muted">{label}</span>
       {children}
     </label>
   );
@@ -1006,9 +1031,9 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 
 function InfoCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white px-3 py-3">
-      <p className="text-xs text-slate-500">{label}</p>
-      <p className="mt-1 font-semibold text-slate-900 truncate">{value}</p>
+    <div className="rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-2">
+      <p className="text-[11px] muted">{label}</p>
+      <p className="mt-0.5 text-sm font-semibold truncate">{value}</p>
     </div>
   );
 }
