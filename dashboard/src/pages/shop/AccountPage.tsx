@@ -38,6 +38,7 @@ type LoyaltySummary = {
   unlockedRewards: LoyaltyReward[];
   nextReward: LoyaltyReward | null;
   progressPercent: number;
+  expiringSoon?: { points: number; expiresAt: string } | null;
 };
 
 type HistoryOrder = {
@@ -295,6 +296,12 @@ export default function AccountPage() {
     );
   }
 
+  const pointsBalance = Math.max(
+    0,
+    Number(loyalty?.balance ?? customer?.loyaltyPoints ?? 0) || 0
+  );
+  const programOn = !!loyalty?.program?.enabled;
+
   return (
     <div className="min-h-screen bg-[#f6f5f2] text-stone-900">
       <header className="sticky top-0 z-20 bg-white border-b border-stone-200">
@@ -304,6 +311,11 @@ export default function AccountPage() {
           </Link>
           <div className="flex items-center gap-3">
             <ShopLangSwitcher />
+            {customer ? (
+              <span className="text-xs font-bold bg-teal-800 text-white px-2.5 py-1 rounded-full">
+                {t('shopPointsChip').replace('{n}', String(pointsBalance))}
+              </span>
+            ) : null}
             <span className="font-bold text-sm">{t('shopMyAccount')}</span>
           </div>
         </div>
@@ -348,16 +360,17 @@ export default function AccountPage() {
           </section>
         ) : (
           <>
-            {loyalty?.program?.enabled && (
-              <section className="bg-white border border-stone-200 p-5 space-y-3">
-                <div className="flex items-end justify-between gap-3">
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-stone-400">{t('shopFidelity')}</p>
-                    <p className="text-3xl font-bold tracking-tight">
-                      {loyalty.balance}{' '}
-                      <span className="text-base font-semibold text-stone-500">{t('shopPoints')}</span>
-                    </p>
-                  </div>
+            <section className="bg-white border border-stone-200 p-5 space-y-3">
+              <div className="flex items-end justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-stone-400">{t('shopFidelity')}</p>
+                  <p className="text-3xl font-bold tracking-tight">
+                    {pointsBalance}{' '}
+                    <span className="text-base font-semibold text-stone-500">{t('shopPoints')}</span>
+                  </p>
+                  <p className="text-sm text-stone-500 mt-1">{t('shopPointsBalance')}</p>
+                </div>
+                {loyalty?.program ? (
                   <p className="text-xs text-stone-500 text-right max-w-[12rem]">
                     {t('shopEarnHint').replace('{n}', String(loyalty.program.earnPointsPerChf))}
                     <br />
@@ -365,55 +378,90 @@ export default function AccountPage() {
                       '{n}',
                       String(loyalty.program.redeemPointsPerChf)
                     )}
+                    {loyalty.program.expiryDays ? (
+                      <>
+                        <br />
+                        {t('shopPointsExpireHint').replace(
+                          '{n}',
+                          String(loyalty.program.expiryDays)
+                        )}
+                      </>
+                    ) : null}
                   </p>
-                </div>
-                <div className="h-2 bg-stone-100 overflow-hidden">
-                  <div
-                    className="h-full bg-teal-700 transition-all"
-                    style={{ width: `${loyalty.progressPercent || 0}%` }}
-                  />
-                </div>
-                <p className="text-sm text-stone-600">
-                  {loyalty.nextReward
-                    ? t('shopProgressToReward').replace(
-                        '{n}',
-                        String(Math.max(0, loyalty.nextReward.loyaltyRewardPoints - loyalty.balance))
-                      )
-                    : t('shopAllRewardsUnlocked')}
-                </p>
+                ) : null}
+              </div>
 
-                {(loyalty.unlockedRewards || []).length > 0 && (
-                  <div className="pt-2 space-y-2">
-                    <p className="text-sm font-semibold">{t('shopUnlockedRewards')}</p>
-                    <ul className="space-y-2">
-                      {loyalty.unlockedRewards.map((r) => (
-                        <li
-                          key={r.id}
-                          className="flex items-center justify-between gap-3 border border-stone-100 px-3 py-2"
-                        >
-                          <div className="min-w-0">
-                            <p className="font-medium truncate">{r.name}</p>
-                            <p className="text-xs text-stone-500">
-                              {t('shopPtsBadge').replace('{n}', String(r.loyaltyRewardPoints))}
-                            </p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => addRewardToCart(r)}
-                            className="shrink-0 text-sm font-semibold bg-teal-800 text-white px-3 py-1.5"
-                          >
-                            {t('shopAddFree')}
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
+              {programOn ? (
+                <>
+                  <div className="h-2.5 bg-stone-100 overflow-hidden rounded-full">
+                    <div
+                      className="h-full bg-teal-700 transition-all"
+                      style={{ width: `${loyalty?.progressPercent || 0}%` }}
+                    />
                   </div>
-                )}
-              </section>
-            )}
+                  <p className="text-sm text-stone-600">
+                    {loyalty?.nextReward
+                      ? t('shopProgressToReward').replace(
+                          '{n}',
+                          String(
+                            Math.max(
+                              0,
+                              loyalty.nextReward.loyaltyRewardPoints - pointsBalance
+                            )
+                          )
+                        )
+                      : t('shopAllRewardsUnlocked')}
+                  </p>
+                  {loyalty?.expiringSoon?.points ? (
+                    <p className="text-xs text-amber-700">
+                      {t('shopPointsExpiringSoon')
+                        .replace('{n}', String(loyalty.expiringSoon.points))
+                        .replace(
+                          '{date}',
+                          new Date(loyalty.expiringSoon.expiresAt).toLocaleDateString()
+                        )}
+                    </p>
+                  ) : null}
+                  {(loyalty?.unlockedRewards || []).length > 0 && (
+                    <div className="pt-2 space-y-2">
+                      <p className="text-sm font-semibold">{t('shopUnlockedRewards')}</p>
+                      <ul className="space-y-2">
+                        {loyalty!.unlockedRewards.map((r) => (
+                          <li
+                            key={r.id}
+                            className="flex items-center justify-between gap-3 border border-stone-100 px-3 py-2"
+                          >
+                            <div className="min-w-0">
+                              <p className="font-medium truncate">{r.name}</p>
+                              <p className="text-xs text-stone-500">
+                                {t('shopPtsBadge').replace('{n}', String(r.loyaltyRewardPoints))}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => addRewardToCart(r)}
+                              className="shrink-0 text-sm font-semibold bg-teal-800 text-white px-3 py-1.5"
+                            >
+                              {t('shopAddFree')}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p className="text-sm text-stone-500">{t('shopFidelityInactive')}</p>
+              )}
+            </section>
 
             <section className="bg-white border border-stone-200 p-5 space-y-3">
-              <h2 className="font-bold text-lg">{t('shopMyAccount')}</h2>
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="font-bold text-lg">{t('shopMyAccount')}</h2>
+                <span className="text-sm font-semibold text-teal-800">
+                  {t('shopPointsChip').replace('{n}', String(pointsBalance))}
+                </span>
+              </div>
               <form onSubmit={onSaveProfile} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <input
                   className="border border-stone-300 px-3 py-2 text-sm"
