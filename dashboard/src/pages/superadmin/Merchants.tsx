@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
-import { Search, Plus, Edit2, Trash2, Eye, X, Copy, KeyRound, Mail } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, Eye, X, Copy, KeyRound, LogIn } from 'lucide-react';
+import { useAuthStore } from '@/store/auth';
 
 interface Merchant {
   id: string;
@@ -28,15 +30,6 @@ interface IssuedLicense {
   expiresAt: string;
 }
 
-interface PlanOption {
-  id: string;
-  name: string;
-  slug: string;
-  isActive: boolean;
-  priceMonthly: string;
-  currency: string;
-}
-
 const emptyForm = {
   businessName: '',
   email: '',
@@ -51,21 +44,14 @@ const emptyForm = {
   deviceSeats: 1,
   licenseType: 'yearly' as 'trial' | 'yearly' | 'custom',
   customDays: 365,
-  sendInvite: true,
-};
-
-type InviteResult = {
-  emailed?: boolean;
-  emailError?: string;
-  inviteUrl?: string;
-  email?: string;
-  expiresAt?: string;
 };
 
 export default function Merchants() {
+  const navigate = useNavigate();
+  const startImpersonation = useAuthStore((s) => s.startImpersonation);
   const [merchants, setMerchants] = useState<Merchant[]>([]);
-  const [plans, setPlans] = useState<PlanOption[]>([]);
   const [loading, setLoading] = useState(true);
+  const [openingId, setOpeningId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [showCreate, setShowCreate] = useState(false);
@@ -74,28 +60,10 @@ export default function Merchants() {
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [issuedKeys, setIssuedKeys] = useState<IssuedLicense[]>([]);
-  const [inviteResult, setInviteResult] = useState<InviteResult | null>(null);
-  const [inviteMerchantId, setInviteMerchantId] = useState<string | null>(null);
-  const [sendingInvite, setSendingInvite] = useState(false);
 
   useEffect(() => {
     fetchMerchants();
   }, [page, search]);
-
-  useEffect(() => {
-    void (async () => {
-      try {
-        const res = await api.get('/superadmin/plans');
-        const list = (res.data.plans || []).filter((p: PlanOption) => p.isActive !== false);
-        setPlans(list);
-        if (list.length && !list.some((p: PlanOption) => p.slug === emptyForm.subscriptionPlan)) {
-          setForm((f) => ({ ...f, subscriptionPlan: list[0].slug }));
-        }
-      } catch {
-        /* keep hardcoded fallbacks in select */
-      }
-    })();
-  }, []);
 
   const fetchMerchants = async () => {
     try {
@@ -123,12 +91,8 @@ export default function Merchants() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.businessName || !form.email) {
-      toast.error('Name and email are required');
-      return;
-    }
-    if (form.password && form.password.length < 8) {
-      toast.error('Password must be at least 8 characters (or leave blank to invite)');
+    if (!form.businessName || !form.email || !form.password) {
+      toast.error('Name, email and password are required');
       return;
     }
     setSaving(true);
@@ -136,7 +100,7 @@ export default function Merchants() {
       const res = await api.post('/superadmin/merchants', {
         businessName: form.businessName,
         email: form.email,
-        password: form.password || undefined,
+        password: form.password,
         phone: form.phone || undefined,
         address: form.address || undefined,
         city: form.city || undefined,
@@ -147,22 +111,13 @@ export default function Merchants() {
         deviceSeats: Number(form.deviceSeats) || 0,
         licenseType: form.licenseType,
         customDays: form.licenseType === 'custom' ? Number(form.customDays) : undefined,
-        sendInvite: form.sendInvite,
       });
       const issued = res.data.merchant?.issuedLicenses || [];
-      const invite = res.data.merchant?.invite as InviteResult | undefined;
       setIssuedKeys(issued);
-      setInviteMerchantId(res.data.merchant?.id || null);
-      setInviteResult(invite || null);
-      toast.success('Merchant account created');
+      toast.success('Merchant created');
       setForm(emptyForm);
       setShowCreate(false);
       fetchMerchants();
-      if (invite?.emailed) {
-        toast.success(`Invite email sent to ${invite.email}`);
-      } else if (form.sendInvite && invite?.inviteUrl) {
-        toast('Invite link ready — copy it below (email not configured or failed)', { icon: '🔗' });
-      }
       if (issued.length) {
         toast.success(`${issued.length} device license(s) issued — copy keys below`);
       }
@@ -170,31 +125,6 @@ export default function Merchants() {
       toast.error(err.response?.data?.error || 'Failed to create merchant');
     } finally {
       setSaving(false);
-    }
-  };
-
-  const sendInvite = async (merchantId: string) => {
-    setSendingInvite(true);
-    try {
-      const res = await api.post(`/superadmin/merchants/${merchantId}/send-invite`);
-      setInviteMerchantId(merchantId);
-      setInviteResult({
-        emailed: res.data.emailed,
-        emailError: res.data.emailError,
-        inviteUrl: res.data.inviteUrl,
-        email: res.data.email,
-        expiresAt: res.data.expiresAt,
-      });
-      if (res.data.emailed) {
-        toast.success(`Invite email sent to ${res.data.email}`);
-      } else {
-        toast('Invite link created — copy it below', { icon: '🔗' });
-        if (res.data.emailError) toast.error(res.data.emailError);
-      }
-    } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to send invite');
-    } finally {
-      setSendingInvite(false);
     }
   };
 
@@ -226,6 +156,35 @@ export default function Merchants() {
       fetchMerchants();
     } catch {
       toast.error('Failed to delete merchant');
+    }
+  };
+
+  const openMerchantPanel = async (merchant: Merchant) => {
+    if (merchant.status === 'suspended' || merchant.status === 'expired') {
+      toast.error(`Cannot open panel while merchant is ${merchant.status}`);
+      return;
+    }
+    setOpeningId(merchant.id);
+    try {
+      const res = await api.post(`/superadmin/merchants/${merchant.id}/impersonate`);
+      const { token, merchant: account } = res.data;
+      if (!token || !account) {
+        throw new Error('Invalid impersonation response');
+      }
+      startImpersonation(token, {
+        id: account.id,
+        email: account.email,
+        name: account.name,
+        role: 'merchant',
+        merchantId: account.id,
+        impersonatedBy: res.data.impersonatedBy,
+      });
+      toast.success(`Opened ${account.name}`);
+      navigate('/merchant');
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || err.message || 'Failed to open merchant panel');
+    } finally {
+      setOpeningId(null);
     }
   };
 
@@ -270,48 +229,6 @@ export default function Merchants() {
           Add Merchant
         </button>
       </div>
-
-
-      {inviteResult?.inviteUrl && (
-        <div className="card border-sky-200 bg-sky-50">
-          <div className="flex items-center justify-between mb-3 gap-3">
-            <h3 className="font-semibold flex items-center gap-2">
-              <Mail className="w-4 h-4" /> Password setup invite
-            </h3>
-            <button
-              className="text-sm text-gray-500"
-              onClick={() => {
-                setInviteResult(null);
-                setInviteMerchantId(null);
-              }}
-            >
-              Dismiss
-            </button>
-          </div>
-          <p className="text-sm text-gray-700 mb-2">
-            {inviteResult.emailed
-              ? `Email sent to ${inviteResult.email}.`
-              : `Email not sent${inviteResult.emailError ? `: ${inviteResult.emailError}` : '.'} You can copy the link below.`}
-          </p>
-          <div className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 border">
-            <p className="font-mono text-xs truncate flex-1">{inviteResult.inviteUrl}</p>
-            <button className="btn-secondary p-2" onClick={() => copyText(inviteResult.inviteUrl!)}>
-              <Copy className="w-4 h-4" />
-            </button>
-          </div>
-          {inviteMerchantId && (
-            <button
-              type="button"
-              className="btn-primary mt-3 flex items-center gap-2"
-              disabled={sendingInvite}
-              onClick={() => void sendInvite(inviteMerchantId)}
-            >
-              <Mail className="w-4 h-4" />
-              {sendingInvite ? 'Sending…' : 'Send / resend invite email'}
-            </button>
-          )}
-        </div>
-      )}
 
       {issuedKeys.length > 0 && (
         <div className="card border-emerald-200 bg-emerald-50">
@@ -409,6 +326,14 @@ export default function Merchants() {
                       >
                         <Eye className="w-4 h-4 text-gray-600" />
                       </button>
+                      <button
+                        className="p-2 hover:bg-gray-100 rounded"
+                        title="Open merchant panel"
+                        disabled={openingId === merchant.id}
+                        onClick={() => void openMerchantPanel(merchant)}
+                      >
+                        <LogIn className="w-4 h-4 text-teal-700" />
+                      </button>
                       {merchant.status === 'suspended' ? (
                         <button
                           className="p-2 hover:bg-gray-100 rounded text-xs text-emerald-700"
@@ -492,14 +417,14 @@ export default function Merchants() {
                   />
                 </label>
                 <label className="block">
-                  <span className="text-sm font-medium">Password (optional)</span>
+                  <span className="text-sm font-medium">Temp password *</span>
                   <input
                     type="text"
                     className="input mt-1"
                     value={form.password}
                     onChange={(e) => setForm({ ...form, password: e.target.value })}
+                    required
                     minLength={8}
-                    placeholder="Leave blank — merchant sets via email link"
                   />
                 </label>
                 <label className="block">
@@ -542,42 +467,15 @@ export default function Merchants() {
                     value={form.subscriptionPlan}
                     onChange={(e) => setForm({ ...form, subscriptionPlan: e.target.value })}
                   >
-                    {plans.length > 0 ? (
-                      plans.map((p) => (
-                        <option key={p.id} value={p.slug}>
-                          {p.name} ({Number(p.priceMonthly).toFixed(2)} {p.currency}/mo)
-                        </option>
-                      ))
-                    ) : (
-                      <>
-                        <option value="free">Free</option>
-                        <option value="starter">Starter</option>
-                        <option value="professional">Professional</option>
-                        <option value="enterprise">Enterprise</option>
-                      </>
-                    )}
+                    <option value="free">Free</option>
+                    <option value="starter">Starter</option>
+                    <option value="professional">Professional</option>
+                    <option value="enterprise">Enterprise</option>
                   </select>
-                  {!plans.length && (
-                    <span className="text-xs text-amber-700 mt-1 block">
-                      No plans in Settings yet — using defaults. Create plans under Superadmin → Settings.
-                    </span>
-                  )}
                 </label>
               </div>
 
               <div className="border rounded-lg p-4 space-y-3 bg-slate-50">
-                <label className="flex items-center gap-2 text-sm font-medium">
-                  <input
-                    type="checkbox"
-                    checked={form.sendInvite}
-                    onChange={(e) => setForm({ ...form, sendInvite: e.target.checked })}
-                  />
-                  Send email with link to create password
-                </label>
-                <p className="text-xs text-gray-500 -mt-1">
-                  Merchant receives a one-time link to set their own password. Uses Brevo on the
-                  server; otherwise you get a copyable invite link.
-                </p>
                 <label className="flex items-center gap-2 text-sm font-medium">
                   <input
                     type="checkbox"
@@ -676,15 +574,6 @@ export default function Merchants() {
                 <span className="text-gray-500">Devices / licenses:</span> {showDetail.devices} /{' '}
                 {showDetail.licenses}
               </p>
-              <button
-                type="button"
-                className="btn-primary flex items-center gap-2"
-                disabled={sendingInvite}
-                onClick={() => void sendInvite(showDetail.id)}
-              >
-                <Mail className="w-4 h-4" />
-                {sendingInvite ? 'Sending…' : 'Send password setup email'}
-              </button>
               {detailFull?.devices?.length > 0 && (
                 <div>
                   <p className="font-semibold mb-2">Devices</p>
@@ -715,6 +604,17 @@ export default function Merchants() {
                   </ul>
                 </div>
               )}
+              <div className="pt-3 border-t flex justify-end">
+                <button
+                  type="button"
+                  className="btn-primary"
+                  disabled={openingId === showDetail.id}
+                  onClick={() => void openMerchantPanel(showDetail)}
+                >
+                  <LogIn className="w-4 h-4" />
+                  {openingId === showDetail.id ? 'Opening…' : 'Open merchant panel'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -1,5 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { X } from 'lucide-react';
+import { ArrowLeft, X } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { useAuthStore } from '@/store/auth';
 
 interface MenuItem {
@@ -18,10 +19,22 @@ export default function Sidebar({ isOpen, onToggle, menuItems }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const logout = useAuthStore((s) => s.logout);
+  const impersonating = useAuthStore((s) => s.impersonating);
+  const stopImpersonation = useAuthStore((s) => s.stopImpersonation);
 
   const handleLogout = () => {
     logout();
     navigate('/login');
+  };
+
+  const backToSuperadmin = () => {
+    if (!stopImpersonation()) {
+      toast.error('Superadmin session expired — please sign in again');
+      navigate('/login');
+      return;
+    }
+    toast.success('Back to Superadmin');
+    navigate('/superadmin/merchants');
   };
 
   return (
@@ -73,7 +86,17 @@ export default function Sidebar({ isOpen, onToggle, menuItems }: SidebarProps) {
           })}
         </nav>
 
-        <div className="p-3 border-t border-slate-800">
+        <div className="p-3 border-t border-slate-800 space-y-1.5">
+          {impersonating && (
+            <button
+              type="button"
+              onClick={backToSuperadmin}
+              className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium bg-amber-600 hover:bg-amber-500 text-white"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              Superadmin
+            </button>
+          )}
           <button
             type="button"
             onClick={handleLogout}

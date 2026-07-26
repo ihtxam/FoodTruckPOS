@@ -23,12 +23,11 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      const path = window.location.pathname || '';
-      if (!path.startsWith('/set-password') && !path.startsWith('/login')) {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        window.location.href = '/login';
-      }
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      sessionStorage.removeItem('sa_return_token');
+      sessionStorage.removeItem('sa_return_user');
+      window.location.href = '/login';
     }
     return Promise.reject(error);
   }
