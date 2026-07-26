@@ -198,7 +198,10 @@ export default function OnlineShop() {
   const [settings, setSettings] = useState<any>(null);
   const [hours, setHours] = useState<StoreHours>(emptyHours());
   const [selectedDays, setSelectedDays] = useState<DayKey[]>(['mon', 'tue', 'wed', 'thu', 'fri']);
-  const [draftSlots, setDraftSlots] = useState<Slot[]>([{ open: '11:00', close: '22:00' }]);
+  const [draftSlots, setDraftSlots] = useState<Slot[]>([
+    { open: '11:00', close: '14:00' },
+    { open: '17:00', close: '23:00' },
+  ]);
   const [applyTarget, setApplyTarget] = useState<ApplyTarget>('all');
   const [markClosed, setMarkClosed] = useState(false);
   const [showFineTune, setShowFineTune] = useState(false);
