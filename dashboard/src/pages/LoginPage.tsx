@@ -18,13 +18,13 @@ type LoginFormData = z.infer<typeof loginSchema>;
 
 const ACCOUNTS = {
   superadmin: {
-    email: 'admin@manupos.webprintmedia.swiss',
-    password: '79Z98YfcmH2lkoKvdCzf',
+    email: 'admin@chaslay.com',
+    password: 'ChaslayAdmin123!',
     role: 'superadmin' as const,
   },
   merchant: {
-    email: 'merchant@manupos.webprintmedia.swiss',
-    password: 'MerchantDemo123!',
+    email: 'demo@chaslay.com',
+    password: 'DemoShop123!',
     role: 'merchant' as const,
   },
 };

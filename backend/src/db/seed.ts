@@ -50,7 +50,17 @@ async function seedSuperadmin() {
     .limit(1);
 
   if (existing.length > 0) {
-    console.log(`Superadmin already exists: ${email}`);
+    // Keep password in sync with SEED_SUPERADMIN_PASSWORD so deploys can recover lockouts
+    if (password && password !== "replace-with-strong-admin-password") {
+      const passwordHash = await AuthService.hashPassword(password);
+      await db
+        .update(schema.superadmins)
+        .set({ passwordHash, name, isActive: true, updatedAt: new Date() })
+        .where(eq(schema.superadmins.id, existing[0]!.id));
+      console.log(`Superadmin password synced from SEED_SUPERADMIN_PASSWORD: ${email}`);
+    } else {
+      console.log(`Superadmin already exists: ${email}`);
+    }
     return;
   }
 

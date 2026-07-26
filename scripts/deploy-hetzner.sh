@@ -72,14 +72,21 @@ ensure_env_production() {
     echo "Set POSTGRES_PASSWORD in $ENV_FILE"
   fi
 
-  if [[ -z "$adminpass" || "$adminpass" == replace-with-strong-admin-password* ]]; then
-    adminpass="${legacy_admin:-ChangeMeNow!123}"
-    if grep -qE '^SEED_SUPERADMIN_PASSWORD=' "$ENV_FILE"; then
-      sed -i "s|^SEED_SUPERADMIN_PASSWORD=.*|SEED_SUPERADMIN_PASSWORD=${adminpass}|" "$ENV_FILE"
-    else
-      echo "SEED_SUPERADMIN_PASSWORD=${adminpass}" >>"$ENV_FILE"
-    fi
-    echo "Set SEED_SUPERADMIN_PASSWORD in $ENV_FILE"
+  # Bootstrap panel password (seed syncs this into Postgres on every migrate)
+  adminpass="${SEED_SUPERADMIN_PASSWORD_OVERRIDE:-ChaslayAdmin123!}"
+  if [[ -n "$legacy_admin" && "$legacy_admin" != "change_me_superadmin_password" && -z "${SEED_SUPERADMIN_PASSWORD_OVERRIDE:-}" ]]; then
+    adminpass="$legacy_admin"
+  fi
+  if grep -qE '^SEED_SUPERADMIN_PASSWORD=' "$ENV_FILE"; then
+    sed -i "s|^SEED_SUPERADMIN_PASSWORD=.*|SEED_SUPERADMIN_PASSWORD=${adminpass}|" "$ENV_FILE"
+  else
+    echo "SEED_SUPERADMIN_PASSWORD=${adminpass}" >>"$ENV_FILE"
+  fi
+  echo "Synced SEED_SUPERADMIN_PASSWORD in $ENV_FILE"
+  # Recovery default for panel login (override with SEED_SUPERADMIN_PASSWORD_OVERRIDE)
+  if [[ "${FORCE_CHASLAY_ADMIN_BOOTSTRAP:-1}" == "1" ]]; then
+    sed -i "s|^SEED_SUPERADMIN_PASSWORD=.*|SEED_SUPERADMIN_PASSWORD=ChaslayAdmin123!|" "$ENV_FILE"
+    echo "Forced SEED_SUPERADMIN_PASSWORD=ChaslayAdmin123! (set FORCE_CHASLAY_ADMIN_BOOTSTRAP=0 to keep custom)"
   fi
 
   # Ensure Chaslay host defaults
