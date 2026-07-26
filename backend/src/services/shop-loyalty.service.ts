@@ -290,7 +290,8 @@ export class ShopLoyaltyService {
 
   static async getCustomerLoyaltySummary(merchantId: string, customerId: string) {
     const program = await this.getProgram(merchantId);
-    const balance = program.enabled ? await this.getBalance(merchantId, customerId) : 0;
+    // Always sync/show balance on account — earn/redeem still gated by program.enabled
+    const balance = await this.getBalance(merchantId, customerId);
     const rewards = program.enabled ? await this.listRewardProducts(merchantId, balance) : [];
     const unlocked = rewards.filter((r) => r.unlocked);
     const next = rewards.find((r) => !r.unlocked) || null;
@@ -300,18 +301,16 @@ export class ShopLoyaltyService {
 
     const db = getDb();
     const now = new Date();
-    const lots = program.enabled
-      ? await db.query.loyaltyPointLots.findMany({
-          where: and(
-            eq(schema.loyaltyPointLots.merchantId, merchantId),
-            eq(schema.loyaltyPointLots.customerId, customerId),
-            gt(schema.loyaltyPointLots.pointsRemaining, 0),
-            gt(schema.loyaltyPointLots.expiresAt, now)
-          ),
-          orderBy: [asc(schema.loyaltyPointLots.expiresAt)],
-          limit: 5,
-        })
-      : [];
+    const lots = await db.query.loyaltyPointLots.findMany({
+      where: and(
+        eq(schema.loyaltyPointLots.merchantId, merchantId),
+        eq(schema.loyaltyPointLots.customerId, customerId),
+        gt(schema.loyaltyPointLots.pointsRemaining, 0),
+        gt(schema.loyaltyPointLots.expiresAt, now)
+      ),
+      orderBy: [asc(schema.loyaltyPointLots.expiresAt)],
+      limit: 5,
+    });
 
     const expiringSoon = lots[0]
       ? {
