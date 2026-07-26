@@ -80,6 +80,8 @@ export class MerchantSettingsService {
       adyenApiKeyMasked: maskSecret(merchant.adyenApiKey),
       adyenApiKeySet: !!merchant.adyenApiKey,
       adyenClientId: merchant.adyenClientId,
+      onlineCardFeeFixed: merchant.onlineCardFeeFixed ?? "0",
+      onlineCardFeePercent: merchant.onlineCardFeePercent ?? "0",
       panelLanguage: merchant.panelLanguage || "en",
       status: merchant.status,
       subscriptionPlan: merchant.subscriptionPlan,
@@ -117,6 +119,8 @@ export class MerchantSettingsService {
       adyenMerchantAccount?: string;
       adyenApiKey?: string;
       adyenClientId?: string;
+      onlineCardFeeFixed?: number;
+      onlineCardFeePercent?: number;
       panelLanguage?: string;
     }
   ) {
@@ -153,6 +157,18 @@ export class MerchantSettingsService {
     if (updates.deliveryEtaMinutes !== undefined) patch.deliveryEtaMinutes = updates.deliveryEtaMinutes;
     if (updates.adyenMerchantAccount !== undefined) patch.adyenMerchantAccount = updates.adyenMerchantAccount;
     if (updates.adyenClientId !== undefined) patch.adyenClientId = updates.adyenClientId;
+    if (updates.onlineCardFeeFixed !== undefined) {
+      const n = Number(updates.onlineCardFeeFixed);
+      if (!Number.isFinite(n) || n < 0) throw new Error("onlineCardFeeFixed must be >= 0");
+      patch.onlineCardFeeFixed = n.toFixed(2);
+    }
+    if (updates.onlineCardFeePercent !== undefined) {
+      const n = Number(updates.onlineCardFeePercent);
+      if (!Number.isFinite(n) || n < 0 || n > 100) {
+        throw new Error("onlineCardFeePercent must be between 0 and 100");
+      }
+      patch.onlineCardFeePercent = n.toFixed(3);
+    }
     if (updates.panelLanguage !== undefined) {
       const lang = updates.panelLanguage.toLowerCase();
       if (!["en", "fr", "de"].includes(lang)) {

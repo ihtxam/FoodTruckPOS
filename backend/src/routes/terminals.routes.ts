@@ -79,20 +79,16 @@ router.put("/adyen-credentials", async (req: Request, res: Response) => {
 
 /**
  * POST /api/terminals
- * Register Adyen payment terminal at store level.
+ * Register a payment terminal. Uses merchant-level Adyen credentials from Settings.
+ * Only terminal ID is required (display name optional).
  */
 router.post("/", async (req: Request, res: Response) => {
   try {
-    const {
-      terminalId,
-      terminalName,
-      serialNumber,
-      adyenMerchantAccount,
-      adyenApiKey,
-      adyenClientId,
-    } = req.body;
-    if (!terminalId || !terminalName) {
-      return res.status(400).json({ error: "terminalId and terminalName are required" });
+    const terminalId = String(req.body.terminalId || req.body.serialNumber || "").trim();
+    const terminalName = String(req.body.terminalName || terminalId || "").trim();
+    const serialNumber = String(req.body.serialNumber || terminalId || "").trim() || null;
+    if (!terminalId) {
+      return res.status(400).json({ error: "terminalId is required" });
     }
     const db = getDb();
     const [terminal] = await db
@@ -100,11 +96,12 @@ router.post("/", async (req: Request, res: Response) => {
       .values({
         merchantId: req.merchantId!,
         terminalId,
-        terminalName,
+        terminalName: terminalName || terminalId,
         serialNumber,
-        adyenMerchantAccount: adyenMerchantAccount || null,
-        adyenApiKey: adyenApiKey && !String(adyenApiKey).includes("••••") ? adyenApiKey : null,
-        adyenClientId: adyenClientId || null,
+        // Always inherit Adyen account/API from merchant settings
+        adyenMerchantAccount: null,
+        adyenApiKey: null,
+        adyenClientId: null,
         status: "active",
       })
       .returning();
@@ -121,14 +118,11 @@ router.put("/:id", async (req: Request, res: Response) => {
   try {
     const db = getDb();
     const patch: Record<string, unknown> = {};
+    if (req.body.terminalId !== undefined) patch.terminalId = String(req.body.terminalId).trim();
     if (req.body.terminalName !== undefined) patch.terminalName = req.body.terminalName;
     if (req.body.serialNumber !== undefined) patch.serialNumber = req.body.serialNumber;
     if (req.body.status !== undefined) patch.status = req.body.status;
-    if (req.body.adyenMerchantAccount !== undefined) patch.adyenMerchantAccount = req.body.adyenMerchantAccount;
-    if (req.body.adyenClientId !== undefined) patch.adyenClientId = req.body.adyenClientId;
-    if (req.body.adyenApiKey && !String(req.body.adyenApiKey).includes("••••")) {
-      patch.adyenApiKey = req.body.adyenApiKey;
-    }
+    // Do not accept per-terminal Adyen credential overrides
 
     const [terminal] = await db
       .update(schema.paymentTerminals)
