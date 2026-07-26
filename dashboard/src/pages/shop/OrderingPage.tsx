@@ -518,7 +518,9 @@ export default function OrderingPage() {
             </span>
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-3 text-sm">
-            <span className="font-medium">{channelMeta?.todayLabel || t('shopHoursNotSet')}</span>
+            <span className="font-medium">
+              {(merchant?.displayHours?.todayLabel || channelMeta?.todayLabel) || t('shopHoursNotSet')}
+            </span>
             <span
               className={`px-2 py-0.5 text-xs font-semibold ${
                 channelMeta?.open ? 'bg-teal-100 text-teal-900' : 'bg-stone-200 text-stone-700'

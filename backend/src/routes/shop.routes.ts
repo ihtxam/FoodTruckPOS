@@ -2,7 +2,13 @@ import { Router, Request, Response } from "express";
 import { eq, and, asc, inArray } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import { MerchantSettingsService, type FulfillmentChannel } from "@/services/merchant-settings.service";
-import { isChannelOpenNow, isWithinChannelHours, pointInPolygon, type StoreHours } from "@/lib/geo";
+import {
+  getDisplayHoursNow,
+  isChannelOpenNow,
+  isWithinChannelHours,
+  pointInPolygon,
+  type StoreHours,
+} from "@/lib/geo";
 import { roundMoney2, roundTo005, roundingAdjustment } from "@/lib/money";
 import { ShopCustomerService } from "@/services/shop-customer.service";
 import { AdyenService } from "@/services/adyen.service";
@@ -382,6 +388,7 @@ router.get("/:slug", async (req: Request, res: Response) => {
         etaMinutes: merchant.deliveryEtaMinutes ?? 45,
       },
     };
+    const displayHours = getDisplayHoursNow(hours, "takeaway");
 
     res.json({
       success: true,
@@ -402,6 +409,8 @@ router.get("/:slug", async (req: Request, res: Response) => {
         taxDeliveryRate: merchant.taxDeliveryRate,
         vatRate: merchant.vatRate,
         storeHours: hours,
+        /** Homepage banner hours (display channel or takeaway fallback) */
+        displayHours,
         channels,
         payment: {
           cash: true,

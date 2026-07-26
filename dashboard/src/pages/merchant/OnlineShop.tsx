@@ -19,11 +19,58 @@ const DAYS = [
   { key: 'sun', label: 'Sun' },
 ] as const;
 
-const CHANNELS = [
-  { key: 'takeaway', label: 'Pickup / take away' },
+type DayKey = (typeof DAYS)[number]['key'];
+type HoursChannelKey = 'takeaway' | 'dine_in' | 'delivery' | 'display';
+
+const ORDER_CHANNELS: { key: Exclude<HoursChannelKey, 'display'>; label: string }[] = [
+  { key: 'takeaway', label: 'Pickup' },
   { key: 'dine_in', label: 'Dine in' },
   { key: 'delivery', label: 'Delivery' },
-] as const;
+];
+
+const ALL_CHANNELS: HoursChannelKey[] = ['takeaway', 'dine_in', 'delivery', 'display'];
+
+/** Where a quick schedule should be written. */
+type ApplyTarget =
+  | 'all'
+  | 'ordering'
+  | 'takeaway'
+  | 'delivery'
+  | 'dine_in'
+  | 'homepage';
+
+const APPLY_TARGETS: { key: ApplyTarget; label: string; hint: string }[] = [
+  {
+    key: 'all',
+    label: 'All order types',
+    hint: 'Pickup, dine-in, delivery + homepage banner',
+  },
+  {
+    key: 'ordering',
+    label: 'Pickup + delivery',
+    hint: 'Both main order types (+ homepage)',
+  },
+  {
+    key: 'takeaway',
+    label: 'Pickup only',
+    hint: 'Take away / pickup checkout hours',
+  },
+  {
+    key: 'delivery',
+    label: 'Delivery only',
+    hint: 'Home delivery checkout hours',
+  },
+  {
+    key: 'dine_in',
+    label: 'Dine in only',
+    hint: 'Eat-in checkout hours',
+  },
+  {
+    key: 'homepage',
+    label: 'Homepage only',
+    hint: 'Banner hours on the shop page — does not gate ordering',
+  },
+];
 
 type Slot = { open: string; close: string };
 type ChannelHours = Record<string, Slot[]>;
@@ -41,25 +88,36 @@ interface Zone {
   zipCodes?: string[];
 }
 
+function cloneSlots(slots: Slot[]): Slot[] {
+  return slots.map((s) => ({ open: s.open, close: s.close }));
+}
+
+function mkWeek(slots: Slot[]): ChannelHours {
+  return Object.fromEntries(DAYS.map((d) => [d.key, cloneSlots(slots)]));
+}
+
 /** Default: lunch + dinner split (11–14 and 17–23). */
 function emptyHours(): StoreHours {
   const lunchDinner: Slot[] = [
     { open: '11:00', close: '14:00' },
     { open: '17:00', close: '23:00' },
   ];
-  const mk = (): ChannelHours =>
-    Object.fromEntries(DAYS.map((d) => [d.key, lunchDinner.map((s) => ({ ...s }))]));
-  return { takeaway: mk(), dine_in: mk(), delivery: mk() };
+  return {
+    takeaway: mkWeek(lunchDinner),
+    dine_in: mkWeek(lunchDinner),
+    delivery: mkWeek(lunchDinner),
+    display: mkWeek(lunchDinner),
+  };
 }
 
 function mergeHours(saved: StoreHours | null | undefined): StoreHours {
   const base = emptyHours();
   if (!saved || typeof saved !== 'object') return base;
   const out: StoreHours = { ...base };
-  for (const ch of CHANNELS) {
-    const incoming = saved[ch.key];
+  for (const ch of ALL_CHANNELS) {
+    const incoming = saved[ch];
     if (!incoming || typeof incoming !== 'object') continue;
-    const dayMap: ChannelHours = { ...(base[ch.key] || {}) };
+    const dayMap: ChannelHours = { ...(base[ch] || {}) };
     for (const d of DAYS) {
       const slots = incoming[d.key];
       if (Array.isArray(slots)) {
@@ -68,9 +126,56 @@ function mergeHours(saved: StoreHours | null | undefined): StoreHours {
           .map((s) => ({ open: s.open, close: s.close }));
       }
     }
-    out[ch.key] = dayMap;
+    out[ch] = dayMap;
   }
+  // Older saves without display → mirror takeaway for homepage banner
+  if (!saved.display) out.display = mkWeekFromChannel(out.takeaway);
   return out;
+}
+
+function mkWeekFromChannel(ch: ChannelHours): ChannelHours {
+  return Object.fromEntries(DAYS.map((d) => [d.key, cloneSlots(ch[d.key] || [])]));
+}
+
+function targetsFor(apply: ApplyTarget): HoursChannelKey[] {
+  switch (apply) {
+    case 'all':
+      return ['takeaway', 'dine_in', 'delivery', 'display'];
+    case 'ordering':
+      return ['takeaway', 'delivery', 'display'];
+    case 'takeaway':
+      return ['takeaway'];
+    case 'delivery':
+      return ['delivery'];
+    case 'dine_in':
+      return ['dine_in'];
+    case 'homepage':
+      return ['display'];
+    default:
+      return ['takeaway', 'delivery', 'display'];
+  }
+}
+
+function formatDaySlots(slots: Slot[] | undefined): string {
+  if (!slots?.length) return 'Closed';
+  return slots.map((s) => `${s.open}–${s.close}`).join(', ');
+}
+
+function summarizeChannel(ch: ChannelHours): string {
+  // Collapse identical consecutive days for a compact summary
+  const groups: { start: string; end: string; text: string }[] = [];
+  for (const d of DAYS) {
+    const text = formatDaySlots(ch[d.key]);
+    const last = groups[groups.length - 1];
+    if (last && last.text === text) {
+      last.end = d.label;
+    } else {
+      groups.push({ start: d.label, end: d.label, text });
+    }
+  }
+  return groups
+    .map((g) => (g.start === g.end ? `${g.start} ${g.text}` : `${g.start}–${g.end} ${g.text}`))
+    .join(' · ');
 }
 
 function resetZoneForm() {
@@ -92,7 +197,12 @@ export default function OnlineShop() {
   const [savingHours, setSavingHours] = useState(false);
   const [settings, setSettings] = useState<any>(null);
   const [hours, setHours] = useState<StoreHours>(emptyHours());
-  const [hoursChannel, setHoursChannel] = useState<(typeof CHANNELS)[number]['key']>('takeaway');
+  const [selectedDays, setSelectedDays] = useState<DayKey[]>(['mon', 'tue', 'wed', 'thu', 'fri']);
+  const [draftSlots, setDraftSlots] = useState<Slot[]>([{ open: '11:00', close: '22:00' }]);
+  const [applyTarget, setApplyTarget] = useState<ApplyTarget>('all');
+  const [markClosed, setMarkClosed] = useState(false);
+  const [showFineTune, setShowFineTune] = useState(false);
+  const [fineTuneChannel, setFineTuneChannel] = useState<HoursChannelKey>('takeaway');
   const [zones, setZones] = useState<Zone[]>([]);
 
   const [zoneName, setZoneName] = useState('');
@@ -139,49 +249,68 @@ export default function OnlineShop() {
     load();
   }, []);
 
-  const setDaySlots = (day: string, slots: Slot[]) => {
-    setHours((prev) => {
-      const channel = { ...(prev[hoursChannel] || {}) };
-      channel[day] = slots;
-      return { ...prev, [hoursChannel]: channel };
+  const toggleDay = (day: DayKey) => {
+    setSelectedDays((prev) =>
+      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
+    );
+  };
+
+  const selectPresetDays = (preset: 'all' | 'weekdays' | 'weekend') => {
+    if (preset === 'all') setSelectedDays(DAYS.map((d) => d.key));
+    else if (preset === 'weekdays') setSelectedDays(['mon', 'tue', 'wed', 'thu', 'fri']);
+    else setSelectedDays(['sat', 'sun']);
+  };
+
+  const updateDraftSlot = (index: number, field: 'open' | 'close', value: string) => {
+    setDraftSlots((prev) => {
+      const next = [...prev];
+      if (!next[index]) return prev;
+      next[index] = { ...next[index], [field]: value };
+      return next;
     });
   };
 
-  const updateSlot = (day: string, index: number, field: 'open' | 'close', value: string) => {
-    const slots = [...(hours[hoursChannel]?.[day] || [])];
-    if (!slots[index]) return;
-    slots[index] = { ...slots[index], [field]: value };
-    setDaySlots(day, slots);
-  };
-
-  const addSlot = (day: string) => {
-    const slots = [...(hours[hoursChannel]?.[day] || [])];
-    slots.push({ open: '17:00', close: '23:00' });
-    setDaySlots(day, slots);
-  };
-
-  const removeSlot = (day: string, index: number) => {
-    const slots = [...(hours[hoursChannel]?.[day] || [])];
-    slots.splice(index, 1);
-    setDaySlots(day, slots);
-  };
-
-  const clearDay = (day: string) => setDaySlots(day, []);
-
-  const openDayDefault = (day: string) =>
-    setDaySlots(day, [
-      { open: '11:00', close: '14:00' },
-      { open: '17:00', close: '23:00' },
-    ]);
-
-  const copyDayToAll = (day: string) => {
-    const slots = hours[hoursChannel]?.[day] || [];
+  const applyQuickSchedule = () => {
+    if (!selectedDays.length) {
+      toast.error('Select at least one day');
+      return;
+    }
+    const slots = markClosed
+      ? []
+      : draftSlots.filter((s) => s.open && s.close).map((s) => ({ open: s.open, close: s.close }));
+    if (!markClosed && !slots.length) {
+      toast.error('Add at least one open–close time');
+      return;
+    }
+    const channels = targetsFor(applyTarget);
     setHours((prev) => {
-      const channel: ChannelHours = {};
-      DAYS.forEach((d) => {
-        channel[d.key] = slots.map((s) => ({ ...s }));
-      });
-      return { ...prev, [hoursChannel]: channel };
+      const next: StoreHours = { ...prev };
+      for (const ch of channels) {
+        const dayMap: ChannelHours = { ...(next[ch] || {}) };
+        for (const day of selectedDays) {
+          dayMap[day] = cloneSlots(slots);
+        }
+        next[ch] = dayMap;
+      }
+      return next;
+    });
+    const dayLabel =
+      selectedDays.length === 7
+        ? 'every day'
+        : selectedDays.map((k) => DAYS.find((d) => d.key === k)?.label || k).join(', ');
+    const targetLabel = APPLY_TARGETS.find((t) => t.key === applyTarget)?.label || applyTarget;
+    toast.success(
+      markClosed
+        ? `Closed ${dayLabel} → ${targetLabel}`
+        : `Set ${formatDaySlots(slots)} on ${dayLabel} → ${targetLabel}`
+    );
+  };
+
+  const setFineTuneDaySlots = (day: string, slots: Slot[]) => {
+    setHours((prev) => {
+      const channel = { ...(prev[fineTuneChannel] || {}) };
+      channel[day] = slots;
+      return { ...prev, [fineTuneChannel]: channel };
     });
   };
 
@@ -309,14 +438,14 @@ export default function OnlineShop() {
   if (loading) return <div className="text-center py-12">Loading online shop…</div>;
   if (!settings) return <div className="card">Could not load settings.</div>;
 
-  const channelHours = hours[hoursChannel] || {};
+  const fineTuneHours = hours[fineTuneChannel] || {};
 
   return (
     <div className="space-y-6">
       <div className="card">
         <h1 className="text-2xl font-bold mb-1">{t('shop')}</h1>
         <p className="text-gray-600 mb-4">
-          Channels, opening hours (multiple ranges per day), and map-drawn delivery zones.
+          Channels, smart opening hours, and map-drawn delivery zones.
         </p>
         {settings.shopPathUrl && (
           <p className="text-sm mb-4">
@@ -402,87 +531,244 @@ export default function OnlineShop() {
             </div>
           </div>
 
-          <div>
-            <div className="flex flex-wrap gap-2 mb-3">
-              {CHANNELS.map((c) => (
-                <button
-                  key={c.key}
-                  type="button"
-                  className={`px-3 py-1.5 text-sm border ${
-                    hoursChannel === c.key ? 'bg-stone-900 text-white' : 'bg-white'
-                  }`}
-                  onClick={() => setHoursChannel(c.key)}
-                >
-                  {c.label} hours
-                </button>
+          <div className="rounded-xl border border-stone-200 bg-stone-50/80 p-4 space-y-4">
+            <div>
+              <h2 className="text-base font-semibold tracking-tight">Opening hours</h2>
+              <p className="text-sm text-stone-500 mt-0.5">
+                Pick several days, set one schedule, choose where it applies — then save.
+              </p>
+            </div>
+
+            <div>
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                <span className="text-sm font-medium">Days</span>
+                <div className="flex flex-wrap gap-1.5 text-xs">
+                  <button type="button" className="px-2 py-1 rounded border bg-white" onClick={() => selectPresetDays('all')}>
+                    All week
+                  </button>
+                  <button
+                    type="button"
+                    className="px-2 py-1 rounded border bg-white"
+                    onClick={() => selectPresetDays('weekdays')}
+                  >
+                    Weekdays
+                  </button>
+                  <button
+                    type="button"
+                    className="px-2 py-1 rounded border bg-white"
+                    onClick={() => selectPresetDays('weekend')}
+                  >
+                    Weekend
+                  </button>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {DAYS.map((d) => {
+                  const on = selectedDays.includes(d.key);
+                  return (
+                    <button
+                      key={d.key}
+                      type="button"
+                      onClick={() => toggleDay(d.key)}
+                      className={`min-w-[2.75rem] px-3 py-2 text-sm font-semibold rounded-lg border transition ${
+                        on
+                          ? 'bg-stone-900 text-white border-stone-900'
+                          : 'bg-white text-stone-600 border-stone-200 hover:border-stone-400'
+                      }`}
+                    >
+                      {d.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div>
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                <span className="text-sm font-medium">Hours</span>
+                <label className="flex items-center gap-2 text-sm text-stone-600">
+                  <input
+                    type="checkbox"
+                    checked={markClosed}
+                    onChange={(e) => setMarkClosed(e.target.checked)}
+                  />
+                  Mark selected days closed
+                </label>
+              </div>
+              {!markClosed && (
+                <div className="space-y-2">
+                  {draftSlots.map((slot, idx) => (
+                    <div key={idx} className="flex flex-wrap items-center gap-2">
+                      <input
+                        type="time"
+                        className="input w-auto"
+                        value={slot.open}
+                        onChange={(e) => updateDraftSlot(idx, 'open', e.target.value)}
+                      />
+                      <span className="text-stone-400">to</span>
+                      <input
+                        type="time"
+                        className="input w-auto"
+                        value={slot.close}
+                        onChange={(e) => updateDraftSlot(idx, 'close', e.target.value)}
+                      />
+                      {draftSlots.length > 1 && (
+                        <button
+                          type="button"
+                          className="text-sm text-red-600"
+                          onClick={() => setDraftSlots((prev) => prev.filter((_, i) => i !== idx))}
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    className="text-sm font-medium text-teal-700"
+                    onClick={() => setDraftSlots((prev) => [...prev, { open: '17:00', close: '23:00' }])}
+                  >
+                    + Add another range (e.g. lunch + dinner)
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div>
+              <span className="text-sm font-medium block mb-2">Applies to</span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                {APPLY_TARGETS.map((opt) => {
+                  const on = applyTarget === opt.key;
+                  return (
+                    <button
+                      key={opt.key}
+                      type="button"
+                      onClick={() => setApplyTarget(opt.key)}
+                      className={`text-left rounded-lg border px-3 py-2.5 transition ${
+                        on ? 'border-stone-900 bg-white shadow-sm' : 'border-stone-200 bg-white/70 hover:border-stone-400'
+                      }`}
+                    >
+                      <span className="block text-sm font-semibold">{opt.label}</span>
+                      <span className="block text-[11px] text-stone-500 mt-0.5 leading-snug">{opt.hint}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="button" className="btn-secondary" onClick={applyQuickSchedule}>
+                Apply to selected days
+              </button>
+              <span className="text-xs text-stone-500">
+                Preview updates below — click Save to publish.
+              </span>
+            </div>
+
+            <div className="rounded-lg border border-stone-200 bg-white p-3 space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Current schedule</p>
+              {(
+                [
+                  { key: 'display' as const, label: 'Homepage banner' },
+                  ...ORDER_CHANNELS,
+                ] as { key: HoursChannelKey; label: string }[]
+              ).map((c) => (
+                <div key={c.key} className="text-sm flex flex-col sm:flex-row sm:gap-2">
+                  <span className="font-medium text-stone-800 sm:w-36 shrink-0">{c.label}</span>
+                  <span className="text-stone-600">{summarizeChannel(hours[c.key] || {})}</span>
+                </div>
               ))}
             </div>
-            <p className="text-xs text-gray-500 mb-3">
-              Add several open/close ranges per day (e.g. 11:00–14:00 and 17:00–23:00).
-            </p>
-            <div className="space-y-4">
-              {DAYS.map((d) => {
-                const slots = channelHours[d.key] || [];
-                return (
-                  <div key={d.key} className="border border-stone-200 rounded-lg p-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                      <span className="font-semibold">{d.label}</span>
-                      <div className="flex flex-wrap gap-2 text-sm">
-                        {slots.length === 0 ? (
-                          <button type="button" className="text-teal-700" onClick={() => openDayDefault(d.key)}>
-                            Open day
-                          </button>
-                        ) : (
-                          <>
-                            <button type="button" className="text-teal-700" onClick={() => addSlot(d.key)}>
-                              + Time range
-                            </button>
-                            <button type="button" className="text-red-600" onClick={() => clearDay(d.key)}>
-                              Closed
-                            </button>
-                          </>
-                        )}
-                        <button type="button" className="text-gray-600" onClick={() => copyDayToAll(d.key)}>
-                          Copy → week
-                        </button>
-                      </div>
-                    </div>
-                    {slots.length === 0 ? (
-                      <p className="text-sm text-gray-500">Closed</p>
-                    ) : (
-                      <div className="space-y-2">
-                        {slots.map((slot, idx) => (
-                          <div key={`${d.key}-${idx}`} className="flex flex-wrap items-center gap-2">
-                            <span className="text-xs text-gray-500 w-14">Range {idx + 1}</span>
-                            <input
-                              type="time"
-                              className="input w-auto"
-                              value={slot.open}
-                              onChange={(e) => updateSlot(d.key, idx, 'open', e.target.value)}
-                            />
-                            <span className="text-gray-400">–</span>
-                            <input
-                              type="time"
-                              className="input w-auto"
-                              value={slot.close}
-                              onChange={(e) => updateSlot(d.key, idx, 'close', e.target.value)}
-                            />
-                            <button
-                              type="button"
-                              className="text-sm text-red-600"
-                              onClick={() => removeSlot(d.key, idx)}
-                              disabled={slots.length === 1}
-                              title="Remove this range"
-                            >
-                              Remove
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+
+            <div className="border-t border-stone-200 pt-3">
+              <button
+                type="button"
+                className="text-sm font-medium text-stone-700 underline-offset-2 hover:underline"
+                onClick={() => setShowFineTune((v) => !v)}
+              >
+                {showFineTune ? 'Hide fine-tune editor' : 'Fine-tune a single channel (optional)'}
+              </button>
+              {showFineTune && (
+                <div className="mt-3 space-y-3">
+                  <div className="flex flex-wrap gap-2">
+                    {(
+                      [
+                        { key: 'display' as const, label: 'Homepage' },
+                        ...ORDER_CHANNELS,
+                      ] as { key: HoursChannelKey; label: string }[]
+                    ).map((c) => (
+                      <button
+                        key={c.key}
+                        type="button"
+                        className={`px-3 py-1.5 text-sm border rounded-lg ${
+                          fineTuneChannel === c.key ? 'bg-stone-900 text-white border-stone-900' : 'bg-white'
+                        }`}
+                        onClick={() => setFineTuneChannel(c.key)}
+                      >
+                        {c.label}
+                      </button>
+                    ))}
                   </div>
-                );
-              })}
+                  <div className="space-y-2">
+                    {DAYS.map((d) => {
+                      const slots = fineTuneHours[d.key] || [];
+                      return (
+                        <div key={d.key} className="flex flex-wrap items-center gap-2 text-sm">
+                          <span className="w-10 font-medium">{d.label}</span>
+                          {slots.length === 0 ? (
+                            <span className="text-stone-400">Closed</span>
+                          ) : (
+                            slots.map((slot, idx) => (
+                              <span key={idx} className="inline-flex items-center gap-1">
+                                <input
+                                  type="time"
+                                  className="input w-auto py-1"
+                                  value={slot.open}
+                                  onChange={(e) => {
+                                    const next = cloneSlots(slots);
+                                    next[idx] = { ...next[idx], open: e.target.value };
+                                    setFineTuneDaySlots(d.key, next);
+                                  }}
+                                />
+                                <span>–</span>
+                                <input
+                                  type="time"
+                                  className="input w-auto py-1"
+                                  value={slot.close}
+                                  onChange={(e) => {
+                                    const next = cloneSlots(slots);
+                                    next[idx] = { ...next[idx], close: e.target.value };
+                                    setFineTuneDaySlots(d.key, next);
+                                  }}
+                                />
+                              </span>
+                            ))
+                          )}
+                          <button
+                            type="button"
+                            className="text-teal-700"
+                            onClick={() =>
+                              setFineTuneDaySlots(d.key, [
+                                ...slots,
+                                { open: '17:00', close: '23:00' },
+                              ])
+                            }
+                          >
+                            +
+                          </button>
+                          <button
+                            type="button"
+                            className="text-red-600"
+                            onClick={() => setFineTuneDaySlots(d.key, [])}
+                          >
+                            Closed
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

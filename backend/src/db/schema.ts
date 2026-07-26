@@ -64,8 +64,8 @@ export const merchants = pgTable(
     pickupEnabled: boolean("pickup_enabled").default(true).notNull(),
     dineInEnabled: boolean("dine_in_enabled").default(true).notNull(),
     deliveryEnabled: boolean("delivery_enabled").default(true).notNull(),
-    // Per-channel weekly hours:
-    // { takeaway: { mon: [{ open: "11:00", close: "14:00" }], ... }, dine_in: {...}, delivery: {...} }
+    // Per-channel weekly hours (+ optional display for homepage banner):
+    // { takeaway: { mon: [{ open, close }] }, delivery, dine_in, display }
     storeHours: json("store_hours").$type<Record<string, Record<string, Array<{ open: string; close: string }>>>>().default({}),
     shopLogoUrl: varchar("shop_logo_url", { length: 500 }),
     shopBannerUrl: varchar("shop_banner_url", { length: 500 }),
