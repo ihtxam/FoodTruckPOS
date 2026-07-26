@@ -3,15 +3,23 @@ import { useNavigate, useParams } from 'react-router-dom';
 import axios from 'axios';
 import {
   emptyDraft,
+  extrasSignature,
   loadCart,
+  newCartLineId,
   resolveShopKey,
   saveCart,
   shopBasePath,
   type ShopCartItem,
   type ShopChannel,
   type ShopCheckoutDraft,
+  type ShopSelectedExtra,
 } from '@/lib/shop-cart';
 import { roundMoney2, roundTo005, roundingAdjustment } from '@/lib/money';
+import ShopProductModifiersModal, {
+  productHasModifiers,
+  type ShopModifierGroup,
+  type ShopProductForModifiers,
+} from '@/components/shop/ShopProductModifiersModal';
 
 interface Product {
   id: string;
@@ -19,6 +27,9 @@ interface Product {
   price: number;
   description?: string;
   image?: string;
+  allowExtras?: boolean;
+  extras?: Array<{ id: string; name: string; price: number }>;
+  modifierGroups?: ShopModifierGroup[];
 }
 
 interface Category {
@@ -48,6 +59,7 @@ export default function OrderingPage() {
   const [mobileBasket, setMobileBasket] = useState(false);
   const [checkingDelivery, setCheckingDelivery] = useState(false);
   const [deliveryInfo, setDeliveryInfo] = useState<any>(null);
+  const [pendingProduct, setPendingProduct] = useState<ShopProductForModifiers | null>(null);
 
   useEffect(() => {
     if (!shopKey) {
@@ -129,35 +141,57 @@ export default function OrderingPage() {
 
   const patch = (p: Partial<ShopCheckoutDraft>) => setDraft((d) => ({ ...d, ...p }));
 
-  const addToCart = (product: Product) => {
+  const addConfiguredItem = (
+    product: Product | ShopProductForModifiers,
+    extras: ShopSelectedExtra[] = [],
+    unitPrice?: number
+  ) => {
+    const price = roundMoney2(unitPrice ?? product.price + extras.reduce((s, e) => s + e.price, 0));
+    const sig = extrasSignature(extras);
     setDraft((prev) => {
-      const existing = prev.items.find((item) => item.id === product.id);
+      const existing =
+        !extras.length
+          ? prev.items.find((item) => item.id === product.id && !item.selectedExtras?.length)
+          : prev.items.find(
+              (item) => item.id === product.id && extrasSignature(item.selectedExtras) === sig
+            );
       const items: ShopCartItem[] = existing
         ? prev.items.map((item) =>
-            item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
+            item.lineId === existing.lineId ? { ...item, quantity: item.quantity + 1 } : item
           )
         : [
             ...prev.items,
             {
+              lineId: newCartLineId(),
               id: product.id,
               name: product.name,
-              price: product.price,
+              price,
+              basePrice: product.price,
               quantity: 1,
               description: product.description,
               image: product.image,
+              selectedExtras: extras,
             },
           ];
       return { ...prev, items };
     });
   };
 
-  const updateQuantity = (productId: string, quantity: number) => {
+  const handleProductClick = (product: Product) => {
+    if (productHasModifiers(product)) {
+      setPendingProduct(product);
+      return;
+    }
+    addConfiguredItem(product);
+  };
+
+  const updateQuantity = (lineId: string, quantity: number) => {
     setDraft((prev) => ({
       ...prev,
       items:
         quantity <= 0
-          ? prev.items.filter((item) => item.id !== productId)
-          : prev.items.map((item) => (item.id === productId ? { ...item, quantity } : item)),
+          ? prev.items.filter((item) => item.lineId !== lineId)
+          : prev.items.map((item) => (item.lineId === lineId ? { ...item, quantity } : item)),
     }));
   };
 
@@ -255,16 +289,21 @@ export default function OrderingPage() {
         ) : (
           <ul className="space-y-3">
             {cart.map((item) => (
-              <li key={item.id} className="flex gap-3 text-sm">
-                <div className="flex-1">
+              <li key={item.lineId} className="flex gap-3 text-sm">
+                <div className="flex-1 min-w-0">
                   <div className="font-medium text-stone-900">{item.name}</div>
+                  {!!item.selectedExtras?.length && (
+                    <p className="text-xs text-stone-500 mt-0.5 leading-snug">
+                      {item.selectedExtras.map((e) => e.name).join(', ')}
+                    </p>
+                  )}
                   <div className="text-stone-500">CHF {item.price.toFixed(2)}</div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 shrink-0">
                   <button
                     type="button"
                     className="w-7 h-7 border border-stone-300"
-                    onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                    onClick={() => updateQuantity(item.lineId, item.quantity - 1)}
                   >
                     −
                   </button>
@@ -272,7 +311,7 @@ export default function OrderingPage() {
                   <button
                     type="button"
                     className="w-7 h-7 border border-stone-300"
-                    onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                    onClick={() => updateQuantity(item.lineId, item.quantity + 1)}
                   >
                     +
                   </button>
@@ -493,7 +532,7 @@ export default function OrderingPage() {
               <button
                 key={product.id}
                 type="button"
-                onClick={() => addToCart(product)}
+                onClick={() => handleProductClick(product)}
                 className="w-full text-left bg-white border border-stone-200 p-4 flex gap-4 hover:border-stone-400 transition-colors"
               >
                 <div className="flex-1 min-w-0">
@@ -501,7 +540,12 @@ export default function OrderingPage() {
                   {product.description && (
                     <p className="text-sm text-stone-500 mt-1 line-clamp-2">{product.description}</p>
                   )}
-                  <div className="mt-2 font-semibold">CHF {product.price.toFixed(2)}</div>
+                  <div className="mt-2 flex items-center gap-2 flex-wrap">
+                    <span className="font-semibold">CHF {product.price.toFixed(2)}</span>
+                    {productHasModifiers(product) && (
+                      <span className="text-xs font-medium text-stone-500">Customize</span>
+                    )}
+                  </div>
                 </div>
                 {product.image ? (
                   <img
@@ -541,6 +585,17 @@ export default function OrderingPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {pendingProduct && (
+        <ShopProductModifiersModal
+          product={pendingProduct}
+          onClose={() => setPendingProduct(null)}
+          onConfirm={(extras, unitPrice) => {
+            addConfiguredItem(pendingProduct, extras, unitPrice);
+            setPendingProduct(null);
+          }}
+        />
       )}
     </div>
   );

@@ -7,6 +7,7 @@ interface OrderItem {
   productName?: string | null;
   quantity: string | number;
   totalPrice: string | number;
+  selectedExtras?: Array<{ id: string; name: string; price: number }> | null;
 }
 
 interface Order {
@@ -359,10 +360,15 @@ export default function Orders() {
             <ul className="mt-3 space-y-1.5 border-t border-[var(--border)] pt-3 text-sm">
               {(selected.items || []).map((item, i) => (
                 <li key={i} className="flex justify-between gap-3">
-                  <span>
+                  <span className="min-w-0">
                     {Number(item.quantity)}× {item.productName || 'Item'}
+                    {!!item.selectedExtras?.length && (
+                      <span className="mt-0.5 block text-xs text-[var(--muted)]">
+                        {item.selectedExtras.map((e) => e.name).join(', ')}
+                      </span>
+                    )}
                   </span>
-                  <span className="font-medium">CHF {Number(item.totalPrice).toFixed(2)}</span>
+                  <span className="shrink-0 font-medium">CHF {Number(item.totalPrice).toFixed(2)}</span>
                 </li>
               ))}
             </ul>

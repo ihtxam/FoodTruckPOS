@@ -11,6 +11,7 @@ type OrderItem = {
   unitPrice: string;
   totalPrice: string;
   notes?: string | null;
+  selectedExtras?: Array<{ id: string; name: string; price: number }> | null;
 };
 
 type OrderView = {
@@ -312,10 +313,15 @@ export default function OrderConfirmationPage() {
           <ul className="space-y-2">
             {(order.items || []).map((it) => (
               <li key={it.id} className="flex justify-between gap-3 text-sm">
-                <span>
+                <span className="min-w-0">
                   {Number(it.quantity)}× {it.productName || 'Item'}
+                  {!!it.selectedExtras?.length && (
+                    <span className="block text-xs text-stone-500 mt-0.5">
+                      {it.selectedExtras.map((e) => e.name).join(', ')}
+                    </span>
+                  )}
                 </span>
-                <span className="font-medium">{money(it.totalPrice)}</span>
+                <span className="font-medium shrink-0">{money(it.totalPrice)}</span>
               </li>
             ))}
           </ul>

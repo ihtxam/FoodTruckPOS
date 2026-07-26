@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { eq, and, asc } from "drizzle-orm";
+import { eq, and, asc, inArray } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import { MerchantSettingsService, type FulfillmentChannel } from "@/services/merchant-settings.service";
 import { isChannelOpenNow, isWithinChannelHours, pointInPolygon, type StoreHours } from "@/lib/geo";
@@ -7,9 +7,157 @@ import { roundMoney2, roundTo005, roundingAdjustment } from "@/lib/money";
 import { ShopCustomerService } from "@/services/shop-customer.service";
 import { AdyenService } from "@/services/adyen.service";
 import { AuthService } from "@/services/auth.service";
+import { ModifierService } from "@/services/modifier.service";
 import { v4 as uuidv4 } from "uuid";
 
 const router = Router();
+
+type ShopExtraSelection = { id: string; name?: string; price?: number };
+
+function serializeShopModifierGroup(g: any) {
+  const pricingType = g.pricingType || "fixed";
+  return {
+    id: g.id,
+    title: g.title,
+    pricingType,
+    selectionType: g.selectionType || "optional",
+    minSelectable: Number(g.minSelectable) || 0,
+    maxSelectable: Number(g.maxSelectable) || 1,
+    allowMultipleSameItem: !!g.allowMultipleSameItem,
+    options: (g.options || [])
+      .filter((o: any) => (o.saleStatus || "in_stock") !== "out_of_stock")
+      .map((o: any) => ({
+        id: o.id,
+        name: o.name,
+        price: pricingType === "free" ? 0 : parseFloat(o.price?.toString() || "0"),
+        isDefault: !!o.isDefault,
+      })),
+  };
+}
+
+function mapShopProduct(
+  p: typeof schema.products.$inferSelect,
+  modifierGroups: ReturnType<typeof serializeShopModifierGroup>[]
+) {
+  const extras = Array.isArray(p.extras) ? p.extras : [];
+  return {
+    id: p.id,
+    name: p.name,
+    price: parseFloat(p.price.toString()),
+    description: p.description,
+    image: p.imageUrl,
+    allowExtras: !!p.allowExtras || modifierGroups.length > 0 || extras.length > 0,
+    extras: extras.map((e) => ({
+      id: e.id,
+      name: e.name,
+      price: Number(e.price) || 0,
+    })),
+    modifierGroups,
+  };
+}
+
+async function loadModifierGroupsByProduct(merchantId: string, productIds: string[]) {
+  const byProduct = new Map<string, ReturnType<typeof serializeShopModifierGroup>[]>();
+  if (!productIds.length) return byProduct;
+
+  const db = getDb();
+  const links = await db.query.productModifierGroups.findMany({
+    where: inArray(schema.productModifierGroups.productId, productIds),
+    with: {
+      group: {
+        with: {
+          options: { orderBy: [asc(schema.modifierOptions.sortOrder)] },
+        },
+      },
+    },
+    orderBy: [asc(schema.productModifierGroups.sortOrder)],
+  });
+
+  for (const link of links) {
+    const g = link.group as any;
+    if (!g || g.merchantId !== merchantId || g.isActive === false) continue;
+    const list = byProduct.get(link.productId) || [];
+    list.push(serializeShopModifierGroup(g));
+    byProduct.set(link.productId, list);
+  }
+  return byProduct;
+}
+
+/** Resolve and price selected extras from DB (never trust client prices). */
+async function resolveShopLineExtras(
+  merchantId: string,
+  product: typeof schema.products.$inferSelect,
+  requested: ShopExtraSelection[] | undefined
+): Promise<{ extras: Array<{ id: string; name: string; price: number }>; error?: string }> {
+  const groups = await ModifierService.getGroupsForProduct(merchantId, product.id);
+  const optionById = new Map<
+    string,
+    { id: string; name: string; price: number; groupId: string; groupTitle: string }
+  >();
+
+  for (const g of groups) {
+    for (const o of g.options) {
+      if (o.saleStatus === "out_of_stock") continue;
+      optionById.set(o.id, {
+        id: o.id,
+        name: o.name,
+        price: g.pricingType === "free" ? 0 : Number(o.price) || 0,
+        groupId: g.id,
+        groupTitle: g.title,
+      });
+    }
+  }
+
+  // Legacy flat extras (no groups)
+  if (!groups.length && Array.isArray(product.extras)) {
+    for (const e of product.extras) {
+      if (!e?.id) continue;
+      optionById.set(e.id, {
+        id: e.id,
+        name: e.name,
+        price: Number(e.price) || 0,
+        groupId: "__legacy__",
+        groupTitle: "Extras",
+      });
+    }
+  }
+
+  const reqIds = (requested || []).map((r) => r.id).filter(Boolean);
+  const extras: Array<{ id: string; name: string; price: number }> = [];
+  const countsByGroup = new Map<string, number>();
+
+  for (const id of reqIds) {
+    const opt = optionById.get(id);
+    if (!opt) {
+      return { extras: [], error: `Invalid extra selected for ${product.name}` };
+    }
+    extras.push({ id: opt.id, name: opt.name, price: roundMoney2(opt.price) });
+    countsByGroup.set(opt.groupId, (countsByGroup.get(opt.groupId) || 0) + 1);
+  }
+
+  for (const g of groups) {
+    const count = countsByGroup.get(g.id) || 0;
+    const min =
+      g.selectionType === "required"
+        ? Math.max(1, Number(g.minSelectable) || 1)
+        : Math.max(0, Number(g.minSelectable) || 0);
+    const max = Math.max(min, Number(g.maxSelectable) || 1);
+    if (count < min) {
+      return {
+        extras: [],
+        error: `Please choose ${min === 1 ? "an option" : `${min} options`} for "${g.title}" on ${product.name}`,
+      };
+    }
+    if (count > max) {
+      return {
+        extras: [],
+        error: `Too many options selected for "${g.title}" on ${product.name}`,
+      };
+    }
+  }
+
+  return { extras };
+}
 
 async function resolveMerchant(slugOrHost: string) {
   return MerchantSettingsService.resolveByShopHost(slugOrHost);
@@ -145,21 +293,22 @@ router.get("/:slug/menu", async (req: Request, res: Response) => {
       }),
       db.query.products.findMany({
         where: and(eq(schema.products.merchantId, merchant.id), eq(schema.products.isActive, true)),
+        orderBy: [asc(schema.products.sortOrder), asc(schema.products.name)],
       }),
     ]);
+
+    const groupsByProduct = await loadModifierGroupsByProduct(
+      merchant.id,
+      products.map((p) => p.id)
+    );
+
+    const toItem = (p: (typeof products)[number]) =>
+      mapShopProduct(p, groupsByProduct.get(p.id) || []);
 
     const menu = categories.map((cat) => ({
       id: cat.id,
       name: cat.name,
-      items: products
-        .filter((p) => p.categoryId === cat.id)
-        .map((p) => ({
-          id: p.id,
-          name: p.name,
-          price: parseFloat(p.price.toString()),
-          description: p.description,
-          image: p.imageUrl,
-        })),
+      items: products.filter((p) => p.categoryId === cat.id).map(toItem),
     }));
 
     const uncategorized = products.filter((p) => !p.categoryId);
@@ -167,13 +316,7 @@ router.get("/:slug/menu", async (req: Request, res: Response) => {
       menu.push({
         id: "uncategorized",
         name: "Other",
-        items: uncategorized.map((p) => ({
-          id: p.id,
-          name: p.name,
-          price: parseFloat(p.price.toString()),
-          description: p.description,
-          image: p.imageUrl,
-        })),
+        items: uncategorized.map(toItem),
       });
     }
 
@@ -433,7 +576,7 @@ router.post("/:slug/orders", async (req: Request, res: Response) => {
       scheduledFor,
       guestCheckout = true,
     } = req.body as {
-      items: Array<{ productId: string; quantity: number }>;
+      items: Array<{ productId: string; quantity: number; selectedExtras?: ShopExtraSelection[] }>;
       customerEmail?: string;
       customerPhone?: string;
       customerName?: string;
@@ -522,6 +665,7 @@ router.post("/:slug/orders", async (req: Request, res: Response) => {
       unitPrice: number;
       totalPrice: number;
       taxAmount: number;
+      selectedExtras: Array<{ id: string; name: string; price: number }>;
     }> = [];
 
     for (const item of items) {
@@ -533,7 +677,14 @@ router.post("/:slug/orders", async (req: Request, res: Response) => {
       }
       const qty = Number(item.quantity) || 0;
       if (qty <= 0) continue;
-      const unitPrice = roundMoney2(parseFloat(product.price.toString()));
+
+      const resolved = await resolveShopLineExtras(merchant.id, product, item.selectedExtras);
+      if (resolved.error) {
+        return res.status(400).json({ error: resolved.error });
+      }
+
+      const extrasTotal = roundMoney2(resolved.extras.reduce((s, e) => s + e.price, 0));
+      const unitPrice = roundMoney2(parseFloat(product.price.toString()) + extrasTotal);
       const totalPrice = roundMoney2(unitPrice * qty);
       const lineTax = product.isTaxable ? roundMoney2((totalPrice * taxRate) / 100) : 0;
       subtotal += totalPrice;
@@ -545,6 +696,7 @@ router.post("/:slug/orders", async (req: Request, res: Response) => {
         unitPrice,
         totalPrice,
         taxAmount: lineTax,
+        selectedExtras: resolved.extras,
       });
     }
 
@@ -669,6 +821,7 @@ router.post("/:slug/orders", async (req: Request, res: Response) => {
         unitPrice: line.unitPrice.toFixed(2),
         totalPrice: line.totalPrice.toFixed(2),
         taxAmount: line.taxAmount.toFixed(2),
+        selectedExtras: line.selectedExtras,
       });
     }
 
