@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { eq, and, asc, inArray } from "drizzle-orm";
+import { eq, and, asc, desc, inArray } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import { MerchantSettingsService, type FulfillmentChannel } from "@/services/merchant-settings.service";
 import {
@@ -11,6 +11,7 @@ import {
 } from "@/lib/geo";
 import { roundMoney2, roundTo005, roundingAdjustment } from "@/lib/money";
 import { ShopCustomerService } from "@/services/shop-customer.service";
+import { ShopLoyaltyService } from "@/services/shop-loyalty.service";
 import { AdyenService } from "@/services/adyen.service";
 import { AuthService } from "@/services/auth.service";
 import { ModifierService } from "@/services/modifier.service";
@@ -86,6 +87,7 @@ function mapShopProduct(
       .filter(Boolean),
   })).filter((s) => s.options.length > 0);
 
+  const rewardPts = p.loyaltyRewardPoints != null ? Number(p.loyaltyRewardPoints) : null;
   return {
     id: p.id,
     name: p.name,
@@ -101,7 +103,50 @@ function mapShopProduct(
     })),
     modifierGroups,
     comboSlots: isCombo ? comboSlots : [],
+    loyaltyRewardPoints:
+      rewardPts != null && Number.isFinite(rewardPts) && rewardPts >= 1 ? Math.floor(rewardPts) : null,
   };
+}
+
+async function earnLoyaltyForOrder(
+  merchant: typeof schema.merchants.$inferSelect,
+  order: typeof schema.orders.$inferSelect
+) {
+  if (!order.customerId) return order;
+  if ((order.pointsEarned || 0) > 0) return order;
+  const program = ShopLoyaltyService.programFromMerchant(merchant);
+  if (!program.enabled) return order;
+
+  const subtotal = parseFloat(order.subtotal?.toString() || "0");
+  const pointsDiscount = parseFloat(order.pointsDiscount?.toString() || "0");
+  const paidFood = Math.max(0, subtotal - pointsDiscount);
+  const points = ShopLoyaltyService.computeEarnPoints(paidFood, program.earnPointsPerChf);
+  if (points <= 0) {
+    const db = getDb();
+    const [updated] = await db
+      .update(schema.orders)
+      .set({ pointsEarned: 0 })
+      .where(eq(schema.orders.id, order.id))
+      .returning();
+    return updated || order;
+  }
+
+  await ShopLoyaltyService.earnPoints({
+    merchantId: merchant.id,
+    customerId: order.customerId,
+    orderId: order.id,
+    points,
+    expiryDays: program.expiryDays,
+    source: "earn",
+  });
+
+  const db = getDb();
+  const [updated] = await db
+    .update(schema.orders)
+    .set({ pointsEarned: points })
+    .where(eq(schema.orders.id, order.id))
+    .returning();
+  return updated || { ...order, pointsEarned: points };
 }
 
 async function resolveShopComboSelections(
@@ -418,12 +463,86 @@ router.get("/:slug", async (req: Request, res: Response) => {
           cardReady: !!(merchant.adyenMerchantAccount && merchant.adyenApiKey && merchant.adyenClientId),
           currency: "CHF",
         },
+        loyalty: ShopLoyaltyService.programFromMerchant(merchant),
         /** Merchant panel language — used as shop default when customer has no preference */
         language: merchant.panelLanguage || "en",
       },
     });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : "Failed to load shop" });
+  }
+});
+
+/**
+ * GET /api/shop/:slug/loyalty — public program + rewards; full summary when customer Bearer present
+ */
+router.get("/:slug/loyalty", async (req: Request, res: Response) => {
+  try {
+    const merchant = await resolveMerchant(req.params.slug);
+    if (!merchant?.shopEnabled) return res.status(404).json({ error: "Shop not found" });
+    const { customerId } = optionalCustomer(req);
+    if (customerId) {
+      const summary = await ShopLoyaltyService.getCustomerLoyaltySummary(merchant.id, customerId);
+      return res.json({ success: true, ...summary });
+    }
+    const pub = await ShopLoyaltyService.getPublicLoyalty(merchant.id);
+    res.json({ success: true, ...pub });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : "Failed to load loyalty" });
+  }
+});
+
+/**
+ * GET /api/shop/:slug/my-orders — authenticated customer web_shop order history
+ */
+router.get("/:slug/my-orders", async (req: Request, res: Response) => {
+  try {
+    const merchant = await resolveMerchant(req.params.slug);
+    if (!merchant?.shopEnabled) return res.status(404).json({ error: "Shop not found" });
+    const { customerId } = optionalCustomer(req);
+    if (!customerId) return res.status(401).json({ error: "Not logged in" });
+
+    const db = getDb();
+    const orders = await db.query.orders.findMany({
+      where: and(
+        eq(schema.orders.merchantId, merchant.id),
+        eq(schema.orders.customerId, customerId),
+        eq(schema.orders.orderType, "web_shop")
+      ),
+      with: { items: true },
+      orderBy: [desc(schema.orders.createdAt)],
+      limit: 50,
+    });
+
+    res.json({
+      success: true,
+      orders: orders.map((o) => ({
+        id: o.id,
+        orderNumber: o.orderNumber,
+        status: o.status,
+        paymentStatus: o.paymentStatus,
+        paymentMethod: o.paymentMethod,
+        fulfillmentChannel: o.fulfillmentChannel,
+        subtotal: o.subtotal,
+        taxAmount: o.taxAmount,
+        deliveryFee: o.deliveryFee,
+        tipAmount: o.tipAmount,
+        pointsDiscount: o.pointsDiscount,
+        pointsEarned: o.pointsEarned,
+        pointsRedeemed: o.pointsRedeemed,
+        total: o.total,
+        createdAt: o.createdAt,
+        items: (o.items || []).map((it) => ({
+          productId: it.productId,
+          productName: it.productName,
+          quantity: it.quantity,
+          unitPrice: it.unitPrice,
+          selectedExtras: it.selectedExtras,
+        })),
+      })),
+    });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : "Failed to load orders" });
   }
 });
 
@@ -730,12 +849,14 @@ router.post("/:slug/orders", async (req: Request, res: Response) => {
       tipAmount = 0,
       scheduledFor,
       guestCheckout = true,
+      pointsToRedeem = 0,
     } = req.body as {
       items: Array<{
         productId: string;
         quantity: number;
         selectedExtras?: ShopExtraSelection[];
         comboSelections?: ShopComboSelectionInput[];
+        loyaltyReward?: boolean;
       }>;
       customerEmail?: string;
       customerPhone?: string;
@@ -751,6 +872,7 @@ router.post("/:slug/orders", async (req: Request, res: Response) => {
       tipAmount?: number;
       scheduledFor?: string | null;
       guestCheckout?: boolean;
+      pointsToRedeem?: number;
     };
 
     if (!items?.length) {
@@ -815,9 +937,12 @@ router.post("/:slug/orders", async (req: Request, res: Response) => {
     const taxRate = MerchantSettingsService.channelTaxRate(merchant, channel);
     const db = getDb();
     const authCustomer = optionalCustomer(req);
+    const loyaltyProgram = ShopLoyaltyService.programFromMerchant(merchant);
 
     let subtotal = 0;
     let taxAmount = 0;
+    let rewardPointsNeeded = 0;
+    const rewardLines: Array<{ productId: string; points: number; quantity: number }> = [];
     const lineItems: Array<{
       productId: string;
       productName: string;
@@ -825,6 +950,8 @@ router.post("/:slug/orders", async (req: Request, res: Response) => {
       unitPrice: number;
       totalPrice: number;
       taxAmount: number;
+      loyaltyReward: boolean;
+      rewardPointsCost: number;
       selectedExtras: Array<{ id: string; name: string; price: number }>;
       comboSelections: Array<{
         slotId: string;
@@ -845,6 +972,40 @@ router.post("/:slug/orders", async (req: Request, res: Response) => {
       }
       const qty = Number(item.quantity) || 0;
       if (qty <= 0) continue;
+
+      const wantsReward = !!item.loyaltyReward;
+      if (wantsReward) {
+        if (!loyaltyProgram.enabled) {
+          return res.status(400).json({ error: "Loyalty program is not enabled" });
+        }
+        if (!authCustomer.customerId) {
+          return res.status(401).json({ error: "Login required to redeem free rewards" });
+        }
+        const cost = Number(product.loyaltyRewardPoints) || 0;
+        if (cost < 1) {
+          return res.status(400).json({ error: `${product.name} is not available as a free reward` });
+        }
+        const lineCost = cost * qty;
+        rewardPointsNeeded += lineCost;
+        rewardLines.push({ productId: product.id, points: lineCost, quantity: qty });
+
+        const flatExtras: Array<{ id: string; name: string; price: number }> = [
+          { id: "loyalty_reward", name: `Free reward (${cost} pts)`, price: 0 },
+        ];
+        lineItems.push({
+          productId: product.id,
+          productName: product.name,
+          quantity: qty,
+          unitPrice: 0,
+          totalPrice: 0,
+          taxAmount: 0,
+          loyaltyReward: true,
+          rewardPointsCost: cost,
+          selectedExtras: flatExtras,
+          comboSelections: [],
+        });
+        continue;
+      }
 
       let comboSelections: (typeof lineItems)[number]["comboSelections"] = [];
       let comboSurcharge = 0;
@@ -899,6 +1060,8 @@ router.post("/:slug/orders", async (req: Request, res: Response) => {
         unitPrice,
         totalPrice,
         taxAmount: lineTax,
+        loyaltyReward: false,
+        rewardPointsCost: 0,
         selectedExtras: flatExtras,
         comboSelections,
       });
@@ -907,6 +1070,38 @@ router.post("/:slug/orders", async (req: Request, res: Response) => {
     if (!lineItems.length) {
       return res.status(400).json({ error: "No valid items" });
     }
+
+    let pointsDiscount = 0;
+    let cashPointsUsed = 0;
+    const requestedCashPoints = Math.max(0, Math.floor(Number(pointsToRedeem) || 0));
+    if (requestedCashPoints > 0 || rewardPointsNeeded > 0) {
+      if (!loyaltyProgram.enabled) {
+        return res.status(400).json({ error: "Loyalty program is not enabled" });
+      }
+      if (!authCustomer.customerId) {
+        return res.status(401).json({ error: "Login required to redeem points" });
+      }
+      const balance = await ShopLoyaltyService.getBalance(merchant.id, authCustomer.customerId);
+      if (balance < rewardPointsNeeded) {
+        return res.status(400).json({ error: "Insufficient loyalty points for free rewards" });
+      }
+      const balanceAfterRewards = balance - rewardPointsNeeded;
+      if (requestedCashPoints > 0) {
+        const maxPts = ShopLoyaltyService.maxRedeemablePoints(
+          subtotal,
+          balanceAfterRewards,
+          loyaltyProgram.redeemPointsPerChf
+        );
+        const usePts = Math.min(requestedCashPoints, maxPts);
+        const { discountChf, pointsUsed } = ShopLoyaltyService.computeCashDiscount(
+          usePts,
+          loyaltyProgram.redeemPointsPerChf
+        );
+        pointsDiscount = discountChf;
+        cashPointsUsed = pointsUsed;
+      }
+    }
+    const totalPointsRedeemed = rewardPointsNeeded + cashPointsUsed;
 
     let deliveryFee = 0;
     let deliveryZoneId: string | undefined;
@@ -970,8 +1165,9 @@ router.post("/:slug/orders", async (req: Request, res: Response) => {
     taxAmount = roundMoney2(taxAmount + feeTax);
     subtotal = roundMoney2(subtotal);
     deliveryFee = roundMoney2(deliveryFee);
+    pointsDiscount = roundMoney2(pointsDiscount);
     const orderNumber = `WEB-${Date.now()}-${uuidv4().substring(0, 6).toUpperCase()}`;
-    const preCardTotal = subtotal + deliveryFee + tip + taxAmount;
+    const preCardTotal = Math.max(0, subtotal - pointsDiscount) + deliveryFee + tip + taxAmount;
     const cardFeeFixed = Number(merchant.onlineCardFeeFixed || 0) || 0;
     const cardFeePercent = Number(merchant.onlineCardFeePercent || 0) || 0;
     const cardFee =
@@ -996,6 +1192,11 @@ router.post("/:slug/orders", async (req: Request, res: Response) => {
 
     const paymentStatus = payMethod === "card" ? "awaiting_payment" : "cash";
 
+    // Prefer logged-in customer for loyalty redemptions
+    if ((totalPointsRedeemed > 0 || requestedCashPoints > 0) && authCustomer.customerId) {
+      customerId = authCustomer.customerId;
+    }
+
     const [order] = await db
       .insert(schema.orders)
       .values({
@@ -1007,10 +1208,13 @@ router.post("/:slug/orders", async (req: Request, res: Response) => {
         status: "pending_approval",
         subtotal: subtotal.toFixed(2),
         taxAmount: taxAmount.toFixed(2),
-        discountAmount: "0",
+        discountAmount: pointsDiscount.toFixed(2),
         deliveryFee: deliveryFee.toFixed(2),
         tipAmount: tip.toFixed(2),
         cardFee: cardFee.toFixed(2),
+        pointsDiscount: pointsDiscount.toFixed(2),
+        pointsEarned: 0,
+        pointsRedeemed: totalPointsRedeemed,
         total: total.toFixed(2),
         paymentMethod: payMethod,
         paymentStatus,
@@ -1038,6 +1242,43 @@ router.post("/:slug/orders", async (req: Request, res: Response) => {
       });
     }
 
+    // Redeem after insert so events carry orderId; roll back order on failure
+    if (totalPointsRedeemed > 0 && customerId) {
+      try {
+        for (const rl of rewardLines) {
+          await ShopLoyaltyService.redeemPoints({
+            merchantId: merchant.id,
+            customerId,
+            points: rl.points,
+            orderId: order.id,
+            productId: rl.productId,
+            eventType: "redeem_product",
+            meta: { quantity: rl.quantity },
+          });
+        }
+        if (cashPointsUsed > 0) {
+          await ShopLoyaltyService.redeemPoints({
+            merchantId: merchant.id,
+            customerId,
+            points: cashPointsUsed,
+            orderId: order.id,
+            eventType: "redeem_cash",
+            meta: { discountChf: pointsDiscount },
+          });
+        }
+      } catch (redeemErr) {
+        await db.delete(schema.orderItems).where(eq(schema.orderItems.orderId, order.id));
+        await db.delete(schema.orders).where(eq(schema.orders.id, order.id));
+        throw redeemErr;
+      }
+    }
+
+    let finalOrder = order;
+    // Earn immediately on cash; card earns on confirm-payment
+    if (payMethod === "cash" && customerId && loyaltyProgram.enabled) {
+      finalOrder = (await earnLoyaltyForOrder(merchant, order)) as typeof order;
+    }
+
     let paymentSession: unknown = null;
     if (payMethod === "card") {
       try {
@@ -1046,7 +1287,7 @@ router.post("/:slug/orders", async (req: Request, res: Response) => {
         const session = await AdyenService.initializePaymentSession(
           merchant.id,
           order.id,
-          parseFloat(order.total.toString()),
+          parseFloat(finalOrder.total.toString()),
           "CHF",
           returnUrl
         );
@@ -1069,24 +1310,27 @@ router.post("/:slug/orders", async (req: Request, res: Response) => {
     res.status(201).json({
       success: true,
       order: {
-        id: order.id,
-        orderNumber: order.orderNumber,
-        status: order.status,
-        fulfillmentChannel: order.fulfillmentChannel,
-        paymentMethod: order.paymentMethod,
-        paymentStatus: order.paymentStatus,
-        subtotal: order.subtotal,
-        deliveryFee: order.deliveryFee,
-        tipAmount: order.tipAmount,
-        cardFee: order.cardFee,
-        taxAmount: order.taxAmount,
-        total: order.total,
-        scheduledFor: order.scheduledFor,
-        shippingAddress: order.shippingAddress,
-        customerName: order.customerName,
-        customerPhone: order.customerPhone,
-        customerEmail: order.customerEmail,
-        notes: order.notes,
+        id: finalOrder.id,
+        orderNumber: finalOrder.orderNumber,
+        status: finalOrder.status,
+        fulfillmentChannel: finalOrder.fulfillmentChannel,
+        paymentMethod: finalOrder.paymentMethod,
+        paymentStatus: finalOrder.paymentStatus,
+        subtotal: finalOrder.subtotal,
+        deliveryFee: finalOrder.deliveryFee,
+        tipAmount: finalOrder.tipAmount,
+        cardFee: finalOrder.cardFee,
+        taxAmount: finalOrder.taxAmount,
+        pointsDiscount: finalOrder.pointsDiscount,
+        pointsEarned: finalOrder.pointsEarned,
+        pointsRedeemed: finalOrder.pointsRedeemed,
+        total: finalOrder.total,
+        scheduledFor: finalOrder.scheduledFor,
+        shippingAddress: finalOrder.shippingAddress,
+        customerName: finalOrder.customerName,
+        customerPhone: finalOrder.customerPhone,
+        customerEmail: finalOrder.customerEmail,
+        notes: finalOrder.notes,
       },
       paymentSession,
     });
@@ -1125,6 +1369,9 @@ router.get("/:slug/orders/:orderId", async (req: Request, res: Response) => {
         tipAmount: order.tipAmount,
         cardFee: order.cardFee,
         taxAmount: order.taxAmount,
+        pointsDiscount: order.pointsDiscount,
+        pointsEarned: order.pointsEarned,
+        pointsRedeemed: order.pointsRedeemed,
         total: order.total,
         scheduledFor: order.scheduledFor,
         shippingAddress: order.shippingAddress,
@@ -1232,7 +1479,14 @@ router.post("/:slug/orders/:orderId/confirm-payment", async (req: Request, res: 
       /* optional */
     }
 
-    res.json({ success: true, order: updated });
+    let finalOrder = updated;
+    try {
+      finalOrder = (await earnLoyaltyForOrder(merchant, updated)) as typeof updated;
+    } catch (earnErr) {
+      console.error("Loyalty earn on confirm-payment failed:", earnErr);
+    }
+
+    res.json({ success: true, order: finalOrder });
   } catch (error) {
     res.status(400).json({ error: error instanceof Error ? error.message : "Confirm failed" });
   }

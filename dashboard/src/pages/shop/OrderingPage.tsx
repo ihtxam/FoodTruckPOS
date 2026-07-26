@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import axios from 'axios';
 import {
   emptyDraft,
   lineSignature,
   loadCart,
+  loadCustomerToken,
   newCartLineId,
   resolveShopKey,
   saveCart,
@@ -40,7 +41,17 @@ interface Product {
   extras?: Array<{ id: string; name: string; price: number }>;
   modifierGroups?: ShopModifierGroup[];
   comboSlots?: ComboSlot[];
+  loyaltyRewardPoints?: number | null;
 }
+
+type LoyaltyReward = {
+  id: string;
+  name: string;
+  image?: string | null;
+  price: number;
+  loyaltyRewardPoints: number;
+  unlocked: boolean;
+};
 
 interface Category {
   id: string;
@@ -72,6 +83,11 @@ export default function OrderingPage() {
   const [deliveryInfo, setDeliveryInfo] = useState<any>(null);
   const [pendingProduct, setPendingProduct] = useState<ShopProductForModifiers | null>(null);
   const [pendingCombo, setPendingCombo] = useState<ShopComboProduct | null>(null);
+  const [customer, setCustomer] = useState<any>(null);
+  const [loyaltyBalance, setLoyaltyBalance] = useState(0);
+  const [loyaltyRewards, setLoyaltyRewards] = useState<LoyaltyReward[]>([]);
+  const [loyaltyProgress, setLoyaltyProgress] = useState(0);
+  const [nextRewardPts, setNextRewardPts] = useState<number | null>(null);
 
   useEffect(() => {
     if (!shopKey) {
@@ -85,14 +101,49 @@ export default function OrderingPage() {
 
     const load = async () => {
       try {
-        const [shopRes, menuRes] = await Promise.all([
+        const token = loadCustomerToken(shopKey);
+        const [shopRes, menuRes, loyaltyRes] = await Promise.all([
           axios.get(`/api/shop/${shopKey}`),
           axios.get(`/api/shop/${shopKey}/menu`),
+          axios.get(`/api/shop/${shopKey}/loyalty`, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined),
         ]);
         const data = shopRes.data.data;
         setMerchant(data);
         setMenu(menuRes.data.data || []);
         setSelectedCategory(menuRes.data.data?.[0]?.id || '');
+
+        const loyaltyData = loyaltyRes.data || {};
+        setLoyaltyRewards(loyaltyData.rewards || []);
+        if (token && loyaltyData.balance != null) {
+          setLoyaltyBalance(Number(loyaltyData.balance) || 0);
+          setLoyaltyProgress(Number(loyaltyData.progressPercent) || 0);
+          setNextRewardPts(
+            loyaltyData.nextReward?.loyaltyRewardPoints != null
+              ? Number(loyaltyData.nextReward.loyaltyRewardPoints)
+              : null
+          );
+        } else {
+          setLoyaltyBalance(0);
+          setLoyaltyProgress(0);
+          setNextRewardPts(null);
+        }
+
+        if (token) {
+          try {
+            const me = await axios.get(`/api/shop/${shopKey}/auth/me`, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            setCustomer(me.data.customer);
+            if (me.data.customer?.loyaltyPoints != null) {
+              setLoyaltyBalance(Number(me.data.customer.loyaltyPoints) || 0);
+            }
+          } catch {
+            setCustomer(null);
+          }
+        } else {
+          setCustomer(null);
+        }
+
         if (isLocale(data.language)) {
           try {
             const stored = localStorage.getItem('manupos_shop_lang');
@@ -169,8 +220,40 @@ export default function OrderingPage() {
     product: Product | ShopProductForModifiers | ShopComboProduct,
     extras: ShopSelectedExtra[] = [],
     unitPrice?: number,
-    comboSelections: ShopComboSelection[] = []
+    comboSelections: ShopComboSelection[] = [],
+    asReward = false
   ) => {
+    const rewardCost =
+      'loyaltyRewardPoints' in product && product.loyaltyRewardPoints != null
+        ? Number(product.loyaltyRewardPoints)
+        : 0;
+    if (asReward) {
+      setDraft((prev) => {
+        const existing = prev.items.find((item) => item.id === product.id && item.loyaltyReward);
+        const items: ShopCartItem[] = existing
+          ? prev.items.map((item) =>
+              item.lineId === existing.lineId ? { ...item, quantity: item.quantity + 1 } : item
+            )
+          : [
+              ...prev.items,
+              {
+                lineId: newCartLineId(),
+                id: product.id,
+                name: product.name,
+                price: 0,
+                basePrice: 0,
+                quantity: 1,
+                description: product.description,
+                image: product.image,
+                loyaltyReward: true,
+                rewardPointsCost: rewardCost,
+              },
+            ];
+        return { ...prev, items };
+      });
+      return;
+    }
+
     const price = roundMoney2(
       unitPrice ??
         product.price +
@@ -185,6 +268,7 @@ export default function OrderingPage() {
       const existing = prev.items.find(
         (item) =>
           item.id === product.id &&
+          !item.loyaltyReward &&
           lineSignature(item.selectedExtras, item.comboSelections) === sig
       );
       const items: ShopCartItem[] = existing
@@ -309,6 +393,9 @@ export default function OrderingPage() {
     { id: 'dine_in', label: t('shopDineIn') },
   ];
   const channelButtons = allChannels.filter((c) => channels[c.id]?.enabled);
+  const loyaltyEnabled = !!merchant?.loyalty?.enabled;
+  const unlockedRewards = loyaltyRewards.filter((r) => r.unlocked);
+  const accountPath = `${shopBasePath(shopKey)}/account`;
 
   const Basket = (
     <aside className="bg-white border border-stone-200 flex flex-col h-full">
@@ -328,7 +415,12 @@ export default function OrderingPage() {
             {cart.map((item) => (
               <li key={item.lineId} className="flex gap-3 text-sm">
                 <div className="flex-1 min-w-0">
-                  <div className="font-medium text-stone-900">{item.name}</div>
+                  <div className="font-medium text-stone-900">
+                    {item.name}
+                    {item.loyaltyReward && (
+                      <span className="ml-2 text-xs font-semibold text-teal-800">{t('shopFree')}</span>
+                    )}
+                  </div>
                   {!!item.comboSelections?.length && (
                     <p className="text-xs text-stone-500 mt-0.5 leading-snug">
                       {item.comboSelections
@@ -345,7 +437,11 @@ export default function OrderingPage() {
                       {item.selectedExtras.map((e) => e.name).join(', ')}
                     </p>
                   )}
-                  <div className="text-stone-500">CHF {item.price.toFixed(2)}</div>
+                  <div className="text-stone-500">
+                    {item.loyaltyReward
+                      ? t('shopPtsBadge').replace('{n}', String(item.rewardPointsCost || 0))
+                      : `CHF ${item.price.toFixed(2)}`}
+                  </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <button
@@ -480,9 +576,23 @@ export default function OrderingPage() {
           </div>
           <div className="flex items-center gap-2 sm:gap-4">
             <ShopLangSwitcher />
-            <nav className="hidden sm:flex items-center gap-6 text-sm font-medium">
+            <nav className="hidden sm:flex items-center gap-4 text-sm font-medium">
               <span className="text-stone-900 border-b-2 border-stone-900 pb-0.5">{t('shopOrder')}</span>
+              <Link to={accountPath} className="text-stone-600 hover:text-stone-900">
+                {t('shopAccount')}
+              </Link>
             </nav>
+            {customer && loyaltyEnabled && (
+              <span className="hidden sm:inline text-xs font-semibold bg-teal-100 text-teal-900 px-2 py-1">
+                {t('shopPointsChip').replace('{n}', String(loyaltyBalance))}
+              </span>
+            )}
+            <Link
+              to={accountPath}
+              className="sm:hidden text-sm font-semibold text-stone-800 underline underline-offset-2"
+            >
+              {t('shopAccount')}
+            </Link>
             <button
               type="button"
               className="lg:hidden bg-stone-900 text-white px-4 py-2 text-sm font-semibold"
@@ -556,11 +666,94 @@ export default function OrderingPage() {
               );
             })}
           </div>
+
+          {loyaltyEnabled && (
+            <div className="mt-4 border border-stone-200 bg-stone-50 px-4 py-3 space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-semibold">{t('shopFidelity')}</p>
+                {customer ? (
+                  <span className="text-sm font-semibold text-teal-900">
+                    {t('shopPointsChip').replace('{n}', String(loyaltyBalance))}
+                  </span>
+                ) : (
+                  <Link to={accountPath} className="text-xs font-semibold underline underline-offset-2">
+                    {t('shopLoyaltyLoginHint')}
+                  </Link>
+                )}
+              </div>
+              {customer ? (
+                <>
+                  <div className="h-1.5 bg-stone-200 overflow-hidden">
+                    <div
+                      className="h-full bg-teal-700 transition-all"
+                      style={{ width: `${loyaltyProgress}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-stone-600">
+                    {nextRewardPts != null
+                      ? t('shopProgressToReward').replace(
+                          '{n}',
+                          String(Math.max(0, nextRewardPts - loyaltyBalance))
+                        )
+                      : unlockedRewards.length
+                        ? t('shopAllRewardsUnlocked')
+                        : t('shopFidelityTease')}
+                  </p>
+                </>
+              ) : (
+                <p className="text-xs text-stone-600">{t('shopFidelityTease')}</p>
+              )}
+            </div>
+          )}
         </div>
       </section>
 
       <div className="max-w-7xl mx-auto px-4 py-6 grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-6 items-start">
         <div>
+          {loyaltyEnabled && unlockedRewards.length > 0 && (
+            <div className="mb-5 space-y-2">
+              <h2 className="text-sm font-bold uppercase tracking-wide text-stone-500">
+                {t('shopFreeRewards')}
+              </h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {unlockedRewards.map((r) => (
+                  <div
+                    key={r.id}
+                    className="bg-white border border-teal-200 p-3 flex items-center justify-between gap-3"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-semibold truncate">{r.name}</p>
+                      <p className="text-xs text-teal-800">
+                        {t('shopPtsBadge').replace('{n}', String(r.loyaltyRewardPoints))}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        addConfiguredItem(
+                          {
+                            id: r.id,
+                            name: r.name,
+                            price: r.price,
+                            image: r.image || undefined,
+                            loyaltyRewardPoints: r.loyaltyRewardPoints,
+                          },
+                          [],
+                          0,
+                          [],
+                          true
+                        )
+                      }
+                      className="shrink-0 text-xs font-semibold bg-teal-800 text-white px-3 py-2"
+                    >
+                      {t('shopAddFree')}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="sticky top-16 z-20 -mx-4 px-4 py-3 bg-[#f6f5f2]/80 backdrop-blur border-b border-stone-200/80 mb-4">
             <div className="flex gap-2 overflow-x-auto pb-1">
               {menu.map((cat) => (
@@ -581,40 +774,67 @@ export default function OrderingPage() {
           </div>
 
           <div className="space-y-3">
-            {visibleItems.map((product) => (
-              <button
-                key={product.id}
-                type="button"
-                onClick={() => handleProductClick(product)}
-                className="w-full text-left bg-white border border-stone-200 p-4 flex gap-4 hover:border-stone-400 transition-colors"
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-stone-900">{product.name}</div>
-                  {product.description && (
-                    <p className="text-sm text-stone-500 mt-1 line-clamp-2">{product.description}</p>
-                  )}
-                  <div className="mt-2 flex items-center gap-2 flex-wrap">
-                    <span className="font-semibold">CHF {product.price.toFixed(2)}</span>
-                    {productHasComboSlots(product) ? (
-                      <span className="text-xs font-medium text-teal-800">Build combo</span>
-                    ) : productHasModifiers(product) ? (
-                      <span className="text-xs font-medium text-stone-500">Customize</span>
-                    ) : null}
+            {visibleItems.map((product) => {
+              const rewardPts =
+                product.loyaltyRewardPoints != null && Number(product.loyaltyRewardPoints) >= 1
+                  ? Number(product.loyaltyRewardPoints)
+                  : null;
+              const unlocked = rewardPts != null && customer && loyaltyBalance >= rewardPts;
+              return (
+                <div
+                  key={product.id}
+                  className="bg-white border border-stone-200 p-4 flex gap-4 hover:border-stone-400 transition-colors"
+                >
+                  <button
+                    type="button"
+                    onClick={() => handleProductClick(product)}
+                    className="flex-1 min-w-0 text-left"
+                  >
+                    <div className="font-semibold text-stone-900 flex flex-wrap items-center gap-2">
+                      <span>{product.name}</span>
+                      {rewardPts != null && (
+                        <span className="text-[11px] font-semibold bg-amber-100 text-amber-900 px-1.5 py-0.5">
+                          {t('shopPtsBadge').replace('{n}', String(rewardPts))}
+                        </span>
+                      )}
+                    </div>
+                    {product.description && (
+                      <p className="text-sm text-stone-500 mt-1 line-clamp-2">{product.description}</p>
+                    )}
+                    <div className="mt-2 flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold">CHF {product.price.toFixed(2)}</span>
+                      {productHasComboSlots(product) ? (
+                        <span className="text-xs font-medium text-teal-800">Build combo</span>
+                      ) : productHasModifiers(product) ? (
+                        <span className="text-xs font-medium text-stone-500">Customize</span>
+                      ) : null}
+                    </div>
+                  </button>
+                  <div className="flex flex-col items-end gap-2 shrink-0">
+                    {product.image ? (
+                      <img
+                        src={product.image}
+                        alt=""
+                        className="w-24 h-24 object-cover bg-stone-100"
+                      />
+                    ) : (
+                      <div className="w-24 h-24 bg-stone-100 flex items-center justify-center text-2xl text-stone-300">
+                        +
+                      </div>
+                    )}
+                    {unlocked && (
+                      <button
+                        type="button"
+                        onClick={() => addConfiguredItem(product, [], 0, [], true)}
+                        className="text-xs font-semibold bg-teal-800 text-white px-2 py-1"
+                      >
+                        {t('shopFree')}
+                      </button>
+                    )}
                   </div>
                 </div>
-                {product.image ? (
-                  <img
-                    src={product.image}
-                    alt=""
-                    className="w-24 h-24 object-cover flex-shrink-0 bg-stone-100"
-                  />
-                ) : (
-                  <div className="w-24 h-24 flex-shrink-0 bg-stone-100 flex items-center justify-center text-2xl text-stone-300">
-                    +
-                  </div>
-                )}
-              </button>
-            ))}
+              );
+            })}
             {visibleItems.length === 0 && (
               <p className="text-stone-500 py-12 text-center">{t('shopNoProducts')}</p>
             )}

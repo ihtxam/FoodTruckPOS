@@ -11,6 +11,7 @@ import MerchantDashboard from '@/pages/merchant/Dashboard';
 import OrderingPage from '@/pages/shop/OrderingPage';
 import CheckoutPage from '@/pages/shop/CheckoutPage';
 import OrderConfirmationPage from '@/pages/shop/OrderConfirmationPage';
+import AccountPage from '@/pages/shop/AccountPage';
 import ReceiptPage from '@/pages/ReceiptPage';
 import ProtectedRoute from '@/components/ProtectedRoute';
 
@@ -78,6 +79,14 @@ function App() {
               </ShopRoutes>
             }
           />
+          <Route
+            path="/shop/:merchantSlug/account"
+            element={
+              <ShopRoutes>
+                <AccountPage />
+              </ShopRoutes>
+            }
+          />
 
           {/* shop.domain/{slug} — Chaslay-style path shops */}
           {shopHub && (
@@ -95,6 +104,14 @@ function App() {
                 element={
                   <ShopRoutes>
                     <OrderConfirmationPage />
+                  </ShopRoutes>
+                }
+              />
+              <Route
+                path="/:merchantSlug/account"
+                element={
+                  <ShopRoutes>
+                    <AccountPage />
                   </ShopRoutes>
                 }
               />
@@ -133,6 +150,14 @@ function App() {
                 element={
                   <ShopRoutes>
                     <OrderConfirmationPage />
+                  </ShopRoutes>
+                }
+              />
+              <Route
+                path="/account"
+                element={
+                  <ShopRoutes>
+                    <AccountPage />
                   </ShopRoutes>
                 }
               />

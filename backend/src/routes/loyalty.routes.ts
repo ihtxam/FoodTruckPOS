@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import { verifyToken, requireMerchant, setMerchantContext } from "@/middleware/auth.middleware";
 import { LoyaltyService } from "@/services/loyalty.service";
+import { ShopLoyaltyService } from "@/services/shop-loyalty.service";
 
 const router = Router();
 
@@ -8,6 +9,61 @@ const router = Router();
 router.use(verifyToken);
 router.use(requireMerchant);
 router.use(setMerchantContext);
+
+/**
+ * GET /api/loyalty/program
+ * Online shop fidelity program settings
+ */
+router.get("/program", async (req: Request, res: Response) => {
+  try {
+    const merchantId = req.merchantId;
+    if (!merchantId) {
+      return res.status(400).json({ error: "Merchant ID is required" });
+    }
+    const program = await ShopLoyaltyService.getProgram(merchantId);
+    res.json({
+      success: true,
+      program,
+      formula: {
+        earn: `floor(paidFoodSubtotal × ${program.earnPointsPerChf}) pts — tip/delivery excluded`,
+        redeem: `${program.redeemPointsPerChf} pts = CHF 1.00 cash discount`,
+        freeProduct: "product.loyaltyRewardPoints = N → unlock when balance ≥ N",
+        expiry: `${program.expiryDays} days FIFO lots`,
+      },
+    });
+  } catch (error) {
+    console.error("Error getting loyalty program:", error);
+    res.status(500).json({ error: error instanceof Error ? error.message : "Failed to get program" });
+  }
+});
+
+/**
+ * PUT /api/loyalty/program
+ * Update online shop fidelity program settings
+ */
+router.put("/program", async (req: Request, res: Response) => {
+  try {
+    const merchantId = req.merchantId;
+    if (!merchantId) {
+      return res.status(400).json({ error: "Merchant ID is required" });
+    }
+    const { enabled, earnPointsPerChf, redeemPointsPerChf, expiryDays } = req.body || {};
+    const program = await ShopLoyaltyService.updateProgram(merchantId, {
+      enabled,
+      earnPointsPerChf,
+      redeemPointsPerChf,
+      expiryDays,
+    });
+    res.json({
+      success: true,
+      message: "Fidelity program updated",
+      program,
+    });
+  } catch (error) {
+    console.error("Error updating loyalty program:", error);
+    res.status(400).json({ error: error instanceof Error ? error.message : "Failed to update program" });
+  }
+});
 
 /**
  * POST /api/loyalty/cards

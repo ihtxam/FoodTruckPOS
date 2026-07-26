@@ -81,6 +81,14 @@ export const merchants = pgTable(
     onlineCardFeeFixed: decimal("online_card_fee_fixed", { precision: 10, scale: 2 }).default("0"),
     /** Percent surcharge on (subtotal+tax+delivery+tip) for online card checkouts */
     onlineCardFeePercent: decimal("online_card_fee_percent", { precision: 6, scale: 3 }).default("0"),
+    // Online shop fidelity / loyalty program (customer account points)
+    loyaltyEnabled: boolean("loyalty_enabled").default(false).notNull(),
+    /** Points earned per 1.00 CHF of paid food subtotal (default 1) */
+    loyaltyEarnPointsPerChf: decimal("loyalty_earn_points_per_chf", { precision: 8, scale: 3 }).default("1"),
+    /** Points required to redeem 1.00 CHF discount (default 100) */
+    loyaltyRedeemPointsPerChf: integer("loyalty_redeem_points_per_chf").default(100).notNull(),
+    /** Earn lots expire after this many days (default 30) */
+    loyaltyPointsExpiryDays: integer("loyalty_points_expiry_days").default(30).notNull(),
     panelLanguage: varchar("panel_language", { length: 10 }).default("en").notNull(), // en | fr | de
     /** Chaslay/FoodTruck Android POS sync key (X-Api-Key header) */
     syncApiKey: varchar("sync_api_key", { length: 64 }),
@@ -294,6 +302,8 @@ export const products = pgTable(
       .default([]),
     buttonColor: varchar("button_color", { length: 20 }), // POS button color hex
     allowExtras: boolean("allow_extras").default(false).notNull(),
+    /** If set (>0), customer can claim this product free by spending this many loyalty points */
+    loyaltyRewardPoints: integer("loyalty_reward_points"),
     sortOrder: integer("sort_order").default(0).notNull(),
     clientId: varchar("client_id", { length: 64 }), // offline sync id from POS device
     isActive: boolean("is_active").default(true).notNull(),
@@ -436,6 +446,10 @@ export const orders = pgTable(
     tipAmount: decimal("tip_amount", { precision: 10, scale: 2 }).default("0"),
     /** Online card surcharge charged to the customer */
     cardFee: decimal("card_fee", { precision: 10, scale: 2 }).default("0"),
+    /** CHF discount applied from redeeming loyalty points as money */
+    pointsDiscount: decimal("points_discount", { precision: 10, scale: 2 }).default("0"),
+    pointsEarned: integer("points_earned").default(0),
+    pointsRedeemed: integer("points_redeemed").default(0),
     total: decimal("total", { precision: 10, scale: 2 }).notNull(),
     paymentMethod: varchar("payment_method", { length: 50 }), // cash, card, terminal, loyalty, online
     paymentStatus: varchar("payment_status", { length: 50 }), // pending, awaiting_payment, completed, failed
@@ -827,6 +841,58 @@ export const loyaltyTransactions = pgTable(
 );
 
 // ============================================================================
+// SHOP LOYALTY POINT LOTS (FIFO expiry for customer accounts)
+// ============================================================================
+
+export const loyaltyPointLots = pgTable(
+  "loyalty_point_lots",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    merchantId: uuid("merchant_id")
+      .notNull()
+      .references(() => merchants.id, { onDelete: "cascade" }),
+    customerId: uuid("customer_id")
+      .notNull()
+      .references(() => customers.id, { onDelete: "cascade" }),
+    orderId: uuid("order_id").references(() => orders.id, { onDelete: "set null" }),
+    pointsGranted: integer("points_granted").notNull(),
+    pointsRemaining: integer("points_remaining").notNull(),
+    earnedAt: timestamp("earned_at").defaultNow().notNull(),
+    expiresAt: timestamp("expires_at").notNull(),
+    source: varchar("source", { length: 40 }).default("earn").notNull(), // earn | adjustment | bonus
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    customerIdx: index("loyalty_point_lots_customer_idx").on(table.customerId),
+    merchantIdx: index("loyalty_point_lots_merchant_idx").on(table.merchantId),
+    expiresIdx: index("loyalty_point_lots_expires_idx").on(table.expiresAt),
+  })
+);
+
+export const loyaltyPointEvents = pgTable(
+  "loyalty_point_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    merchantId: uuid("merchant_id")
+      .notNull()
+      .references(() => merchants.id, { onDelete: "cascade" }),
+    customerId: uuid("customer_id")
+      .notNull()
+      .references(() => customers.id, { onDelete: "cascade" }),
+    orderId: uuid("order_id").references(() => orders.id, { onDelete: "set null" }),
+    productId: uuid("product_id").references(() => products.id, { onDelete: "set null" }),
+    eventType: varchar("event_type", { length: 40 }).notNull(), // earn | redeem_cash | redeem_product | expire | adjust
+    points: integer("points").notNull(),
+    meta: json("meta").$type<Record<string, unknown>>().default({}),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    customerIdx: index("loyalty_point_events_customer_idx").on(table.customerId),
+    merchantIdx: index("loyalty_point_events_merchant_idx").on(table.merchantId),
+  })
+);
+
+// ============================================================================
 // DAILY REPORTS
 // ============================================================================
 
@@ -868,6 +934,8 @@ export const merchantsRelations = relations(merchants, ({ many }) => ({
   paymentTransactions: many(paymentTransactions),
   loyaltyCards: many(loyaltyCards),
   loyaltyTransactions: many(loyaltyTransactions),
+  loyaltyPointLots: many(loyaltyPointLots),
+  loyaltyPointEvents: many(loyaltyPointEvents),
   dailyReports: many(dailyReports),
   rfidReaders: many(rfidReaders),
   deliveryZones: many(deliveryZones),
@@ -934,6 +1002,19 @@ export const loyaltyCardsRelations = relations(loyaltyCards, ({ one, many }) => 
   merchant: one(merchants, { fields: [loyaltyCards.merchantId], references: [merchants.id] }),
   customer: one(customers, { fields: [loyaltyCards.customerId], references: [customers.id] }),
   transactions: many(loyaltyTransactions),
+}));
+
+export const loyaltyPointLotsRelations = relations(loyaltyPointLots, ({ one }) => ({
+  merchant: one(merchants, { fields: [loyaltyPointLots.merchantId], references: [merchants.id] }),
+  customer: one(customers, { fields: [loyaltyPointLots.customerId], references: [customers.id] }),
+  order: one(orders, { fields: [loyaltyPointLots.orderId], references: [orders.id] }),
+}));
+
+export const loyaltyPointEventsRelations = relations(loyaltyPointEvents, ({ one }) => ({
+  merchant: one(merchants, { fields: [loyaltyPointEvents.merchantId], references: [merchants.id] }),
+  customer: one(customers, { fields: [loyaltyPointEvents.customerId], references: [customers.id] }),
+  order: one(orders, { fields: [loyaltyPointEvents.orderId], references: [orders.id] }),
+  product: one(products, { fields: [loyaltyPointEvents.productId], references: [products.id] }),
 }));
 
 export const rfidReadersRelations = relations(rfidReaders, ({ one }) => ({

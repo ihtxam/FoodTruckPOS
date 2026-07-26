@@ -42,6 +42,9 @@ type OrderView = {
   deliveryFee: string;
   tipAmount: string;
   cardFee?: string;
+  pointsDiscount?: string | number | null;
+  pointsEarned?: number | null;
+  pointsRedeemed?: number | null;
   total: string;
   createdAt: string;
   items: OrderItem[];
@@ -378,6 +381,12 @@ export default function OrderConfirmationPage() {
           </ul>
           <div className="mt-4 pt-3 border-t border-stone-100 space-y-1 text-sm">
             <Row label={t('shopSubtotal')} value={money(order.subtotal)} />
+            {Number(order.pointsDiscount || 0) > 0 && (
+              <Row
+                label={t('shopPointsDiscount')}
+                value={`− ${money(order.pointsDiscount || 0)}`}
+              />
+            )}
             <Row label={t('shopTax')} value={money(order.taxAmount)} />
             <Row label={t('shopDelivery')} value={money(order.deliveryFee || 0)} />
             <Row label={t('shopTip')} value={money(order.tipAmount || 0)} />
@@ -386,7 +395,8 @@ export default function OrderConfirmationPage() {
             )}
             {(() => {
               const parts =
-                Number(order.subtotal || 0) +
+                Number(order.subtotal || 0) -
+                Number(order.pointsDiscount || 0) +
                 Number(order.taxAmount || 0) +
                 Number(order.deliveryFee || 0) +
                 Number(order.tipAmount || 0) +
@@ -401,6 +411,18 @@ export default function OrderConfirmationPage() {
               );
             })()}
             <Row label={t('shopTotal')} value={money(order.total)} bold />
+            {Number(order.pointsEarned || 0) > 0 && (
+              <Row
+                label={t('shopPointsEarned')}
+                value={`+${order.pointsEarned} ${t('shopPoints')}`}
+              />
+            )}
+            {Number(order.pointsRedeemed || 0) > 0 && (
+              <Row
+                label={t('shopPointsRedeemed')}
+                value={`−${order.pointsRedeemed} ${t('shopPoints')}`}
+              />
+            )}
           </div>
         </section>
       </main>
