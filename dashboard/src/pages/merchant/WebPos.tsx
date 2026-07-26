@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
+import { useI18n } from '@/lib/i18n';
 import { roundMoney2, roundTo005, roundingAdjustment } from '@/lib/money';
 import {
   generateWebPosReceiptText,
@@ -69,7 +70,8 @@ function money(n: number) {
   return `CHF ${n.toFixed(2)}`;
 }
 
-export default function WebPos() {
+export default function WebPos({ appMode = true }: { appMode?: boolean }) {
+  const { t } = useI18n();
   const [loading, setLoading] = useState(true);
   const [merchant, setMerchant] = useState<any>(null);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -88,6 +90,32 @@ export default function WebPos() {
   const [lastReceipt, setLastReceipt] = useState<string>('');
   const [lastReceiptUrl, setLastReceiptUrl] = useState<string>('');
   const [pendingProduct, setPendingProduct] = useState<ShopProductForModifiers | null>(null);
+
+  const showPanelMenus = useCallback(() => {
+    window.dispatchEvent(new CustomEvent('webpos:show-panel'));
+  }, []);
+
+  const enterPosApp = useCallback(() => {
+    window.dispatchEvent(new CustomEvent('webpos:enter-app'));
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      // Close product modal first, then restore merchant panel chrome
+      if (pendingProduct) {
+        e.preventDefault();
+        setPendingProduct(null);
+        return;
+      }
+      if (appMode) {
+        e.preventDefault();
+        showPanelMenus();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [appMode, pendingProduct, showPanelMenus]);
 
   const taxRate = useMemo(() => {
     if (!merchant) return 8.1;
@@ -343,8 +371,12 @@ export default function WebPos() {
   }
 
   return (
-    <div className="-m-6 h-[calc(100vh-4rem)] flex flex-col bg-slate-100">
-      <div className="flex items-center justify-between gap-3 px-4 py-3 bg-white border-b border-slate-200">
+    <div
+      className={`${
+        appMode ? 'h-dvh' : '-m-3 sm:-m-4 h-[calc(100dvh-4rem)]'
+      } flex flex-col bg-slate-100`}
+    >
+      <div className="flex items-center justify-between gap-3 px-4 py-3 bg-white border-b border-slate-200 shrink-0">
         <div>
           <h1 className="text-xl font-bold text-slate-900">WebPOS</h1>
           <p className="text-xs text-slate-500">
@@ -354,6 +386,12 @@ export default function WebPos() {
             ) : (
               <span className="text-amber-600 font-semibold">Print agent offline (browser print fallback)</span>
             )}
+            {appMode ? (
+              <>
+                {' '}
+                · <span className="text-slate-400">{t('webPosEscHint')}</span>
+              </>
+            ) : null}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -381,6 +419,15 @@ export default function WebPos() {
           <button type="button" className="btn-secondary text-sm py-1.5" onClick={() => load()}>
             Reload catalog
           </button>
+          {appMode ? (
+            <button type="button" className="btn-secondary text-sm py-1.5" onClick={showPanelMenus}>
+              {t('webPosShowPanel')}
+            </button>
+          ) : (
+            <button type="button" className="btn-primary text-sm py-1.5" onClick={enterPosApp}>
+              {t('webPosEnterApp')}
+            </button>
+          )}
         </div>
       </div>
 
