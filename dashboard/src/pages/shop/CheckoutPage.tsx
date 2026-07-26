@@ -139,6 +139,8 @@ export default function CheckoutPage() {
     return Number.isFinite(eta) && eta > 0 ? Math.max(15, eta) : 30;
   }, [merchant, draft.channel]);
 
+  const shopLocale = locale === 'fr' ? 'fr-CH' : locale === 'de' ? 'de-CH' : 'en-CH';
+
   const scheduleDays = useMemo(() => {
     if (!merchant) return [];
     return buildScheduleDays({
@@ -147,8 +149,16 @@ export default function CheckoutPage() {
       leadMinutes,
       intervalMinutes: 15,
       horizonDays: 2,
+      locale: shopLocale,
     });
-  }, [merchant, draft.channel, leadMinutes]);
+  }, [merchant, draft.channel, leadMinutes, shopLocale]);
+
+  const scheduleDayTitle = (offset: number) => {
+    if (offset === 0) return t('shopToday');
+    if (offset === 1) return t('shopTomorrow');
+    if (offset === 2) return t('shopDayAfterTomorrow');
+    return t('shopPlusDays').replace('{n}', String(offset));
+  };
 
   const activeScheduleDay = useMemo(() => {
     if (!scheduleDays.length) return null;
@@ -193,7 +203,7 @@ export default function CheckoutPage() {
   const checkDelivery = async () => {
     if (draft.channel !== 'delivery') return true;
     if (!draft.address.trim()) {
-      setError('Enter your delivery address');
+      setError(t('shopEnterDeliveryAddress'));
       return false;
     }
     setCheckingZone(true);
@@ -213,7 +223,7 @@ export default function CheckoutPage() {
       });
       setDeliveryInfo(res.data);
       if (!res.data.deliverable) {
-        setError(res.data.error || 'Outside delivery area');
+        setError(res.data.error || t('shopOutsideDelivery'));
         return false;
       }
       if (!res.data.meetsMinOrder) {
@@ -222,7 +232,7 @@ export default function CheckoutPage() {
       }
       return true;
     } catch (e: any) {
-      setError(e.response?.data?.error || 'Could not verify address');
+      setError(e.response?.data?.error || t('shopCouldNotVerifyAddress'));
       return false;
     } finally {
       setCheckingZone(false);
@@ -295,11 +305,11 @@ export default function CheckoutPage() {
       patch({ authMode: 'guest' });
     }
     if (whenMode === 'asap' && !channelOpen) {
-      setError('Store is closed — please choose a later time slot');
+      setError(t('shopClosedChooseLater'));
       return;
     }
     if (whenMode === 'later' && !draft.scheduledFor) {
-      setError('Please choose a day and time slot');
+      setError(t('shopChooseDayAndTime'));
       return;
     }
     if (whenMode === 'later' && scheduleDays.length === 0) {
@@ -374,7 +384,7 @@ export default function CheckoutPage() {
 
       navigate(`${shopBasePath(shopKey)}/order/${order.id}`);
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Checkout failed');
+      setError(err.response?.data?.error || t('shopCheckoutFailed'));
     } finally {
       setSubmitting(false);
     }
@@ -665,12 +675,12 @@ export default function CheckoutPage() {
                       </p>
                     ) : (
                       <>
-                        <div className="flex flex-wrap gap-2">
+                        <div className="grid grid-cols-3 gap-2">
                           {scheduleDays.map((day) => (
                             <button
                               key={day.offset}
                               type="button"
-                              className={`px-3 py-2 text-sm border rounded-md ${
+                              className={`min-w-0 px-1.5 py-2 text-center border rounded-md ${
                                 activeScheduleDay?.offset === day.offset
                                   ? 'bg-stone-900 text-white border-stone-900'
                                   : 'bg-white border-stone-300'
@@ -680,8 +690,10 @@ export default function CheckoutPage() {
                                 patch({ scheduledFor: day.slots[0]?.value || '' });
                               }}
                             >
-                              <span className="font-semibold block">{day.label}</span>
-                              <span className="text-[11px] opacity-80">
+                              <span className="font-semibold block text-xs sm:text-sm leading-tight">
+                                {scheduleDayTitle(day.offset)}
+                              </span>
+                              <span className="text-[10px] sm:text-[11px] opacity-80 block truncate">
                                 {day.weekday} {day.dateLabel}
                               </span>
                             </button>
