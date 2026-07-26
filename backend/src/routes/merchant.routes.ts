@@ -74,10 +74,21 @@ router.get("/products", async (req: Request, res: Response) => {
     }
 
     const products = await ProductService.getProducts(merchantId, page, limit, search, categoryId);
+    const productIds = (products || []).map((p: { id: string }) => p.id);
+    const groupsByProduct = await ModifierService.getGroupsForProducts(merchantId, productIds);
+    const withModifiers = (products || []).map((p: any) => {
+      const modifierGroups = groupsByProduct.get(p.id) || [];
+      const extras = Array.isArray(p.extras) ? p.extras : [];
+      return {
+        ...p,
+        modifierGroups,
+        allowExtras: !!p.allowExtras || modifierGroups.length > 0 || extras.length > 0,
+      };
+    });
 
     res.json({
       success: true,
-      products,
+      products: withModifiers,
       pagination: { page, limit },
     });
   } catch (error) {

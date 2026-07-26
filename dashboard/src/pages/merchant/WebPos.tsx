@@ -16,6 +16,12 @@ import {
   type AgentPrinter,
 } from '@/lib/print-agent';
 import { buildReceiptUrl, qrImageUrl } from '@/lib/qr';
+import { extrasSignature, type ShopSelectedExtra } from '@/lib/shop-cart';
+import ShopProductModifiersModal, {
+  productHasModifiers,
+  type ShopModifierGroup,
+  type ShopProductForModifiers,
+} from '@/components/shop/ShopProductModifiersModal';
 
 type Channel = 'takeaway' | 'dine_in' | 'delivery';
 
@@ -26,6 +32,9 @@ type Product = {
   categoryId?: string | null;
   isTaxable?: boolean;
   stock?: number;
+  allowExtras?: boolean;
+  extras?: Array<{ id: string; name: string; price: number; isDefault?: boolean }>;
+  modifierGroups?: ShopModifierGroup[];
 };
 
 type Category = { id: string; name: string };
@@ -38,6 +47,7 @@ type CartLine = {
   unitPrice: number;
   lineTotal: number;
   taxable: boolean;
+  selectedExtras: ShopSelectedExtra[];
 };
 
 type SaleRecord = {
@@ -77,6 +87,7 @@ export default function WebPos() {
   const [autoPrint, setAutoPrint] = useState(() => localStorage.getItem('manupos_webpos_autoprint') !== '0');
   const [lastReceipt, setLastReceipt] = useState<string>('');
   const [lastReceiptUrl, setLastReceiptUrl] = useState<string>('');
+  const [pendingProduct, setPendingProduct] = useState<ShopProductForModifiers | null>(null);
 
   const taxRate = useMemo(() => {
     if (!merchant) return 8.1;
@@ -160,31 +171,54 @@ export default function WebPos() {
     localStorage.setItem('manupos_webpos_autoprint', autoPrint ? '1' : '0');
   }, [autoPrint]);
 
-  const addProduct = (p: Product) => {
-    const unitPrice = roundMoney2(Number(p.price) || 0);
+  const addConfiguredProduct = (
+    p: Product,
+    unitPrice: number,
+    selectedExtras: ShopSelectedExtra[] = []
+  ) => {
+    const price = roundMoney2(unitPrice);
+    const sig = extrasSignature(selectedExtras);
     setCart((prev) => {
-      const existing = prev.find((l) => l.productId === p.id);
+      const existing = prev.find(
+        (l) => l.productId === p.id && extrasSignature(l.selectedExtras) === sig
+      );
       if (existing) {
         const quantity = existing.quantity + 1;
         return prev.map((l) =>
           l.lineId === existing.lineId
-            ? { ...l, quantity, lineTotal: roundMoney2(unitPrice * quantity) }
+            ? { ...l, quantity, lineTotal: roundMoney2(price * quantity) }
             : l
         );
       }
       return [
         ...prev,
         {
-          lineId: `${p.id}-${Date.now()}`,
+          lineId: `${p.id}-${Date.now()}-${sig || 'plain'}`,
           productId: p.id,
           name: p.name,
           quantity: 1,
-          unitPrice,
-          lineTotal: unitPrice,
+          unitPrice: price,
+          lineTotal: price,
           taxable: p.isTaxable !== false,
+          selectedExtras,
         },
       ];
     });
+  };
+
+  const onProductClick = (p: Product) => {
+    if (productHasModifiers(p as ShopProductForModifiers)) {
+      setPendingProduct({
+        id: p.id,
+        name: p.name,
+        price: Number(p.price) || 0,
+        allowExtras: p.allowExtras,
+        extras: p.extras,
+        modifierGroups: p.modifierGroups,
+      });
+      return;
+    }
+    addConfiguredProduct(p, Number(p.price) || 0, []);
   };
 
   const setQty = (lineId: string, quantity: number) => {
@@ -237,6 +271,11 @@ export default function WebPos() {
           unitPrice: l.unitPrice,
           totalPrice: l.lineTotal,
           taxAmount: l.taxable ? roundMoney2((l.lineTotal * taxRate) / 100) : 0,
+          selectedExtras: l.selectedExtras.map((e) => ({
+            id: e.id,
+            name: e.name,
+            price: e.price,
+          })),
           isOpenPrice: false,
         })),
       };
@@ -253,7 +292,9 @@ export default function WebPos() {
         channel,
         paymentMethod,
         items: cart.map((l) => ({
-          name: l.name,
+          name: l.selectedExtras.length
+            ? `${l.name} (${l.selectedExtras.map((e) => e.name).join(', ')})`
+            : l.name,
           quantity: l.quantity,
           unitPrice: l.unitPrice,
           lineTotal: l.lineTotal,
@@ -383,17 +424,25 @@ export default function WebPos() {
               <div className="text-center text-slate-500 py-16">No products</div>
             ) : (
               <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2">
-                {visibleProducts.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => addProduct(p)}
-                    className="text-left bg-white border border-slate-200 rounded-xl p-3 hover:border-indigo-400 hover:shadow-sm transition"
-                  >
-                    <div className="font-semibold text-slate-900 line-clamp-2 min-h-[2.5rem]">{p.name}</div>
-                    <div className="text-lg font-bold text-indigo-600 mt-2">{money(Number(p.price) || 0)}</div>
-                  </button>
-                ))}
+                {visibleProducts.map((p) => {
+                  const hasMods = productHasModifiers(p as ShopProductForModifiers);
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => onProductClick(p)}
+                      className="text-left bg-white border border-slate-200 rounded-xl p-3 hover:border-indigo-400 hover:shadow-sm transition"
+                    >
+                      <div className="font-semibold text-slate-900 line-clamp-2 min-h-[2.5rem]">{p.name}</div>
+                      {hasMods && (
+                        <div className="text-[11px] font-medium text-slate-500 mt-1">Options</div>
+                      )}
+                      <div className="text-lg font-bold text-indigo-600 mt-2">
+                        {money(Number(p.price) || 0)}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -426,8 +475,15 @@ export default function WebPos() {
               cart.map((l) => (
                 <div key={l.lineId} className="border border-slate-200 rounded-lg p-2">
                   <div className="flex justify-between gap-2">
-                    <div className="font-medium text-sm text-slate-900">{l.name}</div>
-                    <button type="button" className="text-red-500 text-xs" onClick={() => setQty(l.lineId, 0)}>
+                    <div className="min-w-0">
+                      <div className="font-medium text-sm text-slate-900">{l.name}</div>
+                      {!!l.selectedExtras.length && (
+                        <div className="text-xs text-slate-500 mt-0.5">
+                          {l.selectedExtras.map((e) => e.name).join(', ')}
+                        </div>
+                      )}
+                    </div>
+                    <button type="button" className="text-red-500 text-xs shrink-0" onClick={() => setQty(l.lineId, 0)}>
                       ✕
                     </button>
                   </div>
@@ -522,6 +578,18 @@ export default function WebPos() {
           )}
         </aside>
       </div>
+
+      {pendingProduct && (
+        <ShopProductModifiersModal
+          product={pendingProduct}
+          onClose={() => setPendingProduct(null)}
+          onConfirm={(extras, unitPrice) => {
+            const base = products.find((p) => p.id === pendingProduct.id);
+            if (base) addConfiguredProduct(base, unitPrice, extras);
+            setPendingProduct(null);
+          }}
+        />
+      )}
     </div>
   );
 }
