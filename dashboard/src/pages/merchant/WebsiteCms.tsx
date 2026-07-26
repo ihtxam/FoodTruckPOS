@@ -2,14 +2,12 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
+import { ensureCmsChaiBlocks } from '@/lib/cms/chai-blocks';
+import { CmsShopProvider } from '@/lib/cms/CmsShopContext';
 
-type BlockType = 'hero' | 'richtext' | 'html' | 'menu' | 'hours' | 'cta' | 'image' | 'spacer';
-
-type CmsBlock = {
-  id: string;
-  type: BlockType;
-  [key: string]: any;
-};
+// ChaiBuilder CSS + editor (heavy) — load only in this page
+import '@chaibuilder/sdk/styles';
+import { ChaiBuilderEditor, type ChaiBlock } from '@chaibuilder/sdk';
 
 type CmsPage = {
   id: string;
@@ -18,7 +16,8 @@ type CmsPage = {
   isHomepage: boolean;
   status: string;
   templateKey?: string | null;
-  blocks: CmsBlock[];
+  blocks: ChaiBlock[];
+  theme?: Record<string, unknown> | null;
   seoTitle?: string | null;
   seoDescription?: string | null;
 };
@@ -35,73 +34,7 @@ type Site = {
   shopCustomDomainUrl?: string | null;
 };
 
-function newId() {
-  try {
-    return crypto.randomUUID();
-  } catch {
-    return `b-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  }
-}
-
-function defaultBlock(type: BlockType): CmsBlock {
-  switch (type) {
-    case 'hero':
-      return {
-        id: newId(),
-        type,
-        title: 'Your shop name',
-        subtitle: 'A short welcome line',
-        ctaLabel: 'Order now',
-        ctaHref: '/menu',
-        align: 'center',
-      };
-    case 'richtext':
-      return { id: newId(), type, html: '<p>Tell your story…</p>' };
-    case 'html':
-      return {
-        id: newId(),
-        type,
-        html: '<div style="padding:1rem;text-align:center">Custom HTML block</div>',
-      };
-    case 'menu':
-      return {
-        id: newId(),
-        type,
-        title: 'Menu',
-        mode: 'full',
-        showPrices: true,
-        ctaLabel: 'Order online',
-        ctaHref: '/menu',
-      };
-    case 'hours':
-      return { id: newId(), type, title: 'Hours', channel: 'display' };
-    case 'cta':
-      return {
-        id: newId(),
-        type,
-        title: 'Ready to order?',
-        primaryLabel: 'Order now',
-        primaryHref: '/menu',
-      };
-    case 'image':
-      return { id: newId(), type, imageUrl: '', alt: '' };
-    case 'spacer':
-      return { id: newId(), type, size: 'md' };
-    default:
-      return { id: newId(), type: 'html', html: '' };
-  }
-}
-
-const BLOCK_LABELS: Record<BlockType, string> = {
-  hero: 'Hero',
-  richtext: 'Text',
-  html: 'HTML',
-  menu: 'POS menu',
-  hours: 'Hours',
-  cta: 'Call to action',
-  image: 'Image',
-  spacer: 'Spacer',
-};
+ensureCmsChaiBlocks();
 
 export default function WebsiteCms() {
   const { t } = useI18n();
@@ -112,31 +45,60 @@ export default function WebsiteCms() {
   const [customDomain, setCustomDomain] = useState('');
   const [savingSite, setSavingSite] = useState(false);
   const [editing, setEditing] = useState<CmsPage | null>(null);
-  const [savingPage, setSavingPage] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [newTitle, setNewTitle] = useState('Homepage');
   const [newTemplate, setNewTemplate] = useState('restaurant');
   const [asHomepage, setAsHomepage] = useState(true);
-  const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
+  const [menuPreview, setMenuPreview] = useState<any[]>([]);
+  const [storeHours, setStoreHours] = useState<Record<string, any>>({});
+  const [publishBusy, setPublishBusy] = useState(false);
 
-  const selectedBlock = useMemo(
-    () => editing?.blocks?.find((b) => b.id === selectedBlockId) || null,
-    [editing, selectedBlockId]
+  const shopCtx = useMemo(
+    () => ({
+      shopKey: site?.slug || site?.subdomain || 'preview',
+      basePath: '',
+      menu: menuPreview,
+      storeHours,
+      merchantName: site?.name,
+    }),
+    [site, menuPreview, storeHours]
   );
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [pagesRes, templatesRes, siteRes] = await Promise.all([
+      const [pagesRes, templatesRes, siteRes, settingsRes, menuRes] = await Promise.all([
         api.get('/merchant/cms/pages'),
         api.get('/merchant/cms/templates'),
         api.get('/merchant/cms/site'),
+        api.get('/merchant/settings').catch(() => null),
+        api.get('/merchant/products', { params: { limit: 200 } }).catch(() => null),
       ]);
       setPages(pagesRes.data.pages || []);
       setTemplates(templatesRes.data.templates || []);
       const s = siteRes.data.site as Site;
       setSite(s);
       setCustomDomain(s.customDomain || '');
+      const hours = settingsRes?.data?.settings?.storeHours || {};
+      setStoreHours(hours);
+
+      // Build a lightweight menu preview from merchant products
+      const products = menuRes?.data?.products || menuRes?.data?.data || [];
+      const byCat = new Map<string, { id: string; name: string; items: any[] }>();
+      for (const p of products) {
+        if (p.isActive === false) continue;
+        const catId = p.categoryId || p.category?.id || 'other';
+        const catName = p.category?.name || p.categoryName || 'Menu';
+        if (!byCat.has(catId)) byCat.set(catId, { id: catId, name: catName, items: [] });
+        byCat.get(catId)!.items.push({
+          id: p.id,
+          name: p.name,
+          price: Number(p.price) || 0,
+          description: p.description || '',
+          image: p.imageUrl || p.image || undefined,
+        });
+      }
+      setMenuPreview(Array.from(byCat.values()));
     } catch (error: any) {
       toast.error(error.response?.data?.error || t('cmsLoadFailed'));
     } finally {
@@ -176,8 +138,7 @@ export default function WebsiteCms() {
       });
       const page = res.data.page as CmsPage;
       setCreateOpen(false);
-      setEditing({ ...page, blocks: page.blocks || [] });
-      setSelectedBlockId(page.blocks?.[0]?.id || null);
+      setEditing({ ...page, blocks: (page.blocks || []) as ChaiBlock[] });
       await load();
       toast.success(t('cmsPageCreated'));
     } catch (error: any) {
@@ -189,76 +150,58 @@ export default function WebsiteCms() {
     try {
       const res = await api.get(`/merchant/cms/pages/${pageId}`);
       const page = res.data.page as CmsPage;
-      setEditing({ ...page, blocks: page.blocks || [] });
-      setSelectedBlockId(page.blocks?.[0]?.id || null);
+      setEditing({ ...page, blocks: (page.blocks || []) as ChaiBlock[] });
     } catch (error: any) {
       toast.error(error.response?.data?.error || t('cmsLoadFailed'));
     }
   };
 
-  const updateEditing = (patch: Partial<CmsPage>) => {
-    setEditing((prev) => (prev ? { ...prev, ...patch } : prev));
-  };
-
-  const updateBlock = (id: string, patch: Record<string, unknown>) => {
-    setEditing((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        blocks: prev.blocks.map((b) => (b.id === id ? { ...b, ...patch } : b)),
-      };
-    });
-  };
-
-  const moveBlock = (id: string, dir: -1 | 1) => {
-    setEditing((prev) => {
-      if (!prev) return prev;
-      const idx = prev.blocks.findIndex((b) => b.id === id);
-      const next = idx + dir;
-      if (idx < 0 || next < 0 || next >= prev.blocks.length) return prev;
-      const blocks = [...prev.blocks];
-      const [item] = blocks.splice(idx, 1);
-      blocks.splice(next, 0, item);
-      return { ...prev, blocks };
-    });
-  };
-
-  const removeBlock = (id: string) => {
-    setEditing((prev) => {
-      if (!prev) return prev;
-      const blocks = prev.blocks.filter((b) => b.id !== id);
-      if (selectedBlockId === id) setSelectedBlockId(blocks[0]?.id || null);
-      return { ...prev, blocks };
-    });
-  };
-
-  const addBlock = (type: BlockType) => {
-    const block = defaultBlock(type);
-    setEditing((prev) => (prev ? { ...prev, blocks: [...prev.blocks, block] } : prev));
-    setSelectedBlockId(block.id);
-  };
-
-  const savePage = async (status?: 'draft' | 'published') => {
-    if (!editing) return;
-    setSavingPage(true);
+  const persistPage = async (
+    blocks: ChaiBlock[],
+    theme: Record<string, unknown> | undefined,
+    status?: 'draft' | 'published'
+  ) => {
+    if (!editing) return false;
     try {
       const res = await api.put(`/merchant/cms/pages/${editing.id}`, {
         title: editing.title,
         slug: editing.slug,
         isHomepage: editing.isHomepage,
-        blocks: editing.blocks,
-        seoTitle: editing.seoTitle,
-        seoDescription: editing.seoDescription,
+        blocks,
+        theme: theme ?? editing.theme ?? null,
         status: status || editing.status,
       });
       const page = res.data.page as CmsPage;
-      setEditing({ ...page, blocks: page.blocks || [] });
+      setEditing({ ...page, blocks: (page.blocks || []) as ChaiBlock[] });
       await load();
-      toast.success(status === 'published' ? t('cmsPublished') : t('saved'));
+      return true;
     } catch (error: any) {
       toast.error(error.response?.data?.error || t('cmsSaveFailed'));
+      return false;
+    }
+  };
+
+  const onChaiSave = async ({
+    blocks,
+    theme,
+  }: {
+    blocks: ChaiBlock[];
+    theme?: Record<string, unknown>;
+    autoSave?: boolean;
+  }) => {
+    const ok = await persistPage(blocks, theme);
+    if (ok) toast.success(t('saved'));
+    return ok;
+  };
+
+  const publish = async () => {
+    if (!editing) return;
+    setPublishBusy(true);
+    try {
+      const ok = await persistPage(editing.blocks || [], editing.theme || undefined, 'published');
+      if (ok) toast.success(t('cmsPublished'));
     } finally {
-      setSavingPage(false);
+      setPublishBusy(false);
     }
   };
 
@@ -280,150 +223,63 @@ export default function WebsiteCms() {
 
   if (editing) {
     return (
-      <div className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <button type="button" className="text-sm muted hover:underline" onClick={() => setEditing(null)}>
-              ← {t('cmsBackToPages')}
-            </button>
-            <h1 className="text-xl font-semibold mt-1">{t('cmsPageBuilder')}</h1>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              className="btn-secondary"
-              disabled={savingPage}
-              onClick={() => savePage('draft')}
-            >
-              {t('cmsSaveDraft')}
-            </button>
-            <button
-              type="button"
-              className="btn-primary"
-              disabled={savingPage}
-              onClick={() => savePage('published')}
-            >
-              {t('cmsPublish')}
-            </button>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-          <div className="lg:col-span-3 space-y-3">
-            <div className="rounded-md border border-[var(--border)] bg-[var(--bg)] p-3 space-y-2">
-              <label className="text-xs font-medium block">{t('title')}</label>
+      <CmsShopProvider value={shopCtx}>
+        <div className="fixed inset-0 z-40 flex flex-col bg-[var(--bg)]">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] px-3 py-2 bg-[var(--bg)]">
+            <div className="flex items-center gap-3 min-w-0">
+              <button
+                type="button"
+                className="text-sm muted hover:underline shrink-0"
+                onClick={() => setEditing(null)}
+              >
+                ← {t('cmsBackToPages')}
+              </button>
               <input
-                className="input"
+                className="input text-sm max-w-[220px]"
                 value={editing.title}
-                onChange={(e) => updateEditing({ title: e.target.value })}
+                onChange={(e) => setEditing({ ...editing, title: e.target.value })}
               />
-              <label className="text-xs font-medium block">{t('cmsSlug')}</label>
-              <input
-                className="input"
-                value={editing.slug}
-                onChange={(e) => updateEditing({ slug: e.target.value })}
-              />
-              <label className="flex items-center gap-2 text-sm mt-2">
+              <label className="flex items-center gap-1.5 text-xs shrink-0">
                 <input
                   type="checkbox"
                   checked={!!editing.isHomepage}
-                  onChange={(e) => updateEditing({ isHomepage: e.target.checked })}
+                  onChange={(e) => setEditing({ ...editing, isHomepage: e.target.checked })}
                 />
                 {t('cmsIsHomepage')}
               </label>
-              <p className="text-xs muted">
-                {t('status')}: {editing.status}
-              </p>
+              <span className="text-xs muted shrink-0">{editing.status}</span>
             </div>
-
-            <div className="rounded-md border border-[var(--border)] bg-[var(--bg)] p-3">
-              <p className="text-xs font-medium mb-2">{t('cmsBlocks')}</p>
-              <ul className="space-y-1">
-                {editing.blocks.map((b, i) => (
-                  <li key={b.id}>
-                    <button
-                      type="button"
-                      className={`w-full text-left text-sm px-2 py-1.5 rounded ${
-                        selectedBlockId === b.id
-                          ? 'bg-[var(--bg-muted)] font-medium'
-                          : 'hover:bg-[var(--bg-muted)]'
-                      }`}
-                      onClick={() => setSelectedBlockId(b.id)}
-                    >
-                      {i + 1}. {BLOCK_LABELS[b.type] || b.type}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-              <div className="mt-3 grid grid-cols-2 gap-1.5">
-                {(Object.keys(BLOCK_LABELS) as BlockType[]).map((type) => (
-                  <button
-                    key={type}
-                    type="button"
-                    className="text-xs border border-[var(--border)] rounded px-2 py-1.5 hover:bg-[var(--bg-muted)]"
-                    onClick={() => addBlock(type)}
-                  >
-                    + {BLOCK_LABELS[type]}
-                  </button>
-                ))}
-              </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className="btn-primary text-sm"
+                disabled={publishBusy}
+                onClick={() => publish()}
+              >
+                {t('cmsPublish')}
+              </button>
             </div>
           </div>
-
-          <div className="lg:col-span-5 space-y-3">
-            <div className="rounded-md border border-[var(--border)] bg-[var(--bg)] p-4 min-h-[320px]">
-              <p className="text-xs font-medium muted mb-3">{t('cmsPreview')}</p>
-              {editing.blocks.length === 0 && (
-                <p className="text-sm muted py-8 text-center">{t('cmsEmptyBlocks')}</p>
-              )}
-              <div className="space-y-4">
-                {editing.blocks.map((b) => (
-                  <div
-                    key={b.id}
-                    className={`border rounded-md p-3 cursor-pointer ${
-                      selectedBlockId === b.id
-                        ? 'border-stone-800'
-                        : 'border-[var(--border)]'
-                    }`}
-                    onClick={() => setSelectedBlockId(b.id)}
-                  >
-                    <BlockPreview block={b} />
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="lg:col-span-4">
-            <div className="rounded-md border border-[var(--border)] bg-[var(--bg)] p-4 space-y-3 sticky top-2">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-sm font-medium">{t('cmsEditBlock')}</p>
-                {selectedBlock && (
-                  <div className="flex gap-1">
-                    <button type="button" className="btn-secondary text-xs px-2 py-1" onClick={() => moveBlock(selectedBlock.id, -1)}>
-                      ↑
-                    </button>
-                    <button type="button" className="btn-secondary text-xs px-2 py-1" onClick={() => moveBlock(selectedBlock.id, 1)}>
-                      ↓
-                    </button>
-                    <button
-                      type="button"
-                      className="text-xs text-red-600 px-2 py-1"
-                      onClick={() => removeBlock(selectedBlock.id)}
-                    >
-                      {t('delete')}
-                    </button>
-                  </div>
-                )}
-              </div>
-              {!selectedBlock && <p className="text-sm muted">{t('cmsSelectBlock')}</p>}
-              {selectedBlock && (
-                <BlockEditor block={selectedBlock} onChange={(patch) => updateBlock(selectedBlock.id, patch)} />
-              )}
-            </div>
+          <div className="flex-1 min-h-0 relative">
+            <ChaiBuilderEditor
+              key={editing.id}
+              pageId={editing.id}
+              blocks={(editing.blocks || []) as ChaiBlock[]}
+              theme={(editing.theme || undefined) as any}
+              autoSave={false}
+              onSave={onChaiSave as any}
+              permissions={[
+                'add_block',
+                'delete_block',
+                'edit_block',
+                'edit_theme',
+                'save_page',
+                'move_block',
+              ]}
+            />
           </div>
         </div>
-      </div>
+      </CmsShopProvider>
     );
   }
 
@@ -432,6 +288,7 @@ export default function WebsiteCms() {
       <div>
         <h1 className="text-xl font-semibold">{t('cmsWebsite')}</h1>
         <p className="text-sm muted mt-1">{t('cmsWebsiteHint')}</p>
+        <p className="text-xs muted mt-1">{t('cmsChaiHint')}</p>
       </div>
 
       <form onSubmit={saveSite} className="rounded-md border border-[var(--border)] bg-[var(--bg)] p-4 space-y-3">
@@ -465,7 +322,10 @@ export default function WebsiteCms() {
       </div>
 
       {createOpen && (
-        <form onSubmit={createPage} className="rounded-md border border-[var(--border)] bg-[var(--bg-muted)] p-4 space-y-3">
+        <form
+          onSubmit={createPage}
+          className="rounded-md border border-[var(--border)] bg-[var(--bg-muted)] p-4 space-y-3"
+        >
           <label className="text-xs font-medium block">{t('title')}</label>
           <input className="input" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} />
           <label className="text-xs font-medium block">{t('cmsTemplate')}</label>
@@ -516,7 +376,7 @@ export default function WebsiteCms() {
             </div>
             <div className="flex gap-2">
               <button type="button" className="btn-secondary text-sm" onClick={() => openEditor(page.id)}>
-                {t('edit')}
+                {t('cmsOpenBuilder')}
               </button>
               <button type="button" className="text-sm text-red-600 px-2" onClick={() => deletePage(page.id)}>
                 {t('delete')}
@@ -527,203 +387,4 @@ export default function WebsiteCms() {
       </div>
     </div>
   );
-}
-
-function BlockPreview({ block }: { block: CmsBlock }) {
-  if (block.type === 'hero') {
-    return (
-      <div className="text-center py-4 bg-stone-100 rounded">
-        <p className="text-lg font-semibold">{block.title}</p>
-        {block.subtitle && <p className="text-sm text-stone-600 mt-1">{block.subtitle}</p>}
-        {block.ctaLabel && (
-          <span className="inline-block mt-3 text-xs font-semibold border border-stone-800 px-3 py-1">
-            {block.ctaLabel}
-          </span>
-        )}
-      </div>
-    );
-  }
-  if (block.type === 'menu') {
-    return (
-      <div>
-        <p className="font-medium text-sm">{block.title || 'Menu'}</p>
-        <p className="text-xs muted mt-1">
-          POS catalog · {block.mode === 'featured' ? 'featured' : 'full'}
-          {block.showPrices !== false ? ' · prices' : ''}
-        </p>
-      </div>
-    );
-  }
-  if (block.type === 'html' || block.type === 'richtext') {
-    return (
-      <div className="text-sm prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: block.html || '' }} />
-    );
-  }
-  if (block.type === 'hours') {
-    return <p className="text-sm font-medium">{block.title || 'Hours'}</p>;
-  }
-  if (block.type === 'cta') {
-    return (
-      <div className="text-center py-3">
-        <p className="font-semibold">{block.title}</p>
-        {block.primaryLabel && <p className="text-xs mt-2 underline">{block.primaryLabel}</p>}
-      </div>
-    );
-  }
-  if (block.type === 'image') {
-    return block.imageUrl ? (
-      <img src={block.imageUrl} alt={block.alt || ''} className="max-h-40 w-full object-cover rounded" />
-    ) : (
-      <p className="text-xs muted">Image</p>
-    );
-  }
-  if (block.type === 'spacer') {
-    return <p className="text-xs muted text-center">Spacer ({block.size || 'md'})</p>;
-  }
-  return <p className="text-xs muted">{block.type}</p>;
-}
-
-function BlockEditor({
-  block,
-  onChange,
-}: {
-  block: CmsBlock;
-  onChange: (patch: Record<string, unknown>) => void;
-}) {
-  const { t } = useI18n();
-  const field = (label: string, key: string, multiline = false) => (
-    <div key={key}>
-      <label className="text-xs font-medium block mb-1">{label}</label>
-      {multiline ? (
-        <textarea
-          className="input min-h-[100px] font-mono text-xs"
-          value={block[key] ?? ''}
-          onChange={(e) => onChange({ [key]: e.target.value })}
-        />
-      ) : (
-        <input
-          className="input"
-          value={block[key] ?? ''}
-          onChange={(e) => onChange({ [key]: e.target.value })}
-        />
-      )}
-    </div>
-  );
-
-  if (block.type === 'hero') {
-    return (
-      <div className="space-y-2">
-        {field(t('title'), 'title')}
-        {field(t('cmsSubtitle'), 'subtitle')}
-        {field(t('cmsCtaLabel'), 'ctaLabel')}
-        {field(t('cmsCtaLink'), 'ctaHref')}
-        {field(t('cmsImageUrl'), 'imageUrl')}
-      </div>
-    );
-  }
-  if (block.type === 'richtext' || block.type === 'html') {
-    return (
-      <div className="space-y-2">
-        {field(block.type === 'html' ? t('cmsHtmlCode') : t('cmsHtmlContent'), 'html', true)}
-        {block.type === 'html' && <p className="text-xs muted">{t('cmsHtmlHint')}</p>}
-      </div>
-    );
-  }
-  if (block.type === 'menu') {
-    return (
-      <div className="space-y-2">
-        {field(t('title'), 'title')}
-        {field(t('cmsSubtitle'), 'subtitle')}
-        <div>
-          <label className="text-xs font-medium block mb-1">{t('cmsMenuMode')}</label>
-          <select
-            className="input"
-            value={block.mode || 'full'}
-            onChange={(e) => onChange({ mode: e.target.value })}
-          >
-            <option value="full">{t('cmsMenuFull')}</option>
-            <option value="featured">{t('cmsMenuFeatured')}</option>
-          </select>
-        </div>
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={block.showPrices !== false}
-            onChange={(e) => onChange({ showPrices: e.target.checked })}
-          />
-          {t('cmsShowPrices')}
-        </label>
-        {block.mode === 'featured' && (
-          <div>
-            <label className="text-xs font-medium block mb-1">{t('cmsMenuLimit')}</label>
-            <input
-              className="input"
-              type="number"
-              min={1}
-              max={50}
-              value={block.limit ?? 6}
-              onChange={(e) => onChange({ limit: Number(e.target.value) || 6 })}
-            />
-          </div>
-        )}
-        {field(t('cmsCtaLabel'), 'ctaLabel')}
-        {field(t('cmsCtaLink'), 'ctaHref')}
-        <p className="text-xs muted">{t('cmsMenuFromPos')}</p>
-      </div>
-    );
-  }
-  if (block.type === 'hours') {
-    return (
-      <div className="space-y-2">
-        {field(t('title'), 'title')}
-        <div>
-          <label className="text-xs font-medium block mb-1">{t('cmsHoursChannel')}</label>
-          <select
-            className="input"
-            value={block.channel || 'display'}
-            onChange={(e) => onChange({ channel: e.target.value })}
-          >
-            <option value="display">Homepage / display</option>
-            <option value="pickup">Pickup</option>
-            <option value="delivery">Delivery</option>
-          </select>
-        </div>
-      </div>
-    );
-  }
-  if (block.type === 'cta') {
-    return (
-      <div className="space-y-2">
-        {field(t('title'), 'title')}
-        {field(t('cmsSubtitle'), 'subtitle')}
-        {field(t('cmsCtaLabel'), 'primaryLabel')}
-        {field(t('cmsCtaLink'), 'primaryHref')}
-        {field(t('cmsSecondaryLabel'), 'secondaryLabel')}
-        {field(t('cmsSecondaryLink'), 'secondaryHref')}
-      </div>
-    );
-  }
-  if (block.type === 'image') {
-    return (
-      <div className="space-y-2">
-        {field(t('cmsImageUrl'), 'imageUrl')}
-        {field('Alt', 'alt')}
-        {field(t('cmsCaption'), 'caption')}
-        {field(t('cmsCtaLink'), 'href')}
-      </div>
-    );
-  }
-  if (block.type === 'spacer') {
-    return (
-      <div>
-        <label className="text-xs font-medium block mb-1">Size</label>
-        <select className="input" value={block.size || 'md'} onChange={(e) => onChange({ size: e.target.value })}>
-          <option value="sm">Small</option>
-          <option value="md">Medium</option>
-          <option value="lg">Large</option>
-        </select>
-      </div>
-    );
-  }
-  return null;
 }

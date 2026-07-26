@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { Routes, Route, useLocation } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import Sidebar from '@/components/Sidebar';
@@ -14,11 +14,12 @@ import Terminals from './Terminals';
 import Settings from './Settings';
 import Billing from './Billing';
 import OnlineShop from './OnlineShop';
-import WebsiteCms from './WebsiteCms';
 import FloorPlan from './FloorPlan';
 import WebPos from './WebPos';
 import api from '@/lib/api';
 import { I18nProvider, useI18n, type Locale } from '@/lib/i18n';
+
+const WebsiteCms = lazy(() => import('./WebsiteCms'));
 
 function MerchantShell() {
   const { t, locale, setLocale } = useI18n();
@@ -105,7 +106,14 @@ function MerchantShell() {
             <Route path="customers" element={<Customers />} />
             <Route path="loyalty" element={<Loyalty />} />
             <Route path="online-shop" element={<OnlineShop />} />
-            <Route path="website" element={<WebsiteCms />} />
+            <Route
+              path="website"
+              element={
+                <Suspense fallback={<div className="p-4 text-sm muted">{t('loading')}</div>}>
+                  <WebsiteCms />
+                </Suspense>
+              }
+            />
             <Route path="terminals" element={<Terminals />} />
             <Route path="floor-plan" element={<FloorPlan />} />
             <Route path="billing" element={<Billing />} />

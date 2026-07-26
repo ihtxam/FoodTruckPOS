@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { useAuthStore } from '@/store/auth';
@@ -9,15 +9,26 @@ import SetPasswordPage from '@/pages/SetPasswordPage';
 import SuperadminDashboard from '@/pages/superadmin/Dashboard';
 import MerchantDashboard from '@/pages/merchant/Dashboard';
 import OrderingPage from '@/pages/shop/OrderingPage';
-import ShopEntry from '@/pages/shop/ShopEntry';
 import CheckoutPage from '@/pages/shop/CheckoutPage';
 import OrderConfirmationPage from '@/pages/shop/OrderConfirmationPage';
 import AccountPage from '@/pages/shop/AccountPage';
 import ReceiptPage from '@/pages/ReceiptPage';
 import ProtectedRoute from '@/components/ProtectedRoute';
 
+const ShopEntry = lazy(() => import('@/pages/shop/ShopEntry'));
+
 function ShopRoutes({ children }: { children: React.ReactNode }) {
-  return <I18nProvider storageKey={SHOP_LANG_KEY}>{children}</I18nProvider>;
+  return (
+    <I18nProvider storageKey={SHOP_LANG_KEY}>
+      <Suspense
+        fallback={
+          <div className="min-h-screen flex items-center justify-center text-stone-500">…</div>
+        }
+      >
+        {children}
+      </Suspense>
+    </I18nProvider>
+  );
 }
 
 const MAIN_HOST = (

@@ -927,69 +927,15 @@ export const dailyReports = pgTable(
 // CMS PAGES (merchant website / homepage builder)
 // ============================================================================
 
-export type CmsBlock =
-  | {
-      id: string;
-      type: "hero";
-      title: string;
-      subtitle?: string;
-      ctaLabel?: string;
-      ctaHref?: string;
-      imageUrl?: string;
-      align?: "left" | "center";
-    }
-  | {
-      id: string;
-      type: "richtext";
-      html: string;
-    }
-  | {
-      id: string;
-      type: "html";
-      html: string;
-    }
-  | {
-      id: string;
-      type: "menu";
-      title?: string;
-      subtitle?: string;
-      mode: "full" | "featured";
-      categoryIds?: string[];
-      productIds?: string[];
-      limit?: number;
-      showPrices?: boolean;
-      ctaLabel?: string;
-      ctaHref?: string;
-    }
-  | {
-      id: string;
-      type: "hours";
-      title?: string;
-      channel?: "display" | "pickup" | "delivery";
-    }
-  | {
-      id: string;
-      type: "cta";
-      title: string;
-      subtitle?: string;
-      primaryLabel?: string;
-      primaryHref?: string;
-      secondaryLabel?: string;
-      secondaryHref?: string;
-    }
-  | {
-      id: string;
-      type: "image";
-      imageUrl: string;
-      alt?: string;
-      caption?: string;
-      href?: string;
-    }
-  | {
-      id: string;
-      type: "spacer";
-      size?: "sm" | "md" | "lg";
-    };
+/** ChaiBuilder SDK block JSON (`_id`, `_type`, optional `_parent`, …) */
+export type CmsBlock = {
+  _id: string;
+  _type: string;
+  _parent?: string | null;
+  [key: string]: unknown;
+};
+
+export type CmsTheme = Record<string, unknown>;
 
 export const cmsPages = pgTable(
   "cms_pages",
@@ -1003,7 +949,10 @@ export const cmsPages = pgTable(
     isHomepage: boolean("is_homepage").notNull().default(false),
     status: varchar("status", { length: 20 }).notNull().default("draft"),
     templateKey: varchar("template_key", { length: 40 }),
+    /** ChaiBuilder blocks array */
     blocks: json("blocks").$type<CmsBlock[]>().notNull().default([]),
+    /** ChaiBuilder theme values */
+    theme: json("theme").$type<CmsTheme | null>(),
     seoTitle: varchar("seo_title", { length: 200 }),
     seoDescription: text("seo_description"),
     publishedAt: timestamp("published_at", { withTimezone: true }),

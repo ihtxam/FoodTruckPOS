@@ -118,6 +118,7 @@ router.put("/pages/:pageId", async (req: Request, res: Response) => {
       slug: req.body.slug,
       isHomepage: req.body.isHomepage,
       blocks: req.body.blocks,
+      theme: req.body.theme,
       seoTitle: req.body.seoTitle,
       seoDescription: req.body.seoDescription,
       status: req.body.status,
