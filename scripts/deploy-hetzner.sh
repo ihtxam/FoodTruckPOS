@@ -113,12 +113,17 @@ ln -sfn "$ENV_FILE" "$REPO_DIR/.env"
 echo "=== Git pull ==="
 git fetch origin main
 git reset --hard origin/main
+chmod +x "$REPO_DIR/scripts/deploy-hetzner.sh" || true
 
-# Re-link after reset + re-ensure env (script may have been updated on pull)
+# Re-exec updated script so new ensure_env_production / seed logic is used
+if [[ "${DEPLOY_POST_PULL:-}" != "1" ]]; then
+  echo "=== Re-executing updated deploy script ==="
+  exec env DEPLOY_POST_PULL=1 bash "$REPO_DIR/scripts/deploy-hetzner.sh"
+fi
+
 ensure_env_production
 ln -sfn "$ENV_FILE" "$REPO_DIR/.env.production"
 ln -sfn "$ENV_FILE" "$REPO_DIR/.env"
-chmod +x "$REPO_DIR/scripts/deploy-hetzner.sh" || true
 
 echo "=== Stop legacy backend compose (frees :80/:443) ==="
 if [[ -f "$REPO_DIR/backend/docker-compose.yml" ]]; then
