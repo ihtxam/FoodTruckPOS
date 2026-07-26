@@ -1,5 +1,5 @@
 import { getDb, schema } from "@/db";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, asc, desc, max, sql } from "drizzle-orm";
 
 export class CategoryService {
   /**
@@ -14,6 +14,13 @@ export class CategoryService {
     const db = getDb();
 
     try {
+      const [{ nextSort }] = await db
+        .select({
+          nextSort: sql<number>`coalesce(${max(schema.categories.sortOrder)}, -1) + 1`,
+        })
+        .from(schema.categories)
+        .where(eq(schema.categories.merchantId, merchantId));
+
       const category = await db
         .insert(schema.categories)
         .values({
@@ -21,6 +28,7 @@ export class CategoryService {
           name,
           description,
           color,
+          sortOrder: Number(nextSort) || 0,
         })
         .returning();
 
@@ -40,7 +48,7 @@ export class CategoryService {
     try {
       const categories = await db.query.categories.findMany({
         where: eq(schema.categories.merchantId, merchantId),
-        orderBy: desc(schema.categories.createdAt),
+        orderBy: [asc(schema.categories.sortOrder), desc(schema.categories.createdAt)],
       });
 
       return categories;
@@ -48,6 +56,43 @@ export class CategoryService {
       console.error("Error getting categories:", error);
       throw error;
     }
+  }
+
+  /**
+   * Persist display order for categories (ordered id list).
+   */
+  static async reorderCategories(merchantId: string, orderedIds: string[]) {
+    const db = getDb();
+    if (!Array.isArray(orderedIds) || orderedIds.length === 0) {
+      throw new Error("orderedIds is required");
+    }
+
+    const existing = await db.query.categories.findMany({
+      where: eq(schema.categories.merchantId, merchantId),
+      columns: { id: true },
+    });
+    const owned = new Set(existing.map((c) => c.id));
+    for (const id of orderedIds) {
+      if (!owned.has(id)) {
+        throw new Error("Invalid category id in reorder list");
+      }
+    }
+
+    await db.transaction(async (tx) => {
+      for (let i = 0; i < orderedIds.length; i++) {
+        await tx
+          .update(schema.categories)
+          .set({ sortOrder: i, updatedAt: new Date() })
+          .where(
+            and(
+              eq(schema.categories.id, orderedIds[i]),
+              eq(schema.categories.merchantId, merchantId)
+            )
+          );
+      }
+    });
+
+    return this.getCategories(merchantId);
   }
 
   /**

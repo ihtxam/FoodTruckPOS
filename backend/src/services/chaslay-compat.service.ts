@@ -35,21 +35,6 @@ export function generateSyncApiKey(): string {
   return crypto.randomBytes(24).toString("hex");
 }
 
-function isPlaceholderSeatId(externalId: string): boolean {
-  return /^POS-/i.test(externalId || "");
-}
-
-function deviceIdsMatch(stored: string, incoming: string): boolean {
-  if (!stored || !String(stored).trim()) return true;
-  const a = normalizeChaslayDeviceId(stored);
-  const b = normalizeChaslayDeviceId(incoming);
-  if (a === b) return true;
-  if (stored.trim().toUpperCase() === incoming.trim().toUpperCase()) return true;
-  if (deriveShortDeviceId(stored) === b) return true;
-  if (deriveShortDeviceId(incoming) === a) return true;
-  return deriveShortDeviceId(stored) === deriveShortDeviceId(incoming);
-}
-
 export class ChaslayCompatService {
   static async activateLicense(input: {
     deviceId: string;
@@ -60,7 +45,6 @@ export class ChaslayCompatService {
   }) {
     const db = getDb();
     const normalizedDeviceId = normalizeChaslayDeviceId(input.deviceId);
-    const shortId = deriveShortDeviceId(input.deviceId);
     const licenseKey = normalizeActivationCode(input.activationCode);
 
     let merchant = input.tenantSlug
@@ -88,56 +72,18 @@ export class ChaslayCompatService {
     }
 
     let device = license.device;
-    const boundId = normalizedDeviceId || shortId;
-
-    if (device && !isPlaceholderSeatId(device.deviceId)) {
-      if (!deviceIdsMatch(device.deviceId, input.deviceId)) {
-        const expected = normalizeChaslayDeviceId(device.deviceId) || device.deviceId;
-        throw new Error(
-          `This code is for device ${expected}, but this tablet sent ${normalizedDeviceId}. ` +
-            `Generate a code for this device ID in Superadmin → Licenses.`
-        );
-      }
-      await db
-        .update(schema.devices)
-        .set({
-          deviceId: boundId,
-          appVersion: input.appVersion,
-          osVersion: input.deviceModel,
-          lastSync: now,
-          isActive: true,
-        })
-        .where(eq(schema.devices.id, device.id));
-    } else if (device && isPlaceholderSeatId(device.deviceId)) {
-      const conflict = await db.query.devices.findFirst({
-        where: eq(schema.devices.deviceId, boundId),
-      });
-      if (conflict && conflict.id !== device.id) {
-        throw new Error("This device is already licensed under another seat");
-      }
-      await db
-        .update(schema.devices)
-        .set({
-          deviceId: boundId,
-          deviceName: input.deviceModel || device.deviceName || `POS ${boundId}`,
-          appVersion: input.appVersion,
-          osVersion: input.deviceModel,
-          lastSync: now,
-          isActive: true,
-        })
-        .where(eq(schema.devices.id, device.id));
-    } else {
+    if (!device) {
+      const externalId = `POS-${merchant.id.substring(0, 6).toUpperCase()}-${normalizedDeviceId.replace(/-/g, "")}`;
       const inserted = await db
         .insert(schema.devices)
         .values({
           merchantId: merchant.id,
-          deviceId: boundId,
-          deviceName: input.deviceModel || `Chaslay ${boundId}`,
+          deviceId: externalId,
+          deviceName: input.deviceModel || `Chaslay ${normalizedDeviceId}`,
           deviceType: "tablet",
           osVersion: input.deviceModel,
           appVersion: input.appVersion,
           isActive: true,
-          lastSync: now,
         })
         .returning();
       device = inserted[0]!;
@@ -145,6 +91,16 @@ export class ChaslayCompatService {
         .update(schema.licenses)
         .set({ deviceId: device.id, updatedAt: now })
         .where(eq(schema.licenses.id, license.id));
+    } else {
+      await db
+        .update(schema.devices)
+        .set({
+          appVersion: input.appVersion,
+          osVersion: input.deviceModel,
+          lastSync: now,
+          isActive: true,
+        })
+        .where(eq(schema.devices.id, device.id));
     }
 
     await db
@@ -179,7 +135,15 @@ export class ChaslayCompatService {
       with: { licenses: true, merchant: true },
     });
 
-    const device = devices.find((d) => deviceIdsMatch(d.deviceId, input.deviceId));
+    const device = devices.find((d) => {
+      const ext = d.deviceId.toUpperCase();
+      return (
+        ext.includes(normalized.replace(/-/g, "")) ||
+        ext.endsWith(normalized.replace(/-/g, "")) ||
+        deriveShortDeviceId(d.deviceId) === normalized ||
+        deriveShortDeviceId(d.deviceId) === short
+      );
+    });
 
     if (!device) {
       throw new Error("Device not licensed");
@@ -193,11 +157,7 @@ export class ChaslayCompatService {
 
     await db
       .update(schema.devices)
-      .set({
-        appVersion: input.appVersion,
-        lastSync: new Date(),
-        deviceId: normalized || short || device.deviceId,
-      })
+      .set({ appVersion: input.appVersion, lastSync: new Date() })
       .where(eq(schema.devices.id, device.id));
 
     return {
@@ -371,7 +331,7 @@ export class ChaslayCompatService {
       tax_rate: parseFloat(String(p.isTaxable ? 8.1 : 0)),
       sku: p.sku,
       image_url: p.imageUrl,
-      sort_order: 0,
+      sort_order: p.sortOrder ?? 0,
       in_stock: (p.stock ?? 0) > 0,
       online_visible: p.isActive,
       kiosk_visible: p.isActive,

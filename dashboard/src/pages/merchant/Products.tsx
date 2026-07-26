@@ -14,6 +14,7 @@ import {
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
+import { DragHandle, SortableContainer, SortableRow } from '@/components/SortableList';
 
 interface Extra {
   id: string;
@@ -60,6 +61,7 @@ interface Product {
   specifications?: SpecRow[];
   extras?: Extra[];
   allowExtras?: boolean;
+  sortOrder?: number;
   modifierGroups?: ModifierGroupSummary[];
 }
 
@@ -135,6 +137,7 @@ export default function Products() {
   const [form, setForm] = useState<FormState>(emptyForm());
   const [allModifierGroups, setAllModifierGroups] = useState<ModifierGroupSummary[]>([]);
   const [modifierPickerOpen, setModifierPickerOpen] = useState(false);
+  const [reordering, setReordering] = useState(false);
 
   const load = async () => {
     try {
@@ -168,6 +171,32 @@ export default function Products() {
     }
     return counts;
   }, [products]);
+
+  const persistProductOrder = async (next: Product[]) => {
+    const prev = products;
+    setProducts(next);
+    setReordering(true);
+    try {
+      const res = await api.put('/merchant/products/reorder', {
+        orderedIds: next.map((p) => p.id),
+      });
+      if (res.data.products?.length) {
+        setProducts(res.data.products);
+      }
+    } catch (error: any) {
+      setProducts(prev);
+      toast.error(error.response?.data?.error || 'Failed to save product order');
+    } finally {
+      setReordering(false);
+    }
+  };
+
+  const onReorderFiltered = (nextFiltered: Product[]) => {
+    const filteredIds = new Set(nextFiltered.map((p) => p.id));
+    let i = 0;
+    const merged = products.map((p) => (filteredIds.has(p.id) ? nextFiltered[i++] : p));
+    void persistProductOrder(merged);
+  };
 
   const filteredProducts = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -503,7 +532,14 @@ export default function Products() {
           </div>
         )}
 
-        {filteredProducts.map((product) => {
+        <SortableContainer
+          as="div"
+          className="space-y-2"
+          items={filteredProducts}
+          onReorder={onReorderFiltered}
+          disabled={reordering}
+        >
+          {filteredProducts.map((product) => {
           const extras = product.extras || [];
           const tiers = product.bulkPricing || [];
           const sizes = product.specifications || [];
@@ -511,11 +547,19 @@ export default function Products() {
           const stockOk = product.stock > 20;
 
           return (
-            <article
+            <SortableRow
               key={product.id}
+              id={product.id}
+              as="div"
               className="overflow-hidden card !p-0"
+              disabled={reordering}
             >
+              {({ attributes, listeners }) => (
+              <>
               <div className="flex items-stretch gap-2 p-3">
+                <div className="flex items-center shrink-0">
+                  <DragHandle attributes={attributes} listeners={listeners} />
+                </div>
                 <button
                   type="button"
                   className="flex flex-1 items-center gap-4 text-left min-w-0"
@@ -647,9 +691,12 @@ export default function Products() {
                   </div>
                 </div>
               )}
-            </article>
+              </>
+              )}
+            </SortableRow>
           );
         })}
+        </SortableContainer>
       </section>
 
       {modalOpen && (

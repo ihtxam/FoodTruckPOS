@@ -1,5 +1,5 @@
 import { getDb, schema } from "@/db";
-import { eq, and, desc, gt, or, like } from "drizzle-orm";
+import { eq, and, desc, asc, gt, or, like, gte, lte } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
 import { MerchantSettingsService, type FulfillmentChannel } from "@/services/merchant-settings.service";
 
@@ -73,7 +73,7 @@ export class WebShopService {
         },
         limit,
         offset,
-        orderBy: desc(schema.products.createdAt),
+        orderBy: [asc(schema.products.sortOrder), desc(schema.products.createdAt)],
       });
 
       return products;
@@ -92,7 +92,7 @@ export class WebShopService {
     try {
       const categories = await db.query.categories.findMany({
         where: eq(schema.categories.merchantId, merchantId),
-        orderBy: desc(schema.categories.createdAt),
+        orderBy: [asc(schema.categories.sortOrder), desc(schema.categories.createdAt)],
       });
 
       return categories;
@@ -415,6 +415,3 @@ export class WebShopService {
     }
   }
 }
-
-// Import missing functions
-import { gt, or, like, gte, lte } from "drizzle-orm";
