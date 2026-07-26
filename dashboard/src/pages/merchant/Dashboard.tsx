@@ -1,5 +1,5 @@
-import { useCallback, useState } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { useCallback, useEffect, useState } from 'react';
+import { Routes, Route, useLocation } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import Sidebar from '@/components/Sidebar';
 import Header from '@/components/Header';
@@ -21,9 +21,29 @@ import { I18nProvider, useI18n, type Locale } from '@/lib/i18n';
 
 function MerchantShell() {
   const { t, locale, setLocale } = useI18n();
+  const location = useLocation();
+  const isPosRoute = /^\/merchant\/pos\/?$/.test(location.pathname);
   const [sidebarOpen, setSidebarOpen] = useState(
     typeof window !== 'undefined' ? window.innerWidth >= 1024 : true
   );
+  /** When true on /merchant/pos, hide sidebar + header so WebPOS feels like its own app. */
+  const [posAppMode, setPosAppMode] = useState(true);
+  const hideChrome = isPosRoute && posAppMode;
+
+  useEffect(() => {
+    if (isPosRoute) setPosAppMode(true);
+  }, [isPosRoute]);
+
+  useEffect(() => {
+    const showPanel = () => setPosAppMode(false);
+    const enterApp = () => setPosAppMode(true);
+    window.addEventListener('webpos:show-panel', showPanel);
+    window.addEventListener('webpos:enter-app', enterApp);
+    return () => {
+      window.removeEventListener('webpos:show-panel', showPanel);
+      window.removeEventListener('webpos:enter-app', enterApp);
+    };
+  }, []);
 
   const changeLanguage = useCallback(
     async (lang: Locale) => {
@@ -53,22 +73,30 @@ function MerchantShell() {
   ];
 
   return (
-    <div className="flex h-screen panel-shell">
-      <Sidebar isOpen={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} menuItems={menuItems} />
+    <div className={`flex h-screen panel-shell${hideChrome ? ' webpos-app-mode' : ''}`}>
+      {!hideChrome && (
+        <Sidebar isOpen={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} menuItems={menuItems} />
+      )}
 
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-        <Header
-          title={t('merchantDashboard')}
-          onMenuClick={() => setSidebarOpen(!sidebarOpen)}
-          language={locale}
-          onLanguageChange={changeLanguage}
-        />
+        {!hideChrome && (
+          <Header
+            title={t('merchantDashboard')}
+            onMenuClick={() => setSidebarOpen(!sidebarOpen)}
+            language={locale}
+            onLanguageChange={changeLanguage}
+          />
+        )}
 
-        <main className="flex-1 overflow-auto p-3 sm:p-4">
+        <main
+          className={
+            hideChrome ? 'flex-1 overflow-hidden p-0 min-h-0' : 'flex-1 overflow-auto p-3 sm:p-4'
+          }
+        >
           <Routes>
             <Route index element={<Overview />} />
             <Route path="orders" element={<Orders />} />
-            <Route path="pos" element={<WebPos />} />
+            <Route path="pos" element={<WebPos appMode={hideChrome} />} />
             <Route path="products" element={<Products />} />
             <Route path="modifiers" element={<Modifiers />} />
             <Route path="categories" element={<Categories />} />

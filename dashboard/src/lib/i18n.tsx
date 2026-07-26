@@ -171,6 +171,9 @@ const en: Dict = {
   paxOrderingHint: 'Order each guest separately, bill per person, or split /N at checkout.',
   webPosHint: 'Browser POS for counter sales. Use ManuPOS Desktop for USB thermal printers.',
   openWebPos: 'Open WebPOS',
+  webPosEscHint: 'Esc — show panel menus',
+  webPosShowPanel: 'Panel menus (Esc)',
+  webPosEnterApp: 'Fullscreen POS',
   adyenSettingsHint:
     'One Adyen merchant account and API key for the online shop and all payment terminals.',
   adyenSaved: 'Adyen credentials saved',
@@ -364,6 +367,9 @@ const fr: Dict = {
   paxOrderingHint: 'Commander par convive, facturer par personne ou partager /N.',
   webPosHint: 'POS navigateur. ManuPOS Desktop pour imprimantes USB.',
   openWebPos: 'Ouvrir WebPOS',
+  webPosEscHint: 'Échap — menus du panneau',
+  webPosShowPanel: 'Menus panneau (Échap)',
+  webPosEnterApp: 'POS plein écran',
   adyenSettingsHint:
     'Un seul compte marchand et clé API Adyen pour la boutique en ligne et tous les terminaux.',
   adyenSaved: 'Identifiants Adyen enregistrés',
@@ -557,6 +563,9 @@ const de: Dict = {
   paxOrderingHint: 'Pro Gast bestellen, einzeln abrechnen oder /N teilen.',
   webPosHint: 'Browser-POS. ManuPOS Desktop für USB-Bondrucker.',
   openWebPos: 'WebPOS öffnen',
+  webPosEscHint: 'Esc — Panel-Menüs anzeigen',
+  webPosShowPanel: 'Panel-Menüs (Esc)',
+  webPosEnterApp: 'POS Vollbild',
   adyenSettingsHint:
     'Ein Adyen-Händlerkonto und API-Schlüssel für Online-Shop und alle Zahlungsterminals.',
   adyenSaved: 'Adyen-Zugangsdaten gespeichert',
