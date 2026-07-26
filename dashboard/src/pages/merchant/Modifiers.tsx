@@ -480,142 +480,160 @@ export default function Modifiers() {
                       <Plus size={18} />
                     </button>
                   </div>
-                  <div className="overflow-x-auto rounded-lg border border-slate-200">
-                    <table className="min-w-full text-sm">
-                      <thead className="bg-slate-50 text-left text-slate-500">
-                        <tr>
-                          <th className="px-2 py-2 w-8" />
-                          <th className="px-2 py-2">Items</th>
-                          {form.pricingType !== 'free' && (
-                            <th className="px-2 py-2 w-36">Sale price</th>
-                          )}
-                          <th className="px-2 py-2 w-36">Sale Status</th>
-                          <th className="px-2 py-2 w-28 text-center">Default</th>
-                          <th className="px-2 py-2 w-10" />
-                        </tr>
-                      </thead>
-                      <SortableContainer
-                        as="tbody"
-                        items={form.options.map((o, i) => ({
-                          ...o,
-                          id: o.id || `opt-row-${i}`,
-                        }))}
-                        onReorder={(next) =>
-                          setForm({
-                            ...form,
-                            options: next.map((row, idx) => ({
-                              ...row,
-                              sortOrder: idx,
-                            })),
-                          })
-                        }
-                      >
-                        {form.options.map((opt, idx) => {
-                          const rowId = opt.id || `opt-row-${idx}`;
-                          return (
-                            <SortableRow
-                              key={rowId}
-                              id={rowId}
-                              as="tr"
-                              className="border-t border-slate-100 bg-white"
-                            >
-                              {({ attributes, listeners }) => (
-                                <>
-                                  <td className="px-2 py-2">
-                                    <DragHandle attributes={attributes} listeners={listeners} />
-                                  </td>
-                                  <td className="px-2 py-2">
+
+                  <SortableContainer
+                    as="div"
+                    className="space-y-3"
+                    items={form.options.map((o, i) => ({
+                      ...o,
+                      id: o.id || `opt-row-${i}`,
+                    }))}
+                    onReorder={(next) =>
+                      setForm({
+                        ...form,
+                        options: next.map((row, idx) => ({
+                          ...row,
+                          sortOrder: idx,
+                        })),
+                      })
+                    }
+                  >
+                    {form.options.map((opt, idx) => {
+                      const rowId = opt.id || `opt-row-${idx}`;
+                      return (
+                        <SortableRow
+                          key={rowId}
+                          id={rowId}
+                          as="div"
+                          className="rounded-lg border border-slate-200 bg-white p-3 sm:p-3.5"
+                        >
+                          {({ attributes, listeners }) => (
+                            <div className="flex flex-col gap-2.5 sm:flex-row sm:items-end sm:gap-3">
+                              <div className="flex items-center gap-2 sm:contents">
+                                <div className="shrink-0 sm:pb-2">
+                                  <DragHandle attributes={attributes} listeners={listeners} />
+                                </div>
+                                <label className="block min-w-0 flex-1 sm:flex-[1.4]">
+                                  <span className="mb-1 block text-xs font-medium text-slate-500">
+                                    Items
+                                  </span>
+                                  <input
+                                    className="field min-w-0"
+                                    placeholder="Option Name"
+                                    value={opt.name}
+                                    onChange={(e) => {
+                                      const options = [...form.options];
+                                      options[idx] = { ...options[idx], name: e.target.value };
+                                      setForm({ ...form, options });
+                                    }}
+                                  />
+                                </label>
+                                <button
+                                  type="button"
+                                  className="shrink-0 rounded p-2 text-slate-400 hover:bg-red-50 hover:text-red-600 sm:hidden"
+                                  onClick={() =>
+                                    setForm({
+                                      ...form,
+                                      options:
+                                        form.options.length > 1
+                                          ? form.options.filter((_, i) => i !== idx)
+                                          : [emptyOption()],
+                                    })
+                                  }
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              </div>
+
+                              {form.pricingType !== 'free' && (
+                                <label className="block w-full sm:w-36 sm:shrink-0">
+                                  <span className="mb-1 block text-xs font-medium text-slate-500">
+                                    Sale price
+                                  </span>
+                                  <div className="relative">
                                     <input
-                                      className="field"
-                                      placeholder="Option Name"
-                                      value={opt.name}
-                                      onChange={(e) => {
-                                        const options = [...form.options];
-                                        options[idx] = { ...options[idx], name: e.target.value };
-                                        setForm({ ...form, options });
-                                      }}
-                                    />
-                                  </td>
-                                  {form.pricingType !== 'free' && (
-                                    <td className="px-2 py-2">
-                                      <div className="relative">
-                                        <input
-                                          className="field pr-12"
-                                          type="number"
-                                          step="0.01"
-                                          value={opt.price}
-                                          onChange={(e) => {
-                                            const options = [...form.options];
-                                            options[idx] = {
-                                              ...options[idx],
-                                              price: Number(e.target.value) || 0,
-                                            };
-                                            setForm({ ...form, options });
-                                          }}
-                                        />
-                                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">
-                                          CHF
-                                        </span>
-                                      </div>
-                                    </td>
-                                  )}
-                                  <td className="px-2 py-2">
-                                    <select
-                                      className="field"
-                                      value={opt.saleStatus}
+                                      className="field min-w-0 !pr-14"
+                                      type="number"
+                                      inputMode="decimal"
+                                      step="0.01"
+                                      min="0"
+                                      value={opt.price}
                                       onChange={(e) => {
                                         const options = [...form.options];
                                         options[idx] = {
                                           ...options[idx],
-                                          saleStatus: e.target.value as SaleStatus,
-                                        };
-                                        setForm({ ...form, options });
-                                      }}
-                                    >
-                                      <option value="in_stock">In stock</option>
-                                      <option value="out_of_stock">Out of stock</option>
-                                    </select>
-                                  </td>
-                                  <td className="px-2 py-2 text-center">
-                                    <input
-                                      type="checkbox"
-                                      className="accent-teal-600"
-                                      checked={opt.isDefault}
-                                      onChange={(e) => {
-                                        const options = [...form.options];
-                                        options[idx] = {
-                                          ...options[idx],
-                                          isDefault: e.target.checked,
+                                          price: Number(e.target.value) || 0,
                                         };
                                         setForm({ ...form, options });
                                       }}
                                     />
-                                  </td>
-                                  <td className="px-2 py-2">
-                                    <button
-                                      type="button"
-                                      className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"
-                                      onClick={() =>
-                                        setForm({
-                                          ...form,
-                                          options:
-                                            form.options.length > 1
-                                              ? form.options.filter((_, i) => i !== idx)
-                                              : [emptyOption()],
-                                        })
-                                      }
-                                    >
-                                      <Trash2 size={16} />
-                                    </button>
-                                  </td>
-                                </>
+                                    <span className="pointer-events-none absolute inset-y-0 right-0 flex w-12 items-center justify-center text-xs font-medium text-slate-500">
+                                      CHF
+                                    </span>
+                                  </div>
+                                </label>
                               )}
-                            </SortableRow>
-                          );
-                        })}
-                      </SortableContainer>
-                    </table>
-                  </div>
+
+                              <label className="block w-full min-w-0 sm:w-40 sm:shrink-0">
+                                <span className="mb-1 block text-xs font-medium text-slate-500">
+                                  Sale Status
+                                </span>
+                                <select
+                                  className="field min-w-0"
+                                  value={opt.saleStatus}
+                                  onChange={(e) => {
+                                    const options = [...form.options];
+                                    options[idx] = {
+                                      ...options[idx],
+                                      saleStatus: e.target.value as SaleStatus,
+                                    };
+                                    setForm({ ...form, options });
+                                  }}
+                                >
+                                  <option value="in_stock">In stock</option>
+                                  <option value="out_of_stock">Out of stock</option>
+                                </select>
+                              </label>
+
+                              <div className="flex items-center justify-between gap-3 sm:contents">
+                                <label className="inline-flex items-center gap-2 text-sm text-slate-700 sm:pb-2.5 sm:shrink-0">
+                                  <input
+                                    type="checkbox"
+                                    className="accent-teal-600 h-4 w-4"
+                                    checked={opt.isDefault}
+                                    onChange={(e) => {
+                                      const options = [...form.options];
+                                      options[idx] = {
+                                        ...options[idx],
+                                        isDefault: e.target.checked,
+                                      };
+                                      setForm({ ...form, options });
+                                    }}
+                                  />
+                                  Default
+                                </label>
+                                <button
+                                  type="button"
+                                  className="hidden sm:inline-flex shrink-0 rounded p-2 text-slate-400 hover:bg-red-50 hover:text-red-600 sm:mb-0.5"
+                                  onClick={() =>
+                                    setForm({
+                                      ...form,
+                                      options:
+                                        form.options.length > 1
+                                          ? form.options.filter((_, i) => i !== idx)
+                                          : [emptyOption()],
+                                    })
+                                  }
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </SortableRow>
+                      );
+                    })}
+                  </SortableContainer>
                 </div>
               </section>
 
@@ -770,6 +788,8 @@ export default function Modifiers() {
       <style>{`
         .field {
           width: 100%;
+          min-width: 0;
+          box-sizing: border-box;
           border: 1px solid #e2e8f0;
           border-radius: 0.5rem;
           padding: 0.55rem 0.75rem;
@@ -780,6 +800,15 @@ export default function Modifiers() {
           outline: none;
           border-color: #14b8a6;
           box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.15);
+        }
+        /* Prevent number spinner / suffix collision on narrow screens */
+        input.field[type='number'] {
+          -moz-appearance: textfield;
+        }
+        input.field[type='number']::-webkit-outer-spin-button,
+        input.field[type='number']::-webkit-inner-spin-button {
+          -webkit-appearance: none;
+          margin: 0;
         }
       `}</style>
     </div>
