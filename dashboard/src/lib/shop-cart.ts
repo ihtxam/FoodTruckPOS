@@ -1,12 +1,27 @@
 export type ShopChannel = 'takeaway' | 'dine_in' | 'delivery';
 
-export interface ShopCartItem {
+export interface ShopSelectedExtra {
   id: string;
   name: string;
   price: number;
+  groupId?: string;
+  groupTitle?: string;
+}
+
+export interface ShopCartItem {
+  /** Unique cart line (same product can appear twice with different extras). */
+  lineId: string;
+  /** Product id */
+  id: string;
+  name: string;
+  /** Unit price including selected extras */
+  price: number;
+  /** Product base price without extras */
+  basePrice: number;
   quantity: number;
   description?: string;
   image?: string;
+  selectedExtras?: ShopSelectedExtra[];
 }
 
 export interface ShopCheckoutDraft {
@@ -33,11 +48,31 @@ export function cartStorageKey(shopKey: string) {
   return `${PREFIX}${shopKey}`;
 }
 
+function normalizeCartItem(item: Partial<ShopCartItem> & { id: string; name: string; price: number; quantity: number }): ShopCartItem {
+  const selectedExtras = Array.isArray(item.selectedExtras) ? item.selectedExtras : [];
+  const basePrice = typeof item.basePrice === 'number' ? item.basePrice : item.price;
+  return {
+    lineId: item.lineId || `${item.id}-${selectedExtras.map((e) => e.id).sort().join(',') || 'plain'}`,
+    id: item.id,
+    name: item.name,
+    price: item.price,
+    basePrice,
+    quantity: item.quantity,
+    description: item.description,
+    image: item.image,
+    selectedExtras,
+  };
+}
+
 export function loadCart(shopKey: string): ShopCheckoutDraft | null {
   try {
     const raw = localStorage.getItem(cartStorageKey(shopKey));
     if (!raw) return null;
-    return JSON.parse(raw) as ShopCheckoutDraft;
+    const draft = JSON.parse(raw) as ShopCheckoutDraft;
+    return {
+      ...draft,
+      items: (draft.items || []).map((i) => normalizeCartItem(i)),
+    };
   } catch {
     return null;
   }
@@ -71,6 +106,20 @@ export function emptyDraft(channel: ShopChannel = 'takeaway'): ShopCheckoutDraft
 
 export function cartSubtotal(items: ShopCartItem[]) {
   return items.reduce((s, i) => s + i.price * i.quantity, 0);
+}
+
+export function extrasSignature(extras?: ShopSelectedExtra[]) {
+  return (extras || [])
+    .map((e) => e.id)
+    .sort()
+    .join(',');
+}
+
+export function newCartLineId() {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID();
+  }
+  return `line-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
 const RESERVED_SUBDOMAINS = new Set(['admin', 'api', 'pay', 'www', 'app', 'panel', 'shop']);

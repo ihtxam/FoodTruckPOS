@@ -307,7 +307,11 @@ export default function CheckoutPage() {
       const res = await axios.post(
         `/api/shop/${shopKey}/orders`,
         {
-          items: draft.items.map((i) => ({ productId: i.id, quantity: i.quantity })),
+          items: draft.items.map((i) => ({
+            productId: i.id,
+            quantity: i.quantity,
+            selectedExtras: (i.selectedExtras || []).map((e) => ({ id: e.id })),
+          })),
           fulfillmentChannel: draft.channel,
           customerName: draft.customerName,
           customerEmail: draft.customerEmail || undefined,
@@ -815,11 +819,16 @@ export default function CheckoutPage() {
 
               <ul className="border-t border-stone-100 pt-3 space-y-2 text-sm">
                 {draft.items.map((i) => (
-                  <li key={i.id} className="flex justify-between">
-                    <span>
+                  <li key={i.lineId || i.id} className="flex justify-between gap-3">
+                    <span className="min-w-0">
                       {i.quantity}× {i.name}
+                      {!!i.selectedExtras?.length && (
+                        <span className="block text-xs text-stone-500 mt-0.5">
+                          {i.selectedExtras.map((e) => e.name).join(', ')}
+                        </span>
+                      )}
                     </span>
-                    <span>CHF {(i.price * i.quantity).toFixed(2)}</span>
+                    <span className="shrink-0">CHF {(i.price * i.quantity).toFixed(2)}</span>
                   </li>
                 ))}
               </ul>
@@ -844,11 +853,16 @@ export default function CheckoutPage() {
           <h2 className="font-bold text-lg">Your order</h2>
           <ul className="text-sm space-y-2">
             {draft.items.map((i) => (
-              <li key={i.id} className="flex justify-between gap-2">
-                <span>
+              <li key={i.lineId || i.id} className="flex justify-between gap-2">
+                <span className="min-w-0">
                   {i.quantity}× {i.name}
+                  {!!i.selectedExtras?.length && (
+                    <span className="block text-xs text-stone-500 mt-0.5">
+                      {i.selectedExtras.map((e) => e.name).join(', ')}
+                    </span>
+                  )}
                 </span>
-                <span>CHF {(i.price * i.quantity).toFixed(2)}</span>
+                <span className="shrink-0">CHF {(i.price * i.quantity).toFixed(2)}</span>
               </li>
             ))}
           </ul>
