@@ -8,6 +8,8 @@ import { CustomerService } from "@/services/customer.service";
 import { MerchantSettingsService } from "@/services/merchant-settings.service";
 import { CatalogImportService } from "@/services/catalog-import.service";
 import { ModifierService } from "@/services/modifier.service";
+import { SubscriptionPlansService } from "@/services/subscription-plans.service";
+import { SubscriptionBillingService } from "@/services/subscription-billing.service";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -916,5 +918,74 @@ router.post("/vat-settings", async (req: Request, res: Response) => {
     res.status(400).json({ error: error instanceof Error ? error.message : "Failed to create VAT setting" });
   }
 });
+
+// ============================================================================
+// BILLING / SUBSCRIPTION PLANS (payments → platform Adyen)
+// ============================================================================
+
+router.get("/plans", async (_req: Request, res: Response) => {
+  try {
+    const plans = await SubscriptionPlansService.listPublic();
+    res.json({ success: true, plans });
+  } catch (error) {
+    console.error("Error listing plans:", error);
+    res.status(500).json({ error: error instanceof Error ? error.message : "Failed to list plans" });
+  }
+});
+
+router.get("/billing", async (req: Request, res: Response) => {
+  try {
+    const merchantId = req.merchantId;
+    if (!merchantId) return res.status(400).json({ error: "Merchant ID is required" });
+    const billing = await SubscriptionBillingService.getBillingOverview(merchantId);
+    res.json({ success: true, ...billing });
+  } catch (error) {
+    console.error("Error getting billing:", error);
+    res.status(500).json({ error: error instanceof Error ? error.message : "Failed to get billing" });
+  }
+});
+
+router.post("/billing/checkout", async (req: Request, res: Response) => {
+  try {
+    const merchantId = req.merchantId;
+    if (!merchantId) return res.status(400).json({ error: "Merchant ID is required" });
+    const { planId, billingCycle, returnUrl } = req.body || {};
+    if (!planId) return res.status(400).json({ error: "planId is required" });
+
+    const result = await SubscriptionBillingService.startCheckout(
+      merchantId,
+      planId,
+      billingCycle === "yearly" ? "yearly" : "monthly",
+      returnUrl
+    );
+    res.json({ success: true, ...result });
+  } catch (error) {
+    console.error("Error starting billing checkout:", error);
+    res.status(400).json({
+      error: error instanceof Error ? error.message : "Failed to start checkout",
+    });
+  }
+});
+
+router.post("/billing/confirm", async (req: Request, res: Response) => {
+  try {
+    const merchantId = req.merchantId;
+    if (!merchantId) return res.status(400).json({ error: "Merchant ID is required" });
+    const { paymentId, resultCode, pspReference } = req.body || {};
+    if (!paymentId) return res.status(400).json({ error: "paymentId is required" });
+
+    const result = await SubscriptionBillingService.confirmPayment(merchantId, paymentId, {
+      resultCode,
+      pspReference,
+    });
+    res.json({ success: true, ...result });
+  } catch (error) {
+    console.error("Error confirming billing payment:", error);
+    res.status(400).json({
+      error: error instanceof Error ? error.message : "Failed to confirm payment",
+    });
+  }
+});
+
 
 export default router;

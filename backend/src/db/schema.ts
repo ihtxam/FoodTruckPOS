@@ -102,6 +102,76 @@ export const merchants = pgTable(
 );
 
 // ============================================================================
+// SUBSCRIPTION PLANS (platform SaaS tiers)
+// ============================================================================
+
+export const subscriptionPlans = pgTable(
+  "subscription_plans",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: varchar("name", { length: 100 }).notNull(),
+    slug: varchar("slug", { length: 50 }).notNull().unique(),
+    description: text("description"),
+    priceMonthly: decimal("price_monthly", { precision: 10, scale: 2 }).notNull().default("0"),
+    priceYearly: decimal("price_yearly", { precision: 10, scale: 2 }),
+    currency: varchar("currency", { length: 3 }).notNull().default("CHF"),
+    maxDevices: integer("max_devices").notNull().default(1),
+    maxProducts: integer("max_products"),
+    features: json("features").$type<string[]>().default([]),
+    isActive: boolean("is_active").notNull().default(true),
+    /** Visible for merchants to purchase in their panel */
+    isPublic: boolean("is_public").notNull().default(true),
+    sortOrder: integer("sort_order").notNull().default(0),
+    trialDays: integer("trial_days").notNull().default(0),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    slugIdx: uniqueIndex("subscription_plans_slug_idx").on(table.slug),
+    activeIdx: index("subscription_plans_active_idx").on(table.isActive),
+  })
+);
+
+/** Platform-wide key/value settings (e.g. platform Adyen credentials) */
+export const platformSettings = pgTable("platform_settings", {
+  key: varchar("key", { length: 100 }).primaryKey(),
+  value: text("value"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+/** Merchant subscription purchases paid to the platform Adyen account */
+export const subscriptionPayments = pgTable(
+  "subscription_payments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    merchantId: uuid("merchant_id")
+      .notNull()
+      .references(() => merchants.id, { onDelete: "cascade" }),
+    planId: uuid("plan_id")
+      .notNull()
+      .references(() => subscriptionPlans.id, { onDelete: "restrict" }),
+    billingCycle: varchar("billing_cycle", { length: 20 }).notNull(), // monthly | yearly
+    amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+    currency: varchar("currency", { length: 3 }).notNull().default("CHF"),
+    status: varchar("status", { length: 30 }).notNull().default("pending"), // pending | paid | failed | cancelled
+    adyenSessionId: varchar("adyen_session_id", { length: 255 }),
+    adyenPspReference: varchar("adyen_psp_reference", { length: 255 }),
+    adyenResultCode: varchar("adyen_result_code", { length: 50 }),
+    paidAt: timestamp("paid_at"),
+    periodStart: timestamp("period_start"),
+    periodEnd: timestamp("period_end"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    merchantIdIdx: index("subscription_payments_merchant_id_idx").on(table.merchantId),
+    planIdIdx: index("subscription_payments_plan_id_idx").on(table.planId),
+    statusIdx: index("subscription_payments_status_idx").on(table.status),
+    sessionIdx: index("subscription_payments_session_idx").on(table.adyenSessionId),
+  })
+);
+
+// ============================================================================
 // DEVICES
 // ============================================================================
 
@@ -840,6 +910,7 @@ export const merchantsRelations = relations(merchants, ({ many }) => ({
   modifierGroups: many(modifierGroups),
   floorPlans: many(floorPlans),
   diningTables: many(diningTables),
+  subscriptionPayments: many(subscriptionPayments),
 }));
 
 export const floorPlansRelations = relations(floorPlans, ({ one, many }) => ({
@@ -912,4 +983,19 @@ export const deliveryZonesRelations = relations(deliveryZones, ({ one }) => ({
 
 export const paymentTerminalsRelations = relations(paymentTerminals, ({ one }) => ({
   merchant: one(merchants, { fields: [paymentTerminals.merchantId], references: [merchants.id] }),
+}));
+
+export const subscriptionPlansRelations = relations(subscriptionPlans, ({ many }) => ({
+  payments: many(subscriptionPayments),
+}));
+
+export const subscriptionPaymentsRelations = relations(subscriptionPayments, ({ one }) => ({
+  merchant: one(merchants, {
+    fields: [subscriptionPayments.merchantId],
+    references: [merchants.id],
+  }),
+  plan: one(subscriptionPlans, {
+    fields: [subscriptionPayments.planId],
+    references: [subscriptionPlans.id],
+  }),
 }));

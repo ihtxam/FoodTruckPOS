@@ -16,6 +16,7 @@ import deliveryZonesRoutes from "@/routes/delivery-zones.routes";
 import floorPlansRoutes from "@/routes/floor-plans.routes";
 import receiptsRoutes from "@/routes/receipts.routes";
 import chaslayRoutes from "@/routes/chaslay";
+import webhooksRoutes from "@/routes/webhooks.routes";
 
 // Load environment variables
 dotenv.config();
@@ -95,6 +96,7 @@ app.use("/api/rfid-readers", rfidReadersRoutes);
 app.use("/api/delivery-zones", deliveryZonesRoutes);
 app.use("/api/merchant/floor-plans", floorPlansRoutes);
 app.use("/api/receipts", receiptsRoutes);
+app.use("/api/webhooks", webhooksRoutes);
 /** Chaslay / FoodTruck Android POS (Retrofit /v1/* contract) */
 app.use("/v1", chaslayRoutes);
 

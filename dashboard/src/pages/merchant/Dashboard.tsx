@@ -12,6 +12,7 @@ import Customers from './Customers';
 import Loyalty from './Loyalty';
 import Terminals from './Terminals';
 import Settings from './Settings';
+import Billing from './Billing';
 import OnlineShop from './OnlineShop';
 import FloorPlan from './FloorPlan';
 import WebPos from './WebPos';
@@ -48,6 +49,7 @@ function MerchantShell() {
     { label: t('shop'), path: '/merchant/online-shop', icon: '🌐' },
     { label: t('terminals'), path: '/merchant/terminals', icon: '💳' },
     { label: t('floorPlan'), path: '/merchant/floor-plan', icon: '🪑' },
+    { label: t('billing'), path: '/merchant/billing', icon: '💼' },
     { label: t('settings'), path: '/merchant/settings', icon: '⚙️' },
   ];
 
@@ -76,6 +78,7 @@ function MerchantShell() {
             <Route path="online-shop" element={<OnlineShop />} />
             <Route path="terminals" element={<Terminals />} />
             <Route path="floor-plan" element={<FloorPlan />} />
+            <Route path="billing" element={<Billing />} />
             <Route path="settings" element={<Settings />} />
           </Routes>
         </main>

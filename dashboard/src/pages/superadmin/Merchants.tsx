@@ -28,6 +28,15 @@ interface IssuedLicense {
   expiresAt: string;
 }
 
+interface PlanOption {
+  id: string;
+  name: string;
+  slug: string;
+  isActive: boolean;
+  priceMonthly: string;
+  currency: string;
+}
+
 const emptyForm = {
   businessName: '',
   email: '',
@@ -46,6 +55,7 @@ const emptyForm = {
 
 export default function Merchants() {
   const [merchants, setMerchants] = useState<Merchant[]>([]);
+  const [plans, setPlans] = useState<PlanOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -59,6 +69,21 @@ export default function Merchants() {
   useEffect(() => {
     fetchMerchants();
   }, [page, search]);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res = await api.get('/superadmin/plans');
+        const list = (res.data.plans || []).filter((p: PlanOption) => p.isActive !== false);
+        setPlans(list);
+        if (list.length && !list.some((p: PlanOption) => p.slug === emptyForm.subscriptionPlan)) {
+          setForm((f) => ({ ...f, subscriptionPlan: list[0].slug }));
+        }
+      } catch {
+        /* keep hardcoded fallbacks in select */
+      }
+    })();
+  }, []);
 
   const fetchMerchants = async () => {
     try {
@@ -425,11 +450,26 @@ export default function Merchants() {
                     value={form.subscriptionPlan}
                     onChange={(e) => setForm({ ...form, subscriptionPlan: e.target.value })}
                   >
-                    <option value="free">Free</option>
-                    <option value="starter">Starter</option>
-                    <option value="professional">Professional</option>
-                    <option value="enterprise">Enterprise</option>
+                    {plans.length > 0 ? (
+                      plans.map((p) => (
+                        <option key={p.id} value={p.slug}>
+                          {p.name} ({Number(p.priceMonthly).toFixed(2)} {p.currency}/mo)
+                        </option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="free">Free</option>
+                        <option value="starter">Starter</option>
+                        <option value="professional">Professional</option>
+                        <option value="enterprise">Enterprise</option>
+                      </>
+                    )}
                   </select>
+                  {!plans.length && (
+                    <span className="text-xs text-amber-700 mt-1 block">
+                      No plans in Settings yet — using defaults. Create plans under Superadmin → Settings.
+                    </span>
+                  )}
                 </label>
               </div>
 
