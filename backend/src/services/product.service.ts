@@ -44,6 +44,8 @@ export class ProductService {
         sortOrder?: number;
       }>;
       buttonColor?: string;
+      /** Null clears; integer ≥ 1 sets free-with-points cost */
+      loyaltyRewardPoints?: number | null;
     }
   ) {
     const db = getDb();
@@ -80,6 +82,14 @@ export class ProductService {
           specifications: extras?.specifications || [],
           buttonColor: extras?.buttonColor || null,
           allowExtras: !!extras?.allowExtras,
+          loyaltyRewardPoints:
+            extras?.loyaltyRewardPoints === null
+              ? null
+              : extras?.loyaltyRewardPoints !== undefined &&
+                  Number.isFinite(Number(extras.loyaltyRewardPoints)) &&
+                  Number(extras.loyaltyRewardPoints) >= 1
+                ? Math.floor(Number(extras.loyaltyRewardPoints))
+                : null,
           sortOrder: Number(nextSort) || 0,
           clientId: extras?.clientId,
         })

@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import { AuthService } from "@/services/auth.service";
+import { ShopLoyaltyService } from "@/services/shop-loyalty.service";
 
 export class ShopCustomerService {
   static async register(
@@ -79,7 +80,13 @@ export class ShopCustomerService {
       where: and(eq(schema.customers.id, customerId), eq(schema.customers.merchantId, merchantId)),
     });
     if (!customer) throw new Error("Customer not found");
-    return this.publicCustomer(customer);
+    let loyaltyPoints = customer.loyaltyPoints ?? 0;
+    try {
+      loyaltyPoints = await ShopLoyaltyService.getBalance(merchantId, customerId);
+    } catch {
+      /* keep cached */
+    }
+    return this.publicCustomer({ ...customer, loyaltyPoints });
   }
 
   static async updateProfile(
@@ -116,6 +123,7 @@ export class ShopCustomerService {
       defaultZip: c.defaultZip,
       defaultCity: c.defaultCity,
       hasAccount: !!c.passwordHash,
+      loyaltyPoints: c.loyaltyPoints ?? 0,
     };
   }
 

@@ -177,6 +177,7 @@ router.post("/products", async (req: Request, res: Response) => {
       clientId,
       specifications,
       buttonColor,
+      loyaltyRewardPoints,
       modifierGroupIds,
     } = req.body;
 
@@ -186,6 +187,17 @@ router.post("/products", async (req: Request, res: Response) => {
 
     if (!name || price === undefined) {
       return res.status(400).json({ error: "Name and price are required" });
+    }
+
+    let normalizedLoyaltyReward: number | null | undefined = undefined;
+    if (loyaltyRewardPoints === null || loyaltyRewardPoints === "" || loyaltyRewardPoints === undefined) {
+      normalizedLoyaltyReward = loyaltyRewardPoints === undefined ? undefined : null;
+    } else {
+      const n = Math.floor(Number(loyaltyRewardPoints));
+      if (!Number.isFinite(n) || n < 1) {
+        return res.status(400).json({ error: "loyaltyRewardPoints must be null or an integer ≥ 1" });
+      }
+      normalizedLoyaltyReward = n;
     }
 
     const { sanitizeComboSlotsInput } = await import("@/lib/combo");
@@ -218,6 +230,7 @@ router.post("/products", async (req: Request, res: Response) => {
         clientId,
         specifications,
         buttonColor,
+        loyaltyRewardPoints: normalizedLoyaltyReward === undefined ? null : normalizedLoyaltyReward,
       }
     );
 
@@ -258,6 +271,18 @@ router.put("/products/:productId", async (req: Request, res: Response) => {
     // Coerce numeric fields commonly sent as numbers from the dashboard
     if (updates.price !== undefined) updates.price = String(updates.price);
     if (updates.cost !== undefined && updates.cost !== null) updates.cost = String(updates.cost);
+
+    if (updates.loyaltyRewardPoints !== undefined) {
+      if (updates.loyaltyRewardPoints === null || updates.loyaltyRewardPoints === "") {
+        updates.loyaltyRewardPoints = null;
+      } else {
+        const n = Math.floor(Number(updates.loyaltyRewardPoints));
+        if (!Number.isFinite(n) || n < 1) {
+          return res.status(400).json({ error: "loyaltyRewardPoints must be null or an integer ≥ 1" });
+        }
+        updates.loyaltyRewardPoints = n;
+      }
+    }
 
     if (updates.comboItems !== undefined || updates.productType === "combo") {
       const { sanitizeComboSlotsInput } = await import("@/lib/combo");

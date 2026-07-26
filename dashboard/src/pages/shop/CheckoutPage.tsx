@@ -51,6 +51,8 @@ export default function CheckoutPage() {
   const [loginPassword, setLoginPassword] = useState('');
   const [whenMode, setWhenMode] = useState<WhenMode>('asap');
   const [scheduleDayOffset, setScheduleDayOffset] = useState(0);
+  const [loyaltyBalance, setLoyaltyBalance] = useState(0);
+  const [redeemRate, setRedeemRate] = useState(100);
 
   useEffect(() => {
     if (!shopKey) return;
@@ -82,10 +84,17 @@ export default function CheckoutPage() {
         const token = loadCustomerToken(shopKey);
         if (token) {
           try {
-            const me = await axios.get(`/api/shop/${shopKey}/auth/me`, {
-              headers: { Authorization: `Bearer ${token}` },
-            });
+            const [me, loyaltyRes] = await Promise.all([
+              axios.get(`/api/shop/${shopKey}/auth/me`, {
+                headers: { Authorization: `Bearer ${token}` },
+              }),
+              axios.get(`/api/shop/${shopKey}/loyalty`, {
+                headers: { Authorization: `Bearer ${token}` },
+              }),
+            ]);
             setCustomer(me.data.customer);
+            setLoyaltyBalance(Number(loyaltyRes.data.balance) || 0);
+            setRedeemRate(Number(loyaltyRes.data.program?.redeemPointsPerChf) || 100);
             setDraft((d) => ({
               ...d,
               authMode: 'login',
@@ -193,8 +202,23 @@ export default function CheckoutPage() {
     draft.channel === 'delivery' ? Number(deliveryInfo?.zone?.deliveryFee || 0) : 0
   );
   const tip = roundTo005(Math.max(0, Number(draft.tipAmount) || 0));
+  const rewardPointsInCart = draft.items
+    .filter((i) => i.loyaltyReward)
+    .reduce((s, i) => s + (i.rewardPointsCost || 0) * i.quantity, 0);
+  const loyaltyEnabled = !!merchant?.loyalty?.enabled && !!customer;
+  const rate = Math.max(1, Math.floor(redeemRate || 100));
+  const balanceAfterRewards = Math.max(0, loyaltyBalance - rewardPointsInCart);
+  const maxCashPoints = Math.min(
+    Math.floor(Math.max(0, subtotal)) * rate,
+    Math.floor(balanceAfterRewards / rate) * rate
+  );
+  const pointsToRedeem = Math.min(
+    Math.max(0, Math.floor(Number(draft.pointsToRedeem) || 0)),
+    maxCashPoints
+  );
+  const pointsDiscount = Math.floor(pointsToRedeem / rate);
   const tax = roundMoney2(((subtotal + deliveryFee) * taxRate) / 100);
-  const preCardTotal = subtotal + deliveryFee + tip + tax;
+  const preCardTotal = Math.max(0, subtotal - pointsDiscount) + deliveryFee + tip + tax;
   const cardFeeFixed = Number(paymentOptions?.cardFeeFixed || 0) || 0;
   const cardFeePercent = Number(paymentOptions?.cardFeePercent || 0) || 0;
   const cardFee =
@@ -246,6 +270,18 @@ export default function CheckoutPage() {
     }
   };
 
+  const refreshLoyalty = async (authToken: string) => {
+    try {
+      const loyaltyRes = await axios.get(`/api/shop/${shopKey}/loyalty`, {
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      setLoyaltyBalance(Number(loyaltyRes.data.balance) || 0);
+      setRedeemRate(Number(loyaltyRes.data.program?.redeemPointsPerChf) || 100);
+    } catch {
+      /* optional */
+    }
+  };
+
   const onLogin = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -256,6 +292,7 @@ export default function CheckoutPage() {
       });
       saveCustomerToken(shopKey, res.data.token);
       setCustomer(res.data.customer);
+      await refreshLoyalty(res.data.token);
       setWantCreateAccount(false);
       setShowLogin(false);
       setPassword('');
@@ -289,6 +326,7 @@ export default function CheckoutPage() {
       });
       saveCustomerToken(shopKey, res.data.token);
       setCustomer(res.data.customer);
+      await refreshLoyalty(res.data.token);
       setWantCreateAccount(false);
       setPassword('');
       patch({ authMode: 'register' });
@@ -355,6 +393,7 @@ export default function CheckoutPage() {
               productId: c.productId,
               selectedExtras: (c.selectedExtras || []).map((e) => ({ id: e.id })),
             })),
+            loyaltyReward: !!i.loyaltyReward,
           })),
           fulfillmentChannel: draft.channel,
           customerName: draft.customerName,
@@ -368,6 +407,7 @@ export default function CheckoutPage() {
           notes: draft.notes || undefined,
           tipAmount: tip,
           paymentMethod: draft.paymentMethod,
+          pointsToRedeem: loyaltyEnabled ? pointsToRedeem : 0,
           scheduledFor:
             whenMode === 'later' && draft.scheduledFor
               ? localDateTimeToIso(draft.scheduledFor)
@@ -819,6 +859,52 @@ export default function CheckoutPage() {
                 />
               </div>
 
+              {loyaltyEnabled && maxCashPoints > 0 && (
+                <div className="border border-stone-200 bg-stone-50 p-4 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="text-sm font-semibold">{t('shopRedeemPoints')}</label>
+                    <span className="text-xs text-stone-500">
+                      {t('shopPointsChip').replace('{n}', String(balanceAfterRewards))}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={maxCashPoints}
+                    step={rate}
+                    value={pointsToRedeem}
+                    onChange={(e) =>
+                      patch({ pointsToRedeem: Math.floor(Number(e.target.value) || 0) })
+                    }
+                    className="w-full"
+                  />
+                  <div className="flex items-center justify-between gap-2 text-sm">
+                    <input
+                      type="number"
+                      min={0}
+                      max={maxCashPoints}
+                      step={rate}
+                      className="border border-stone-300 px-2 py-1 w-28"
+                      value={pointsToRedeem}
+                      onChange={(e) =>
+                        patch({
+                          pointsToRedeem: Math.min(
+                            maxCashPoints,
+                            Math.max(0, Math.floor(Number(e.target.value) || 0))
+                          ),
+                        })
+                      }
+                    />
+                    <span className="font-medium text-teal-900">
+                      − CHF {pointsDiscount.toFixed(2)}
+                    </span>
+                  </div>
+                  <p className="text-xs text-stone-500">
+                    {t('shopRedeemHint').replace('{n}', String(rate))}
+                  </p>
+                </div>
+              )}
+
               <button
                 type="button"
                 className="w-full bg-stone-900 text-white py-3 font-semibold"
@@ -927,6 +1013,9 @@ export default function CheckoutPage() {
               <li key={i.lineId || i.id} className="flex justify-between gap-2">
                 <span className="min-w-0">
                   {i.quantity}× {i.name}
+                  {i.loyaltyReward && (
+                    <span className="ml-1 text-xs font-semibold text-teal-800">{t('shopFree')}</span>
+                  )}
                   {!!i.comboSelections?.length && (
                     <span className="block text-xs text-stone-500 mt-0.5">
                       {i.comboSelections.map((c) => c.productName).join(' · ')}
@@ -947,6 +1036,12 @@ export default function CheckoutPage() {
               <span className="text-stone-500">{t('shopSubtotal')}</span>
               <span>CHF {subtotal.toFixed(2)}</span>
             </div>
+            {pointsDiscount > 0 && (
+              <div className="flex justify-between text-teal-800">
+                <span>{t('shopPointsDiscount')}</span>
+                <span>− CHF {pointsDiscount.toFixed(2)}</span>
+              </div>
+            )}
             {deliveryFee > 0 && (
               <div className="flex justify-between">
                 <span className="text-stone-500">{t('shopDelivery')}</span>

@@ -33,6 +33,10 @@ export interface ShopCartItem {
   image?: string;
   selectedExtras?: ShopSelectedExtra[];
   comboSelections?: ShopComboSelection[];
+  /** Free loyalty reward line (price should be 0) */
+  loyaltyReward?: boolean;
+  /** Points cost per unit when loyaltyReward */
+  rewardPointsCost?: number;
 }
 
 export interface ShopCheckoutDraft {
@@ -49,6 +53,8 @@ export interface ShopCheckoutDraft {
   scheduledFor: string; // '' = ASAP, else datetime-local value
   paymentMethod: 'cash' | 'card';
   authMode: 'guest' | 'login' | 'register';
+  /** Cash redeem at checkout (points) */
+  pointsToRedeem?: number;
   lat?: number;
   lng?: number;
 }
@@ -63,17 +69,26 @@ function normalizeCartItem(item: Partial<ShopCartItem> & { id: string; name: str
   const selectedExtras = Array.isArray(item.selectedExtras) ? item.selectedExtras : [];
   const comboSelections = Array.isArray(item.comboSelections) ? item.comboSelections : [];
   const basePrice = typeof item.basePrice === 'number' ? item.basePrice : item.price;
+  const loyaltyReward = !!item.loyaltyReward;
+  const rewardPointsCost =
+    typeof item.rewardPointsCost === 'number' && item.rewardPointsCost >= 1
+      ? Math.floor(item.rewardPointsCost)
+      : undefined;
   return {
-    lineId: item.lineId || `${item.id}-${lineSignature(selectedExtras, comboSelections)}`,
+    lineId:
+      item.lineId ||
+      `${item.id}-${loyaltyReward ? 'reward' : lineSignature(selectedExtras, comboSelections)}`,
     id: item.id,
     name: item.name,
-    price: item.price,
-    basePrice,
+    price: loyaltyReward ? 0 : item.price,
+    basePrice: loyaltyReward ? 0 : basePrice,
     quantity: item.quantity,
     description: item.description,
     image: item.image,
-    selectedExtras,
-    comboSelections,
+    selectedExtras: loyaltyReward ? [] : selectedExtras,
+    comboSelections: loyaltyReward ? [] : comboSelections,
+    loyaltyReward: loyaltyReward || undefined,
+    rewardPointsCost,
   };
 }
 
@@ -114,6 +129,7 @@ export function emptyDraft(channel: ShopChannel = 'takeaway'): ShopCheckoutDraft
     scheduledFor: '',
     paymentMethod: 'cash',
     authMode: 'guest',
+    pointsToRedeem: 0,
   };
 }
 
@@ -138,7 +154,12 @@ export function comboSignature(combo?: ShopComboSelection[]) {
     .join('|');
 }
 
-export function lineSignature(extras?: ShopSelectedExtra[], combo?: ShopComboSelection[]) {
+export function lineSignature(
+  extras?: ShopSelectedExtra[],
+  combo?: ShopComboSelection[],
+  loyaltyReward?: boolean
+) {
+  if (loyaltyReward) return 'loyalty-reward';
   const e = extrasSignature(extras);
   const c = comboSignature(combo);
   return [e || 'plain', c || ''].filter(Boolean).join('~') || 'plain';
@@ -175,7 +196,7 @@ export function resolveShopKey(paramSlug?: string) {
   if (label && !RESERVED_SUBDOMAINS.has(label)) return label;
   if (label === 'shop') {
     const seg = window.location.pathname.split('/').filter(Boolean)[0];
-    if (seg && !['checkout', 'order', 'api', 'assets'].includes(seg)) return seg;
+    if (seg && !['checkout', 'order', 'account', 'api', 'assets'].includes(seg)) return seg;
   }
   return '';
 }

@@ -74,6 +74,7 @@ interface Product {
   specifications?: SpecRow[];
   extras?: Extra[];
   allowExtras?: boolean;
+  loyaltyRewardPoints?: number | null;
   sortOrder?: number;
   modifierGroups?: ModifierGroupSummary[];
   comboItems?: Array<{
@@ -106,6 +107,8 @@ type FormState = {
   comboSlots: ComboSlotForm[];
   specifications: SpecRow[];
   modifierGroupIds: string[];
+  /** Empty = not a free reward; otherwise points cost ≥ 1 */
+  loyaltyRewardPoints: string;
 };
 
 const emptySlot = (name = 'Main'): ComboSlotForm => ({
@@ -130,6 +133,7 @@ const emptyForm = (): FormState => ({
   comboSlots: [],
   specifications: [{ id: 'default', name: 'Regular', price: 0, saleStatus: 'in_stock', isDefault: true }],
   modifierGroupIds: [],
+  loyaltyRewardPoints: '',
 });
 
 function normalizeComboSlotsFromProduct(raw: Product['comboItems']): ComboSlotForm[] {
@@ -327,6 +331,10 @@ export default function Products() {
         comboSlots,
         specifications: specs as SpecRow[],
         modifierGroupIds: (full.modifierGroups || []).map((g) => g.id),
+        loyaltyRewardPoints:
+          full.loyaltyRewardPoints != null && Number(full.loyaltyRewardPoints) >= 1
+            ? String(full.loyaltyRewardPoints)
+            : '',
       });
     } catch {
       const comboSlots = normalizeComboSlotsFromProduct(product.comboItems);
@@ -352,6 +360,10 @@ export default function Products() {
           },
         ],
         modifierGroupIds: [],
+        loyaltyRewardPoints:
+          product.loyaltyRewardPoints != null && Number(product.loyaltyRewardPoints) >= 1
+            ? String(product.loyaltyRewardPoints)
+            : '',
       });
     }
   };
@@ -417,6 +429,12 @@ export default function Products() {
         })),
       modifierGroupIds: form.modifierGroupIds,
       allowExtras: form.modifierGroupIds.length > 0,
+      loyaltyRewardPoints: (() => {
+        const raw = form.loyaltyRewardPoints.trim();
+        if (!raw) return null;
+        const n = Math.floor(Number(raw));
+        return Number.isFinite(n) && n >= 1 ? n : null;
+      })(),
     };
   };
 
@@ -680,6 +698,12 @@ export default function Products() {
                       <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-600">
                         {productTypeLabel(product)}
                       </span>
+                      {product.loyaltyRewardPoints != null &&
+                        Number(product.loyaltyRewardPoints) >= 1 && (
+                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-900">
+                            {product.loyaltyRewardPoints} pts free
+                          </span>
+                        )}
                     </div>
                     {product.description && (
                       <p className="mt-0.5 text-sm text-slate-500 line-clamp-1">{product.description}</p>
@@ -879,6 +903,21 @@ export default function Products() {
                   value={form.description}
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
                 />
+              </Field>
+
+              <Field label="Free with points (optional)">
+                <input
+                  className="field-input"
+                  type="number"
+                  min="1"
+                  step="1"
+                  placeholder="e.g. 200 — leave empty for none"
+                  value={form.loyaltyRewardPoints}
+                  onChange={(e) => setForm({ ...form, loyaltyRewardPoints: e.target.value })}
+                />
+                <p className="mt-1 text-xs text-slate-500">
+                  Customers with at least this many points can add the product free (pays with points).
+                </p>
               </Field>
 
               <div>
