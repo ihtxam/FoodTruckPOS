@@ -75,7 +75,7 @@ export default function OrderingPage() {
   const [merchant, setMerchant] = useState<any>(null);
   const [menu, setMenu] = useState<Category[]>([]);
   const [draft, setDraft] = useState<ShopCheckoutDraft>(emptyDraft());
-  const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [mobileBasket, setMobileBasket] = useState(false);
@@ -110,7 +110,7 @@ export default function OrderingPage() {
         const data = shopRes.data.data;
         setMerchant(data);
         setMenu(menuRes.data.data || []);
-        setSelectedCategory(menuRes.data.data?.[0]?.id || '');
+        setSelectedCategory('all');
 
         const loyaltyData = loyaltyRes.data || {};
         setLoyaltyRewards(loyaltyData.rewards || []);
@@ -386,7 +386,10 @@ export default function OrderingPage() {
     );
   }
 
-  const visibleItems = menu.find((c) => c.id === selectedCategory)?.items || [];
+  const visibleItems =
+    selectedCategory === 'all'
+      ? menu.flatMap((c) => c.items || [])
+      : menu.find((c) => c.id === selectedCategory)?.items || [];
   const allChannels: { id: ShopChannel; label: string }[] = [
     { id: 'takeaway', label: t('shopPickup') },
     { id: 'delivery', label: t('shopDelivery') },
@@ -756,6 +759,17 @@ export default function OrderingPage() {
 
           <div className="sticky top-16 z-20 -mx-4 px-4 py-3 bg-[#f6f5f2]/80 backdrop-blur border-b border-stone-200/80 mb-4">
             <div className="flex gap-2 overflow-x-auto pb-1">
+              <button
+                type="button"
+                onClick={() => setSelectedCategory('all')}
+                className={`whitespace-nowrap px-3 py-1.5 text-sm font-medium border ${
+                  selectedCategory === 'all'
+                    ? 'bg-white border-stone-900 text-stone-900'
+                    : 'bg-transparent border-transparent text-stone-600'
+                }`}
+              >
+                {t('shopAllCategories')}
+              </button>
               {menu.map((cat) => (
                 <button
                   key={cat.id}
