@@ -86,8 +86,6 @@ export default function OrderingPage() {
   const [customer, setCustomer] = useState<any>(null);
   const [loyaltyBalance, setLoyaltyBalance] = useState(0);
   const [loyaltyRewards, setLoyaltyRewards] = useState<LoyaltyReward[]>([]);
-  const [loyaltyProgress, setLoyaltyProgress] = useState(0);
-  const [nextRewardPts, setNextRewardPts] = useState<number | null>(null);
 
   useEffect(() => {
     if (!shopKey) {
@@ -116,16 +114,8 @@ export default function OrderingPage() {
         setLoyaltyRewards(loyaltyData.rewards || []);
         if (token && loyaltyData.balance != null) {
           setLoyaltyBalance(Number(loyaltyData.balance) || 0);
-          setLoyaltyProgress(Number(loyaltyData.progressPercent) || 0);
-          setNextRewardPts(
-            loyaltyData.nextReward?.loyaltyRewardPoints != null
-              ? Number(loyaltyData.nextReward.loyaltyRewardPoints)
-              : null
-          );
         } else {
           setLoyaltyBalance(0);
-          setLoyaltyProgress(0);
-          setNextRewardPts(null);
         }
 
         if (token) {
@@ -585,11 +575,6 @@ export default function OrderingPage() {
                 {t('shopAccount')}
               </Link>
             </nav>
-            {customer && loyaltyEnabled && (
-              <span className="hidden sm:inline text-xs font-semibold bg-teal-100 text-teal-900 px-2 py-1">
-                {t('shopPointsChip').replace('{n}', String(loyaltyBalance))}
-              </span>
-            )}
             <Link
               to={accountPath}
               className="sm:hidden text-sm font-semibold text-stone-800 underline underline-offset-2"
@@ -669,45 +654,6 @@ export default function OrderingPage() {
               );
             })}
           </div>
-
-          {loyaltyEnabled && (
-            <div className="mt-4 border border-stone-200 bg-stone-50 px-4 py-3 space-y-2">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-sm font-semibold">{t('shopFidelity')}</p>
-                {customer ? (
-                  <span className="text-sm font-semibold text-teal-900">
-                    {t('shopPointsChip').replace('{n}', String(loyaltyBalance))}
-                  </span>
-                ) : (
-                  <Link to={accountPath} className="text-xs font-semibold underline underline-offset-2">
-                    {t('shopLoyaltyLoginHint')}
-                  </Link>
-                )}
-              </div>
-              {customer ? (
-                <>
-                  <div className="h-1.5 bg-stone-200 overflow-hidden">
-                    <div
-                      className="h-full bg-teal-700 transition-all"
-                      style={{ width: `${loyaltyProgress}%` }}
-                    />
-                  </div>
-                  <p className="text-xs text-stone-600">
-                    {nextRewardPts != null
-                      ? t('shopProgressToReward').replace(
-                          '{n}',
-                          String(Math.max(0, nextRewardPts - loyaltyBalance))
-                        )
-                      : unlockedRewards.length
-                        ? t('shopAllRewardsUnlocked')
-                        : t('shopFidelityTease')}
-                  </p>
-                </>
-              ) : (
-                <p className="text-xs text-stone-600">{t('shopFidelityTease')}</p>
-              )}
-            </div>
-          )}
         </div>
       </section>
 
