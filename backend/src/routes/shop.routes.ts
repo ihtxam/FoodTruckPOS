@@ -1244,6 +1244,7 @@ router.post("/:slug/orders", async (req: Request, res: Response) => {
 
     // Redeem after insert so events carry orderId; roll back order on failure
     if (totalPointsRedeemed > 0 && customerId) {
+      let burnedSoFar = 0;
       try {
         for (const rl of rewardLines) {
           await ShopLoyaltyService.redeemPoints({
@@ -1255,6 +1256,7 @@ router.post("/:slug/orders", async (req: Request, res: Response) => {
             eventType: "redeem_product",
             meta: { quantity: rl.quantity },
           });
+          burnedSoFar += rl.points;
         }
         if (cashPointsUsed > 0) {
           await ShopLoyaltyService.redeemPoints({
@@ -1265,8 +1267,23 @@ router.post("/:slug/orders", async (req: Request, res: Response) => {
             eventType: "redeem_cash",
             meta: { discountChf: pointsDiscount },
           });
+          burnedSoFar += cashPointsUsed;
         }
       } catch (redeemErr) {
+        if (burnedSoFar > 0) {
+          try {
+            await ShopLoyaltyService.earnPoints({
+              merchantId: merchant.id,
+              customerId,
+              points: burnedSoFar,
+              expiryDays: loyaltyProgram.expiryDays,
+              source: "adjustment",
+              orderId: order.id,
+            });
+          } catch {
+            /* best-effort restore */
+          }
+        }
         await db.delete(schema.orderItems).where(eq(schema.orderItems.orderId, order.id));
         await db.delete(schema.orders).where(eq(schema.orders.id, order.id));
         throw redeemErr;
