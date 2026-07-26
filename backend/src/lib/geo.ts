@@ -31,7 +31,9 @@ const DAY_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
 export type DayKey = (typeof DAY_KEYS)[number];
 export type HoursSlot = { open: string; close: string };
 export type ChannelHours = Partial<Record<DayKey, HoursSlot[]>>;
-export type StoreHours = Partial<Record<"takeaway" | "dine_in" | "delivery", ChannelHours>>;
+/** `display` = homepage / shop banner hours (informational). Order channels gate checkout. */
+export type StoreHoursChannel = "takeaway" | "dine_in" | "delivery" | "display";
+export type StoreHours = Partial<Record<StoreHoursChannel, ChannelHours>>;
 
 /** Merchants are CH-based; evaluate hours in Zurich wall-clock, not server UTC. */
 export const MERCHANT_TZ = "Europe/Zurich";
@@ -72,7 +74,7 @@ export function zonedDayAndMinutes(at: Date, timeZone = MERCHANT_TZ): { day: Day
 /** Is the channel open at `at` in merchant timezone (Europe/Zurich). */
 export function isChannelOpenNow(
   storeHours: StoreHours | null | undefined,
-  channel: "takeaway" | "dine_in" | "delivery",
+  channel: StoreHoursChannel,
   at: Date = new Date()
 ): { open: boolean; todayLabel: string; slots: HoursSlot[] } {
   const { day, mins } = zonedDayAndMinutes(at);
@@ -92,6 +94,20 @@ export function isChannelOpenNow(
   return { open: slots.length === 0 ? false : open, todayLabel, slots };
 }
 
+/**
+ * Homepage / shop banner hours. Prefers `display`, else falls back to the active order channel.
+ */
+export function getDisplayHoursNow(
+  storeHours: StoreHours | null | undefined,
+  fallbackChannel: "takeaway" | "dine_in" | "delivery" = "takeaway",
+  at: Date = new Date()
+) {
+  if (storeHours?.display && Object.keys(storeHours.display).length) {
+    return isChannelOpenNow(storeHours, "display", at);
+  }
+  return isChannelOpenNow(storeHours, fallbackChannel, at);
+}
+
 /** True if `at` falls inside any opening range for that channel/day (Zurich time). */
 export function isWithinChannelHours(
   storeHours: StoreHours | null | undefined,
@@ -107,17 +123,19 @@ export function defaultStoreHours(): StoreHours {
     { open: "17:00", close: "23:00" },
   ];
   const week = (): ChannelHours => ({
-    mon: [...lunchDinner],
-    tue: [...lunchDinner],
-    wed: [...lunchDinner],
-    thu: [...lunchDinner],
-    fri: [...lunchDinner],
-    sat: [...lunchDinner],
-    sun: [...lunchDinner],
+    mon: lunchDinner.map((s) => ({ ...s })),
+    tue: lunchDinner.map((s) => ({ ...s })),
+    wed: lunchDinner.map((s) => ({ ...s })),
+    thu: lunchDinner.map((s) => ({ ...s })),
+    fri: lunchDinner.map((s) => ({ ...s })),
+    sat: lunchDinner.map((s) => ({ ...s })),
+    sun: lunchDinner.map((s) => ({ ...s })),
   });
+  const w = week();
   return {
     takeaway: week(),
     dine_in: week(),
     delivery: week(),
+    display: w,
   };
 }
