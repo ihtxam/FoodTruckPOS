@@ -15,6 +15,7 @@ export const shopEn: Record<string, string> = {
   shopFailedLoad: 'Failed to load shop',
   shopNoItems: 'No items added yet.',
   shopNoProducts: 'No products in this category.',
+  shopAllCategories: 'All',
   shopClose: 'Close',
   shopSubtotal: 'Subtotal',
   shopTax: 'Tax',
