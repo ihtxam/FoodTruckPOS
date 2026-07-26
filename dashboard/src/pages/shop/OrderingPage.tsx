@@ -86,8 +86,6 @@ export default function OrderingPage() {
   const [customer, setCustomer] = useState<any>(null);
   const [loyaltyBalance, setLoyaltyBalance] = useState(0);
   const [loyaltyRewards, setLoyaltyRewards] = useState<LoyaltyReward[]>([]);
-  const [loyaltyProgress, setLoyaltyProgress] = useState(0);
-  const [nextRewardPts, setNextRewardPts] = useState<number | null>(null);
 
   useEffect(() => {
     if (!shopKey) {
@@ -116,16 +114,8 @@ export default function OrderingPage() {
         setLoyaltyRewards(loyaltyData.rewards || []);
         if (token && loyaltyData.balance != null) {
           setLoyaltyBalance(Number(loyaltyData.balance) || 0);
-          setLoyaltyProgress(Number(loyaltyData.progressPercent) || 0);
-          setNextRewardPts(
-            loyaltyData.nextReward?.loyaltyRewardPoints != null
-              ? Number(loyaltyData.nextReward.loyaltyRewardPoints)
-              : null
-          );
         } else {
           setLoyaltyBalance(0);
-          setLoyaltyProgress(0);
-          setNextRewardPts(null);
         }
 
         if (token) {
