@@ -2,34 +2,122 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --bg: #f4f5f7;
+  --bg-elevated: #ffffff;
+  --bg-muted: #eef0f3;
+  --text: #0f172a;
+  --text-muted: #64748b;
+  --border: #e2e8f0;
+  --accent: #334155;
+  --accent-hover: #1e293b;
+  --ring: #94a3b8;
+  --danger: #b91c1c;
+  --success: #15803d;
+}
+
+html.dark {
+  --bg: #0b1220;
+  --bg-elevated: #111827;
+  --bg-muted: #1f2937;
+  --text: #e5e7eb;
+  --text-muted: #9ca3af;
+  --border: #2d3748;
+  --accent: #cbd5e1;
+  --accent-hover: #f8fafc;
+  --ring: #64748b;
+  --danger: #f87171;
+  --success: #4ade80;
+  color-scheme: dark;
+}
+
 * {
   @apply box-border;
 }
 
-body {
-  @apply bg-gray-50 text-gray-900;
+html,
+body,
+#root {
+  min-height: 100%;
 }
 
-input, textarea, select {
-  @apply focus:outline-none focus:ring-2 focus:ring-blue-500;
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+input,
+textarea,
+select {
+  @apply focus:outline-none;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ring) 45%, transparent);
 }
 
 button {
-  @apply transition-all duration-200;
+  @apply transition-colors duration-150;
 }
 
-.btn-primary {
-  @apply bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50;
-}
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50;
+    background: var(--accent);
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: var(--accent-hover);
+  }
 
-.btn-secondary {
-  @apply bg-gray-200 text-gray-900 px-4 py-2 rounded-lg hover:bg-gray-300 disabled:opacity-50;
-}
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50;
+    background: var(--bg-elevated);
+    border-color: var(--border);
+    color: var(--text);
+  }
+  .btn-secondary:hover:not(:disabled) {
+    background: var(--bg-muted);
+  }
 
-.card {
-  @apply bg-white rounded-lg shadow-sm border border-gray-200 p-6;
-}
+  .card {
+    @apply rounded-md border p-3 sm:p-4 shadow-none;
+    background: var(--bg-elevated);
+    border-color: var(--border);
+  }
 
-.input {
-  @apply w-full px-3 py-2 border border-gray-300 rounded-lg bg-white;
+  .input {
+    @apply w-full rounded-md border px-2.5 py-1.5 text-sm;
+    background: var(--bg-elevated);
+    border-color: var(--border);
+    color: var(--text);
+  }
+
+  .page-title {
+    @apply text-lg sm:text-xl font-semibold tracking-tight;
+    color: var(--text);
+  }
+
+  .page-sub {
+    @apply text-xs sm:text-sm mt-0.5;
+    color: var(--text-muted);
+  }
+
+  .panel-shell {
+    background: var(--bg);
+  }
+
+  .panel-header {
+    @apply border-b;
+    background: var(--bg-elevated);
+    border-color: var(--border);
+  }
+
+  .muted {
+    color: var(--text-muted);
+  }
 }

@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Menu, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import { useAuthStore } from '@/store/auth';
 
 interface MenuItem {
@@ -26,25 +26,27 @@ export default function Sidebar({ isOpen, onToggle, menuItems }: SidebarProps) {
 
   return (
     <>
-      <button
-        onClick={onToggle}
-        className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-white rounded-lg shadow"
-        aria-label="Toggle menu"
-      >
-        {isOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-      </button>
-
       <aside
         className={`${
           isOpen ? 'translate-x-0' : '-translate-x-full'
-        } fixed lg:relative lg:translate-x-0 w-64 h-screen bg-gray-900 text-white transition-transform duration-300 z-40 flex flex-col shrink-0`}
+        } fixed lg:relative lg:translate-x-0 w-56 h-screen bg-slate-900 text-slate-100 transition-transform duration-200 z-40 flex flex-col shrink-0`}
       >
-        <div className="p-6 border-b border-gray-800">
-          <h1 className="text-2xl font-bold">ManuPOS</h1>
-          <p className="text-sm text-gray-400 mt-1">Admin Panel</p>
+        <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+          <div>
+            <h1 className="text-base font-semibold tracking-tight">ManuPOS</h1>
+            <p className="text-[11px] text-slate-400 mt-0.5">Panel</p>
+          </div>
+          <button
+            type="button"
+            onClick={onToggle}
+            className="lg:hidden p-1.5 rounded-md hover:bg-slate-800"
+            aria-label="Close menu"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
 
-        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+        <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto">
           {menuItems.map((item) => {
             const isRoot = item.path === '/merchant' || item.path === '/superadmin';
             const isActive = isRoot
@@ -58,22 +60,24 @@ export default function Sidebar({ isOpen, onToggle, menuItems }: SidebarProps) {
                 onClick={() => {
                   if (window.innerWidth < 1024) onToggle();
                 }}
-                className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                  isActive ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-800'
+                className={`flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm transition-colors ${
+                  isActive
+                    ? 'bg-slate-700 text-white'
+                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
                 }`}
               >
-                <span className="text-xl">{item.icon}</span>
-                <span className="font-medium">{item.label}</span>
+                <span className="text-sm w-5 text-center opacity-80">{item.icon}</span>
+                <span className="font-medium truncate">{item.label}</span>
               </Link>
             );
           })}
         </nav>
 
-        <div className="p-6 border-t border-gray-800">
+        <div className="p-3 border-t border-slate-800">
           <button
             type="button"
             onClick={handleLogout}
-            className="w-full px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-white font-medium transition-colors"
+            className="w-full px-3 py-1.5 rounded-md text-sm font-medium bg-slate-800 hover:bg-slate-700 text-slate-100"
           >
             Logout
           </button>
@@ -81,10 +85,7 @@ export default function Sidebar({ isOpen, onToggle, menuItems }: SidebarProps) {
       </aside>
 
       {isOpen && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 lg:hidden z-30"
-          onClick={onToggle}
-        />
+        <div className="fixed inset-0 bg-black/40 lg:hidden z-30" onClick={onToggle} />
       )}
     </>
   );

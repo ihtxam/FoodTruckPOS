@@ -54,10 +54,10 @@ function MerchantShell() {
   ];
 
   return (
-    <div className="flex h-screen bg-gray-100">
+    <div className="flex h-screen panel-shell">
       <Sidebar isOpen={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} menuItems={menuItems} />
 
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <Header
           title={t('merchantDashboard')}
           onMenuClick={() => setSidebarOpen(!sidebarOpen)}
@@ -65,7 +65,7 @@ function MerchantShell() {
           onLanguageChange={changeLanguage}
         />
 
-        <main className="flex-1 overflow-auto p-6">
+        <main className="flex-1 overflow-auto p-3 sm:p-4">
           <Routes>
             <Route index element={<Overview />} />
             <Route path="orders" element={<Orders />} />
