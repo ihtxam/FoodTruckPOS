@@ -194,7 +194,14 @@ export default function CheckoutPage() {
   );
   const tip = roundTo005(Math.max(0, Number(draft.tipAmount) || 0));
   const tax = roundMoney2(((subtotal + deliveryFee) * taxRate) / 100);
-  const rawTotal = subtotal + deliveryFee + tip + tax;
+  const preCardTotal = subtotal + deliveryFee + tip + tax;
+  const cardFeeFixed = Number(paymentOptions?.cardFeeFixed || 0) || 0;
+  const cardFeePercent = Number(paymentOptions?.cardFeePercent || 0) || 0;
+  const cardFee =
+    draft.paymentMethod === 'card'
+      ? roundTo005(Math.max(0, cardFeeFixed + (preCardTotal * cardFeePercent) / 100))
+      : 0;
+  const rawTotal = preCardTotal + cardFee;
   const rounding = roundingAdjustment(rawTotal);
   const total = roundTo005(rawTotal);
 
@@ -950,6 +957,12 @@ export default function CheckoutPage() {
               <div className="flex justify-between">
                 <span className="text-stone-500">{t('shopTip')}</span>
                 <span>CHF {tip.toFixed(2)}</span>
+              </div>
+            )}
+            {cardFee > 0 && (
+              <div className="flex justify-between">
+                <span className="text-stone-500">{t('shopCardFee')}</span>
+                <span>CHF {cardFee.toFixed(2)}</span>
               </div>
             )}
             <div className="flex justify-between">

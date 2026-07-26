@@ -41,6 +41,7 @@ type OrderView = {
   taxAmount: string;
   deliveryFee: string;
   tipAmount: string;
+  cardFee?: string;
   total: string;
   createdAt: string;
   items: OrderItem[];
@@ -380,12 +381,16 @@ export default function OrderConfirmationPage() {
             <Row label={t('shopTax')} value={money(order.taxAmount)} />
             <Row label={t('shopDelivery')} value={money(order.deliveryFee || 0)} />
             <Row label={t('shopTip')} value={money(order.tipAmount || 0)} />
+            {Number(order.cardFee || 0) > 0 && (
+              <Row label={t('shopCardFee')} value={money(order.cardFee || 0)} />
+            )}
             {(() => {
               const parts =
                 Number(order.subtotal || 0) +
                 Number(order.taxAmount || 0) +
                 Number(order.deliveryFee || 0) +
-                Number(order.tipAmount || 0);
+                Number(order.tipAmount || 0) +
+                Number(order.cardFee || 0);
               const roundAdj = roundMoney2(Number(order.total || 0) - parts);
               if (!roundAdj) return null;
               return (

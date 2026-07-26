@@ -33,6 +33,8 @@ interface SettingsData {
   panelLanguage?: string | null;
   subscriptionPlan?: string | null;
   status?: string | null;
+  onlineCardFeeFixed?: string | null;
+  onlineCardFeePercent?: string | null;
 }
 
 interface AdyenCreds {
@@ -40,6 +42,14 @@ interface AdyenCreds {
   clientId?: string | null;
   apiKeyMasked?: string | null;
   apiKeySet?: boolean;
+}
+
+interface TerminalRow {
+  id: string;
+  terminalId: string;
+  terminalName: string;
+  serialNumber?: string | null;
+  status: string;
 }
 
 type TabId = 'business' | 'taxes' | 'shop' | 'operations' | 'payments' | 'language';
@@ -89,10 +99,25 @@ export default function Settings() {
   const [merchantAccount, setMerchantAccount] = useState('');
   const [clientId, setClientId] = useState('');
   const [apiKey, setApiKey] = useState('');
+  const [cardFeeFixed, setCardFeeFixed] = useState('0');
+  const [cardFeePercent, setCardFeePercent] = useState('0');
+  const [terminals, setTerminals] = useState<TerminalRow[]>([]);
+  const [terminalId, setTerminalId] = useState('');
+  const [terminalName, setTerminalName] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingAdyen, setSavingAdyen] = useState(false);
-  const [tab, setTab] = useState<TabId>('business');
+  const [savingFee, setSavingFee] = useState(false);
+  const [savingTerminal, setSavingTerminal] = useState(false);
+  const [tab, setTab] = useState<TabId>(() => {
+    try {
+      const q = new URLSearchParams(window.location.search).get('tab');
+      if (q === 'payments') return 'payments';
+    } catch {
+      /* ignore */
+    }
+    return 'business';
+  });
 
   const tabs = useMemo(
     () =>
@@ -110,16 +135,19 @@ export default function Settings() {
   useEffect(() => {
     const load = async () => {
       try {
-        const [settingsRes, adyenRes] = await Promise.all([
+        const [settingsRes, terminalsRes] = await Promise.all([
           api.get('/merchant/settings'),
-          api.get('/terminals').catch(() => ({ data: { adyen: {} } })),
+          api.get('/terminals').catch(() => ({ data: { adyen: {}, terminals: [] } })),
         ]);
         const s = settingsRes.data.settings;
         setSettings(s);
-        const a = adyenRes.data.adyen || {};
+        setCardFeeFixed(String(s?.onlineCardFeeFixed ?? '0'));
+        setCardFeePercent(String(s?.onlineCardFeePercent ?? '0'));
+        const a = terminalsRes.data.adyen || {};
         setAdyen(a);
         setMerchantAccount(a.merchantAccount || '');
         setClientId(a.clientId || '');
+        setTerminals(terminalsRes.data.terminals || []);
 
         const stored = localStorage.getItem('manupos_panel_lang');
         if (
@@ -192,6 +220,61 @@ export default function Settings() {
       toast.error(error.response?.data?.error || 'Failed to save Adyen credentials');
     } finally {
       setSavingAdyen(false);
+    }
+  };
+
+  const saveCardFees = async (e: FormEvent) => {
+    e.preventDefault();
+    setSavingFee(true);
+    try {
+      const response = await api.put('/merchant/settings', {
+        onlineCardFeeFixed: Number(cardFeeFixed) || 0,
+        onlineCardFeePercent: Number(cardFeePercent) || 0,
+      });
+      const next = response.data.merchant || response.data.settings || {};
+      setSettings((prev) => (prev ? { ...prev, ...next } : prev));
+      setCardFeeFixed(String(next.onlineCardFeeFixed ?? cardFeeFixed));
+      setCardFeePercent(String(next.onlineCardFeePercent ?? cardFeePercent));
+      toast.success(t('cardFeesSaved'));
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || t('failedSaveCardFees'));
+    } finally {
+      setSavingFee(false);
+    }
+  };
+
+  const addTerminal = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!terminalId.trim()) {
+      toast.error(t('terminalIdRequired'));
+      return;
+    }
+    setSavingTerminal(true);
+    try {
+      await api.post('/terminals', {
+        terminalId: terminalId.trim(),
+        terminalName: terminalName.trim() || terminalId.trim(),
+        serialNumber: terminalId.trim(),
+      });
+      toast.success(t('terminalAdded'));
+      setTerminalId('');
+      setTerminalName('');
+      const res = await api.get('/terminals');
+      setTerminals(res.data.terminals || []);
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || t('failedAddTerminal'));
+    } finally {
+      setSavingTerminal(false);
+    }
+  };
+
+  const removeTerminal = async (id: string) => {
+    try {
+      await api.delete(`/terminals/${id}`);
+      setTerminals((prev) => prev.filter((t) => t.id !== id));
+      toast.success(t('terminalRemoved'));
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || t('failedRemoveTerminal'));
     }
   };
 
@@ -439,54 +522,153 @@ export default function Settings() {
           )}
 
           {tab === 'payments' && (
-            <form onSubmit={saveAdyen} className="space-y-5">
-              <Section title={t('adyenCredentials')} description={t('adyenSettingsHint')}>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <Field label={t('merchantAccount')}>
-                    <input
-                      className="input"
-                      value={merchantAccount}
-                      onChange={(e) => setMerchantAccount(e.target.value)}
-                      placeholder="ManuPOS_COM"
-                    />
-                  </Field>
-                  <Field label={t('clientId')}>
-                    <input
-                      className="input"
-                      value={clientId}
-                      onChange={(e) => setClientId(e.target.value)}
-                    />
-                  </Field>
-                  <div className="sm:col-span-2">
-                    <Field
-                      label={t('apiKey')}
-                      hint={
-                        adyen.apiKeySet
-                          ? `${t('currentKey')}: ${adyen.apiKeyMasked || '••••'}`
-                          : t('apiKeyHint')
-                      }
-                    >
+            <div className="space-y-8">
+              <form onSubmit={saveAdyen} className="space-y-5">
+                <Section title={t('adyenCredentials')} description={t('adyenSettingsHint')}>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <Field label={t('merchantAccount')}>
                       <input
                         className="input"
-                        type="password"
-                        value={apiKey}
-                        onChange={(e) => setApiKey(e.target.value)}
-                        placeholder={adyen.apiKeySet ? adyen.apiKeyMasked || '••••' : 'AQE...'}
-                        autoComplete="new-password"
+                        value={merchantAccount}
+                        onChange={(e) => setMerchantAccount(e.target.value)}
+                        placeholder="ChaslayPOS"
+                      />
+                    </Field>
+                    <Field label={t('clientId')}>
+                      <input
+                        className="input"
+                        value={clientId}
+                        onChange={(e) => setClientId(e.target.value)}
+                      />
+                    </Field>
+                    <div className="sm:col-span-2">
+                      <Field
+                        label={t('apiKey')}
+                        hint={
+                          adyen.apiKeySet
+                            ? `${t('currentKey')}: ${adyen.apiKeyMasked || '••••'}`
+                            : t('apiKeyHint')
+                        }
+                      >
+                        <input
+                          className="input"
+                          type="password"
+                          value={apiKey}
+                          onChange={(e) => setApiKey(e.target.value)}
+                          placeholder={adyen.apiKeySet ? adyen.apiKeyMasked || '••••' : 'AQE...'}
+                          autoComplete="new-password"
+                        />
+                      </Field>
+                    </div>
+                  </div>
+                </Section>
+                <div className="flex justify-end border-t border-[var(--border)] pt-4">
+                  <button type="submit" className="btn-primary" disabled={savingAdyen}>
+                    {savingAdyen ? t('saving') : t('save')}
+                  </button>
+                </div>
+              </form>
+
+              <form onSubmit={saveCardFees} className="space-y-5 border-t border-[var(--border)] pt-6">
+                <Section title={t('onlineCardFees')} description={t('onlineCardFeesHint')}>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <Field label={t('cardFeeFixed')} hint={t('cardFeeFixedHint')}>
+                      <input
+                        className="input"
+                        type="number"
+                        min="0"
+                        step="0.05"
+                        value={cardFeeFixed}
+                        onChange={(e) => setCardFeeFixed(e.target.value)}
+                      />
+                    </Field>
+                    <Field label={t('cardFeePercent')} hint={t('cardFeePercentHint')}>
+                      <input
+                        className="input"
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.01"
+                        value={cardFeePercent}
+                        onChange={(e) => setCardFeePercent(e.target.value)}
                       />
                     </Field>
                   </div>
+                </Section>
+                <div className="flex justify-end border-t border-[var(--border)] pt-4">
+                  <button type="submit" className="btn-primary" disabled={savingFee}>
+                    {savingFee ? t('saving') : t('save')}
+                  </button>
                 </div>
-              </Section>
-              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border)] pt-4">
-                <a href="/merchant/terminals" className="text-xs font-medium text-sky-700 hover:underline dark:text-sky-300">
-                  {t('manageTerminals')}
-                </a>
-                <button type="submit" className="btn-primary" disabled={savingAdyen}>
-                  {savingAdyen ? t('saving') : t('save')}
-                </button>
+              </form>
+
+              <div className="space-y-5 border-t border-[var(--border)] pt-6">
+                <Section title={t('paymentTerminals')} description={t('paymentTerminalsHint')}>
+                  <form onSubmit={addTerminal} className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1fr_auto]">
+                    <Field label={`${t('terminalId')} *`} hint={t('terminalIdHint')}>
+                      <input
+                        className="input"
+                        value={terminalId}
+                        onChange={(e) => setTerminalId(e.target.value)}
+                        placeholder="S1F2-000158213131044"
+                        required
+                      />
+                    </Field>
+                    <Field label={t('terminalName')} hint={t('terminalNameHint')}>
+                      <input
+                        className="input"
+                        value={terminalName}
+                        onChange={(e) => setTerminalName(e.target.value)}
+                        placeholder={t('terminalNamePlaceholder')}
+                      />
+                    </Field>
+                    <div className="flex items-end">
+                      <button type="submit" className="btn-primary w-full sm:w-auto" disabled={savingTerminal}>
+                        {savingTerminal ? t('saving') : t('addTerminal')}
+                      </button>
+                    </div>
+                  </form>
+
+                  <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-[var(--border)] text-left muted">
+                          <th className="px-3 py-2 font-medium">{t('terminalName')}</th>
+                          <th className="px-3 py-2 font-medium">{t('terminalId')}</th>
+                          <th className="px-3 py-2 font-medium">{t('status')}</th>
+                          <th className="px-3 py-2 font-medium" />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {terminals.length === 0 && (
+                          <tr>
+                            <td colSpan={4} className="px-3 py-6 muted">
+                              {t('noTerminals')}
+                            </td>
+                          </tr>
+                        )}
+                        {terminals.map((term) => (
+                          <tr key={term.id} className="border-b border-[var(--border)] last:border-0">
+                            <td className="px-3 py-2.5 font-medium">{term.terminalName}</td>
+                            <td className="px-3 py-2.5 font-mono text-xs">{term.terminalId}</td>
+                            <td className="px-3 py-2.5 capitalize">{term.status}</td>
+                            <td className="px-3 py-2.5 text-right">
+                              <button
+                                type="button"
+                                className="text-xs font-semibold text-red-600 hover:underline"
+                                onClick={() => void removeTerminal(term.id)}
+                              >
+                                {t('delete')}
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </Section>
               </div>
-            </form>
+            </div>
           )}
 
           {tab === 'language' && (

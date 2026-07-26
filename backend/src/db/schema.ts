@@ -73,10 +73,14 @@ export const merchants = pgTable(
     longitude: decimal("longitude", { precision: 10, scale: 7 }),
     pickupEtaMinutes: integer("pickup_eta_minutes").default(25),
     deliveryEtaMinutes: integer("delivery_eta_minutes").default(45),
-    // Adyen credentials (merchant-level; terminals reference these)
+    // Adyen credentials (merchant-level; shared by online shop + payment terminals)
     adyenMerchantAccount: varchar("adyen_merchant_account", { length: 255 }),
     adyenApiKey: text("adyen_api_key"),
     adyenClientId: varchar("adyen_client_id", { length: 255 }),
+    /** Fixed CHF surcharge added to online card checkouts */
+    onlineCardFeeFixed: decimal("online_card_fee_fixed", { precision: 10, scale: 2 }).default("0"),
+    /** Percent surcharge on (subtotal+tax+delivery+tip) for online card checkouts */
+    onlineCardFeePercent: decimal("online_card_fee_percent", { precision: 6, scale: 3 }).default("0"),
     panelLanguage: varchar("panel_language", { length: 10 }).default("en").notNull(), // en | fr | de
     /** Chaslay/FoodTruck Android POS sync key (X-Api-Key header) */
     syncApiKey: varchar("sync_api_key", { length: 64 }),
@@ -430,6 +434,8 @@ export const orders = pgTable(
     discountAmount: decimal("discount_amount", { precision: 10, scale: 2 }).default("0"),
     deliveryFee: decimal("delivery_fee", { precision: 10, scale: 2 }).default("0"),
     tipAmount: decimal("tip_amount", { precision: 10, scale: 2 }).default("0"),
+    /** Online card surcharge charged to the customer */
+    cardFee: decimal("card_fee", { precision: 10, scale: 2 }).default("0"),
     total: decimal("total", { precision: 10, scale: 2 }).notNull(),
     paymentMethod: varchar("payment_method", { length: 50 }), // cash, card, terminal, loyalty, online
     paymentStatus: varchar("payment_status", { length: 50 }), // pending, awaiting_payment, completed, failed

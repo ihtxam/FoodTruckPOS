@@ -47,7 +47,6 @@ function MerchantShell() {
     { label: t('customers'), path: '/merchant/customers', icon: '👥' },
     { label: t('loyalty'), path: '/merchant/loyalty', icon: '🎁' },
     { label: t('shop'), path: '/merchant/online-shop', icon: '🌐' },
-    { label: t('terminals'), path: '/merchant/terminals', icon: '💳' },
     { label: t('floorPlan'), path: '/merchant/floor-plan', icon: '🪑' },
     { label: t('billing'), path: '/merchant/billing', icon: '💼' },
     { label: t('settings'), path: '/merchant/settings', icon: '⚙️' },

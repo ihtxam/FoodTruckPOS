@@ -686,6 +686,8 @@ router.get("/:slug/payment-options", async (req: Request, res: Response) => {
         currency: "CHF",
         clientKey: cardReady ? merchant.adyenClientId : null,
         environment: (process.env.ADYEN_ENVIRONMENT || "test").toLowerCase() === "live" ? "live" : "test",
+        cardFeeFixed: Number(merchant.onlineCardFeeFixed || 0) || 0,
+        cardFeePercent: Number(merchant.onlineCardFeePercent || 0) || 0,
       },
     });
   } catch (error) {
@@ -960,7 +962,14 @@ router.post("/:slug/orders", async (req: Request, res: Response) => {
     subtotal = roundMoney2(subtotal);
     deliveryFee = roundMoney2(deliveryFee);
     const orderNumber = `WEB-${Date.now()}-${uuidv4().substring(0, 6).toUpperCase()}`;
-    const rawTotal = subtotal + deliveryFee + tip + taxAmount;
+    const preCardTotal = subtotal + deliveryFee + tip + taxAmount;
+    const cardFeeFixed = Number(merchant.onlineCardFeeFixed || 0) || 0;
+    const cardFeePercent = Number(merchant.onlineCardFeePercent || 0) || 0;
+    const cardFee =
+      payMethod === "card"
+        ? roundTo005(Math.max(0, cardFeeFixed + (preCardTotal * cardFeePercent) / 100))
+        : 0;
+    const rawTotal = preCardTotal + cardFee;
     const roundAdj = roundingAdjustment(rawTotal);
     const total = roundTo005(rawTotal);
     const notesWithRounding =
@@ -992,6 +1001,7 @@ router.post("/:slug/orders", async (req: Request, res: Response) => {
         discountAmount: "0",
         deliveryFee: deliveryFee.toFixed(2),
         tipAmount: tip.toFixed(2),
+        cardFee: cardFee.toFixed(2),
         total: total.toFixed(2),
         paymentMethod: payMethod,
         paymentStatus,
@@ -1059,6 +1069,7 @@ router.post("/:slug/orders", async (req: Request, res: Response) => {
         subtotal: order.subtotal,
         deliveryFee: order.deliveryFee,
         tipAmount: order.tipAmount,
+        cardFee: order.cardFee,
         taxAmount: order.taxAmount,
         total: order.total,
         scheduledFor: order.scheduledFor,
@@ -1103,6 +1114,7 @@ router.get("/:slug/orders/:orderId", async (req: Request, res: Response) => {
         subtotal: order.subtotal,
         deliveryFee: order.deliveryFee,
         tipAmount: order.tipAmount,
+        cardFee: order.cardFee,
         taxAmount: order.taxAmount,
         total: order.total,
         scheduledFor: order.scheduledFor,

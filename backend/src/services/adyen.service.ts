@@ -9,7 +9,8 @@ const ADYEN_CLIENT_ID = process.env.ADYEN_CLIENT_ID;
 
 export class AdyenService {
   /**
-   * Resolve Adyen credentials: terminal override → merchant → env.
+   * Resolve Adyen credentials: merchant settings (shared for shop + terminals) → env.
+   * Legacy per-terminal credential overrides are still honored if present.
    */
   static async resolveCredentials(merchantId: string, terminalId?: string) {
     const db = getDb();
