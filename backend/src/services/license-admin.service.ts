@@ -1,8 +1,142 @@
+import crypto from "crypto";
 import { getDb, schema } from "@/db";
 import { eq, and, desc, lt, gt, asc } from "drizzle-orm";
 import { LicensingService } from "./licensing.service";
+import {
+  deriveShortDeviceId,
+  normalizeChaslayDeviceId,
+} from "./chaslay-compat.service";
+
+function formatActivationCode(): string {
+  const raw = crypto.randomBytes(6).toString("hex").toUpperCase();
+  return raw.match(/.{1,4}/g)?.join("-") ?? raw;
+}
 
 export class LicenseAdminService {
+  /**
+   * Issue a license bound to the Android POS device ID shown in the app.
+   * Matches legacy Chaslay admin flow: copy device ID → generate code for that device.
+   */
+  static async issueForPosDeviceId(
+    merchantId: string,
+    posDeviceId: string,
+    licenseType: "trial" | "yearly" | "custom" = "yearly",
+    customDays?: number,
+    deviceType: string = "tablet"
+  ) {
+    const db = getDb();
+    const merchant = await db.query.merchants.findFirst({
+      where: eq(schema.merchants.id, merchantId),
+    });
+    if (!merchant) throw new Error("Merchant not found");
+
+    const trimmed = String(posDeviceId || "").trim();
+    if (!trimmed) throw new Error("POS device ID is required");
+
+    const normalized =
+      normalizeChaslayDeviceId(trimmed) || deriveShortDeviceId(trimmed);
+    if (!normalized) throw new Error("Invalid POS device ID");
+
+    let device = await db.query.devices.findFirst({
+      where: and(
+        eq(schema.devices.merchantId, merchantId),
+        eq(schema.devices.deviceId, normalized)
+      ),
+      with: { licenses: true },
+    });
+
+    if (!device) {
+      // Also match if stored under derived short form of a longer id
+      const all = await db.query.devices.findMany({
+        where: eq(schema.devices.merchantId, merchantId),
+        with: { licenses: true },
+      });
+      device =
+        all.find(
+          (d) =>
+            normalizeChaslayDeviceId(d.deviceId) === normalized ||
+            deriveShortDeviceId(d.deviceId) === normalized
+        ) || undefined;
+    }
+
+    if (!device) {
+      const inserted = await db
+        .insert(schema.devices)
+        .values({
+          merchantId,
+          deviceId: normalized,
+          deviceName: `POS ${normalized}`,
+          deviceType,
+          isActive: true,
+        })
+        .returning();
+      device = { ...inserted[0]!, licenses: [] };
+    }
+
+    const existingActive = (device.licenses || []).find(
+      (l) => l.status === "active" && l.expiresAt > new Date()
+    );
+    if (existingActive) {
+      return {
+        deviceId: device.id,
+        externalDeviceId: device.deviceId,
+        deviceName: device.deviceName,
+        licenseKey: existingActive.licenseKey,
+        expiresAt: existingActive.expiresAt,
+        licenseId: existingActive.id,
+        reused: true,
+      };
+    }
+
+    const now = new Date();
+    let expiresAt: Date;
+    if (licenseType === "trial") {
+      expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    } else if (licenseType === "custom" && customDays) {
+      expiresAt = new Date(now.getTime() + customDays * 24 * 60 * 60 * 1000);
+    } else {
+      expiresAt = new Date(now.getFullYear() + 1, now.getMonth(), now.getDate());
+    }
+
+    // Chaslay-style short activation code (easier to type on tablet)
+    let licenseKey = formatActivationCode();
+    for (let i = 0; i < 5; i++) {
+      const taken = await db.query.licenses.findFirst({
+        where: eq(schema.licenses.licenseKey, licenseKey),
+      });
+      if (!taken) break;
+      licenseKey = formatActivationCode();
+    }
+
+    const license = await db
+      .insert(schema.licenses)
+      .values({
+        merchantId,
+        deviceId: device.id,
+        licenseKey,
+        licenseType,
+        startsAt: now,
+        expiresAt,
+        status: "active",
+      })
+      .returning();
+
+    await db
+      .update(schema.merchants)
+      .set({ status: "active", subscriptionEndsAt: expiresAt, updatedAt: now })
+      .where(eq(schema.merchants.id, merchantId));
+
+    return {
+      deviceId: device.id,
+      externalDeviceId: normalized,
+      deviceName: device.deviceName,
+      licenseKey,
+      expiresAt,
+      licenseId: license[0]!.id,
+      reused: false,
+    };
+  }
+
   /**
    * Issue N device seats for a merchant (creates placeholder devices + license keys).
    * POS devices activate/bind using these license codes.

@@ -345,6 +345,42 @@ router.post("/licenses/issue-seats", async (req: Request, res: Response) => {
 });
 
 /**
+ * POST /api/superadmin/licenses/issue-for-device
+ * Issue activation code bound to the Android POS device ID (shown in the app)
+ */
+router.post("/licenses/issue-for-device", async (req: Request, res: Response) => {
+  try {
+    const { merchantId, posDeviceId, deviceId, licenseType, customDays, deviceType } = req.body;
+    const androidId = posDeviceId || deviceId;
+    if (!merchantId || !androidId) {
+      return res.status(400).json({ error: "merchantId and posDeviceId (from POS app) are required" });
+    }
+
+    const issued = await LicenseAdminService.issueForPosDeviceId(
+      merchantId,
+      String(androidId),
+      licenseType || "yearly",
+      customDays != null ? Number(customDays) : undefined,
+      deviceType || "tablet"
+    );
+
+    res.status(201).json({
+      success: true,
+      message: issued.reused
+        ? "Existing active license for this device"
+        : "Activation code issued for device",
+      license: issued,
+      licenses: [issued],
+    });
+  } catch (error) {
+    console.error("Error issuing device license:", error);
+    res.status(400).json({
+      error: error instanceof Error ? error.message : "Failed to issue device license",
+    });
+  }
+});
+
+/**
  * GET /api/superadmin/licenses
  * Get all licenses
  */

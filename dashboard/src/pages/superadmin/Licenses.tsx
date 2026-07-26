@@ -47,9 +47,11 @@ export default function Licenses() {
     licenseType: 'yearly' as 'trial' | 'yearly' | 'custom',
     customDays: 365,
     deviceType: 'tablet',
+    mode: 'device' as 'device' | 'seats',
+    posDeviceId: '',
   });
   const [lastIssued, setLastIssued] = useState<
-    Array<{ deviceName: string; licenseKey: string }>
+    Array<{ deviceName: string; licenseKey: string; externalDeviceId?: string }>
   >([]);
 
   const load = async () => {
@@ -104,20 +106,39 @@ export default function Licenses() {
       toast.error('Select a merchant');
       return;
     }
+    if (issueForm.mode === 'device' && !issueForm.posDeviceId.trim()) {
+      toast.error('Enter the Device ID shown in the POS app');
+      return;
+    }
     setIssuing(true);
     try {
-      const res = await api.post('/superadmin/licenses/issue-seats', {
-        merchantId: issueForm.merchantId,
-        seats: Number(issueForm.seats) || 1,
-        licenseType: issueForm.licenseType,
-        customDays:
-          issueForm.licenseType === 'custom' ? Number(issueForm.customDays) : undefined,
-        deviceType: issueForm.deviceType,
-      });
-      const issued = res.data.licenses || [];
+      const res =
+        issueForm.mode === 'device'
+          ? await api.post('/superadmin/licenses/issue-for-device', {
+              merchantId: issueForm.merchantId,
+              posDeviceId: issueForm.posDeviceId.trim(),
+              licenseType: issueForm.licenseType,
+              customDays:
+                issueForm.licenseType === 'custom' ? Number(issueForm.customDays) : undefined,
+              deviceType: issueForm.deviceType,
+            })
+          : await api.post('/superadmin/licenses/issue-seats', {
+              merchantId: issueForm.merchantId,
+              seats: Number(issueForm.seats) || 1,
+              licenseType: issueForm.licenseType,
+              customDays:
+                issueForm.licenseType === 'custom' ? Number(issueForm.customDays) : undefined,
+              deviceType: issueForm.deviceType,
+            });
+      const issued = (res.data.licenses || []).map((k: any) => ({
+        deviceName: k.deviceName || k.externalDeviceId || 'POS',
+        licenseKey: k.licenseKey,
+        externalDeviceId: k.externalDeviceId,
+      }));
       setLastIssued(issued);
       toast.success(res.data.message || 'Licenses issued');
       setShowIssue(false);
+      setIssueForm((f) => ({ ...f, posDeviceId: '' }));
       load();
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Failed to issue licenses');
@@ -217,7 +238,10 @@ export default function Licenses() {
               >
                 <div className="min-w-0">
                   <p className="text-sm font-medium">{k.deviceName}</p>
-                  <p className="font-mono text-xs truncate">{k.licenseKey}</p>
+                  {k.externalDeviceId && (
+                    <p className="text-xs text-gray-500 font-mono">Device {k.externalDeviceId}</p>
+                  )}
+                  <p className="font-mono text-xs truncate">Code: {k.licenseKey}</p>
                 </div>
                 <button className="btn-secondary p-2" onClick={() => copyText(k.licenseKey)}>
                   <Copy className="w-4 h-4" />
@@ -400,7 +424,40 @@ export default function Licenses() {
                   ))}
                 </select>
               </label>
-              <div className="grid grid-cols-2 gap-3">
+
+              <label className="block">
+                <span className="text-sm font-medium">Issue mode</span>
+                <select
+                  className="input mt-1"
+                  value={issueForm.mode}
+                  onChange={(e) =>
+                    setIssueForm({
+                      ...issueForm,
+                      mode: e.target.value as 'device' | 'seats',
+                    })
+                  }
+                >
+                  <option value="device">For POS device ID (recommended)</option>
+                  <option value="seats">Open seats (any device can activate)</option>
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Copy the Device ID from the Android POS license screen, then generate a code for that
+                  device — same as the old Chaslay admin.
+                </p>
+              </label>
+
+              {issueForm.mode === 'device' ? (
+                <label className="block">
+                  <span className="text-sm font-medium">POS Device ID *</span>
+                  <input
+                    className="input mt-1 font-mono"
+                    placeholder="e.g. ABCD-EFGH"
+                    value={issueForm.posDeviceId}
+                    onChange={(e) => setIssueForm({ ...issueForm, posDeviceId: e.target.value })}
+                    required
+                  />
+                </label>
+              ) : (
                 <label className="block">
                   <span className="text-sm font-medium">Seats</span>
                   <input
@@ -412,6 +469,9 @@ export default function Licenses() {
                     onChange={(e) => setIssueForm({ ...issueForm, seats: Number(e.target.value) })}
                   />
                 </label>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
                 <label className="block">
                   <span className="text-sm font-medium">Device type</span>
                   <select

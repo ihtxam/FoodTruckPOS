@@ -162,6 +162,10 @@ fi
 FLOOR_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H 'X-Api-Key: invalid' http://127.0.0.1:3000/v1/floor/main-pos || true)
 echo "floor/main-pos HTTP ${FLOOR_CODE:-unreachable} (401 expected without valid API key)"
 
+
+echo "=== Legacy license volume probe (non-fatal) ==="
+bash "$REPO_DIR/scripts/recover-chaslay-licenses.sh" || true
+
 echo "=== Deploy complete ==="
 echo "  Admin:  https://admin.chaslay.com/"
 echo "  API:    https://api.chaslay.com/health"
