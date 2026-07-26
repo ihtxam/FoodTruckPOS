@@ -103,6 +103,99 @@ ensure_env_production() {
   else
     echo 'PUBLIC_RECEIPT_BASE_URL=https://pay.chaslay.com' >>"$ENV_FILE"
   fi
+
+  # Recover / normalize Brevo (Sendinblue) keys from this file or legacy Chaslay envs
+  ensure_brevo_env "$ENV_FILE"
+}
+
+# Copy KEY=value from SRC into DEST if DEST is missing/empty for that key
+copy_env_key() {
+  local src="$1" dest="$2" key="$3"
+  local val
+  val="$(grep -E "^${key}=" "$src" 2>/dev/null | tail -n1 | cut -d= -f2- || true)"
+  [[ -n "$val" ]] || return 0
+  if grep -qE "^${key}=" "$dest"; then
+    local existing
+    existing="$(grep -E "^${key}=" "$dest" | tail -n1 | cut -d= -f2- || true)"
+    if [[ -z "$existing" ]]; then
+      sed -i "s|^${key}=.*|${key}=${val}|" "$dest"
+      echo "Filled empty ${key} in $dest from legacy env"
+    fi
+  else
+    echo "${key}=${val}" >>"$dest"
+    echo "Imported ${key} into $dest from legacy env"
+  fi
+}
+
+ensure_brevo_env() {
+  local dest="$1"
+  local candidates=(
+    "$dest"
+    /root/chaslay-secrets/.env
+    /root/chaslay/.env
+    /root/chaslay/.env.production
+    /root/Chaslay/.env
+    /root/Chaslay/.env.production
+    /root/FoodTruckPOS/backend/.env
+    /root/FoodTruckPOS/.env
+    /opt/chaslay/.env
+    /opt/chaslay/.env.production
+  )
+
+  local src
+  for src in "${candidates[@]}"; do
+    [[ -f "$src" ]] || continue
+    copy_env_key "$src" "$dest" "BREVO_API_KEY"
+    copy_env_key "$src" "$dest" "SENDINBLUE_API_KEY"
+    copy_env_key "$src" "$dest" "SIB_API_KEY"
+    copy_env_key "$src" "$dest" "BREVO_FROM_EMAIL"
+    copy_env_key "$src" "$dest" "BREVO_SENDER_EMAIL"
+    copy_env_key "$src" "$dest" "SENDINBLUE_FROM_EMAIL"
+    copy_env_key "$src" "$dest" "BREVO_FROM_NAME"
+    copy_env_key "$src" "$dest" "FROM_EMAIL"
+    copy_env_key "$src" "$dest" "MAIL_FROM"
+  done
+
+  # Normalize aliases ? BREVO_* so docker-compose always has the preferred names
+  local api from name
+  api="$(grep -E '^(BREVO_API_KEY|SENDINBLUE_API_KEY|SIB_API_KEY)=' "$dest" 2>/dev/null | grep -v '=$' | head -n1 | cut -d= -f2- || true)"
+  from="$(grep -E '^(BREVO_FROM_EMAIL|BREVO_SENDER_EMAIL|SENDINBLUE_FROM_EMAIL|FROM_EMAIL|MAIL_FROM)=' "$dest" 2>/dev/null | grep -v '=$' | head -n1 | cut -d= -f2- || true)"
+  name="$(grep -E '^(BREVO_FROM_NAME|SENDINBLUE_FROM_NAME|MAIL_FROM_NAME)=' "$dest" 2>/dev/null | grep -v '=$' | head -n1 | cut -d= -f2- || true)"
+
+  if [[ -n "$api" ]]; then
+    if grep -qE '^BREVO_API_KEY=' "$dest"; then
+      sed -i "s|^BREVO_API_KEY=.*|BREVO_API_KEY=${api}|" "$dest"
+    else
+      echo "BREVO_API_KEY=${api}" >>"$dest"
+    fi
+  fi
+  if [[ -n "$from" ]]; then
+    if grep -qE '^BREVO_FROM_EMAIL=' "$dest"; then
+      sed -i "s|^BREVO_FROM_EMAIL=.*|BREVO_FROM_EMAIL=${from}|" "$dest"
+    else
+      echo "BREVO_FROM_EMAIL=${from}" >>"$dest"
+    fi
+  fi
+  if [[ -n "$name" ]]; then
+    if grep -qE '^BREVO_FROM_NAME=' "$dest"; then
+      sed -i "s|^BREVO_FROM_NAME=.*|BREVO_FROM_NAME=${name}|" "$dest"
+    else
+      echo "BREVO_FROM_NAME=${name}" >>"$dest"
+    fi
+  elif ! grep -qE '^BREVO_FROM_NAME=' "$dest"; then
+    echo "BREVO_FROM_NAME=Chaslay" >>"$dest"
+  fi
+
+  if grep -qE '^BREVO_API_KEY=.+' "$dest"; then
+    echo "Brevo API key: present"
+  else
+    echo "Brevo API key: MISSING (set BREVO_API_KEY or SENDINBLUE_API_KEY in $dest)"
+  fi
+  if grep -qE '^BREVO_FROM_EMAIL=.+' "$dest"; then
+    echo "Brevo from email: present ($(grep -E '^BREVO_FROM_EMAIL=' "$dest" | cut -d= -f2-))"
+  else
+    echo "Brevo from email: MISSING"
+  fi
 }
 
 ensure_env_production
@@ -165,6 +258,13 @@ echo "floor/main-pos HTTP ${FLOOR_CODE:-unreachable} (401 expected without valid
 
 echo "=== Legacy license volume probe (non-fatal) ==="
 bash "$REPO_DIR/scripts/recover-chaslay-licenses.sh" || true
+
+echo "=== Email provider check ==="
+if grep -qE '^BREVO_API_KEY=.+' "$ENV_FILE" && grep -qE '^BREVO_FROM_EMAIL=.+' "$ENV_FILE"; then
+  echo "Brevo ready for merchant invite emails"
+else
+  echo "WARNING: Brevo not fully configured — invite links will be copy-only until BREVO_API_KEY + BREVO_FROM_EMAIL are set"
+fi
 
 echo "=== Deploy complete ==="
 echo "  Admin:  https://admin.chaslay.com/"

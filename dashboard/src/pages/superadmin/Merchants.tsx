@@ -575,7 +575,7 @@ export default function Merchants() {
                   Send email with link to create password
                 </label>
                 <p className="text-xs text-gray-500 -mt-1">
-                  Merchant receives a one-time link to set their own password. Requires SendGrid on the
+                  Merchant receives a one-time link to set their own password. Uses Brevo on the
                   server; otherwise you get a copyable invite link.
                 </p>
                 <label className="flex items-center gap-2 text-sm font-medium">
