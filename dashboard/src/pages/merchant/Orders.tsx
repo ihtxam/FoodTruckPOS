@@ -8,6 +8,11 @@ interface OrderItem {
   quantity: string | number;
   totalPrice: string | number;
   selectedExtras?: Array<{ id: string; name: string; price: number }> | null;
+  comboSelections?: Array<{
+    slotName: string;
+    productName: string;
+    selectedExtras?: Array<{ id: string; name: string; price: number }>;
+  }> | null;
 }
 
 interface Order {
@@ -362,7 +367,18 @@ export default function Orders() {
                 <li key={i} className="flex justify-between gap-3">
                   <span className="min-w-0">
                     {Number(item.quantity)}× {item.productName || 'Item'}
-                    {!!item.selectedExtras?.length && (
+                    {!!item.comboSelections?.length && (
+                      <span className="mt-0.5 block text-xs text-[var(--muted)]">
+                        {item.comboSelections
+                          .map((c) =>
+                            c.selectedExtras?.length
+                              ? `${c.productName} (${c.selectedExtras.map((e) => e.name).join(', ')})`
+                              : c.productName
+                          )
+                          .join(' · ')}
+                      </span>
+                    )}
+                    {!item.comboSelections?.length && !!item.selectedExtras?.length && (
                       <span className="mt-0.5 block text-xs text-[var(--muted)]">
                         {item.selectedExtras.map((e) => e.name).join(', ')}
                       </span>

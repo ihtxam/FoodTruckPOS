@@ -12,6 +12,14 @@ type OrderItem = {
   totalPrice: string;
   notes?: string | null;
   selectedExtras?: Array<{ id: string; name: string; price: number }> | null;
+  comboSelections?: Array<{
+    slotId: string;
+    slotName: string;
+    productId: string;
+    productName: string;
+    extraPrice: number;
+    selectedExtras?: Array<{ id: string; name: string; price: number }>;
+  }> | null;
 };
 
 type OrderView = {
@@ -315,7 +323,18 @@ export default function OrderConfirmationPage() {
               <li key={it.id} className="flex justify-between gap-3 text-sm">
                 <span className="min-w-0">
                   {Number(it.quantity)}× {it.productName || 'Item'}
-                  {!!it.selectedExtras?.length && (
+                  {!!it.comboSelections?.length && (
+                    <span className="block text-xs text-stone-500 mt-0.5">
+                      {it.comboSelections
+                        .map((c) =>
+                          c.selectedExtras?.length
+                            ? `${c.productName} (${c.selectedExtras.map((e) => e.name).join(', ')})`
+                            : c.productName
+                        )
+                        .join(' · ')}
+                    </span>
+                  )}
+                  {!it.comboSelections?.length && !!it.selectedExtras?.length && (
                     <span className="block text-xs text-stone-500 mt-0.5">
                       {it.selectedExtras.map((e) => e.name).join(', ')}
                     </span>

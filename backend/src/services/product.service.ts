@@ -24,7 +24,15 @@ export class ProductService {
       weightUnit?: string;
       bulkPricing?: Array<{ minQty: number; price: number }>;
       extras?: Array<{ id: string; name: string; price: number }>;
-      comboItems?: Array<{ productId: string; quantity: number; name?: string }>;
+      comboItems?: Array<{
+        id?: string;
+        name?: string;
+        minPick?: number;
+        maxPick?: number;
+        options?: Array<{ productId: string; extraPrice?: number }>;
+        productId?: string;
+        quantity?: number;
+      }>;
       allowExtras?: boolean;
       clientId?: string;
       specifications?: Array<{
