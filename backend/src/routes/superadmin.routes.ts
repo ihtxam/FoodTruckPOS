@@ -3,11 +3,7 @@ import { verifyToken, requireSuperadmin } from "@/middleware/auth.middleware";
 import { MerchantService } from "@/services/merchant.service";
 import { LicenseAdminService } from "@/services/license-admin.service";
 import { AnalyticsService } from "@/services/analytics.service";
-import { MerchantInviteService } from "@/services/merchant-invite.service";
-import { SubscriptionPlansService } from "@/services/subscription-plans.service";
-import { PlatformSettingsService } from "@/services/platform-settings.service";
-import { getDb, schema } from "@/db";
-import { desc } from "drizzle-orm";
+import { AuthService } from "@/services/auth.service";
 
 const router = Router();
 
@@ -62,6 +58,35 @@ router.get("/merchants/:merchantId", async (req: Request, res: Response) => {
 });
 
 /**
+ * POST /api/superadmin/merchants/:merchantId/impersonate
+ * Open merchant admin panel as that merchant (keeps superadmin session on client for return)
+ */
+router.post("/merchants/:merchantId/impersonate", async (req: Request, res: Response) => {
+  try {
+    const { merchantId } = req.params;
+    const superadminId = req.user?.id;
+
+    if (!superadminId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const result = await AuthService.impersonateMerchant(superadminId, merchantId);
+
+    res.json({
+      success: true,
+      token: result.token,
+      merchant: result.merchant,
+      impersonatedBy: result.impersonatedBy,
+    });
+  } catch (error) {
+    console.error("Error impersonating merchant:", error);
+    res.status(400).json({
+      error: error instanceof Error ? error.message : "Failed to open merchant panel",
+    });
+  }
+});
+
+/**
  * POST /api/superadmin/merchants
  * Create new merchant (+ optional device license seats)
  */
@@ -85,12 +110,9 @@ router.post("/merchants", async (req: Request, res: Response) => {
       customDays,
     } = req.body;
 
-    if (!email || !businessName) {
-      return res.status(400).json({ error: "Email and business name are required" });
+    if (!email || !password || !businessName) {
+      return res.status(400).json({ error: "Email, password, and business name are required" });
     }
-
-    const sendInvite =
-      req.body.sendInvite === undefined ? undefined : !!req.body.sendInvite;
 
     const merchant = await MerchantService.createMerchant(
       email,
@@ -109,7 +131,6 @@ router.post("/merchants", async (req: Request, res: Response) => {
         deviceSeats: deviceSeats != null ? Number(deviceSeats) : 0,
         licenseType,
         customDays: customDays != null ? Number(customDays) : undefined,
-        sendInvite,
       }
     );
 
@@ -121,60 +142,6 @@ router.post("/merchants", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Error creating merchant:", error);
     res.status(400).json({ error: error instanceof Error ? error.message : "Failed to create merchant" });
-  }
-});
-
-/**
- * POST /api/superadmin/merchants/:merchantId/send-invite
- * Email a one-time link for the merchant to create their password
- */
-router.post("/merchants/:merchantId/send-invite", async (req: Request, res: Response) => {
-  try {
-    const result = await MerchantInviteService.sendInviteEmail(req.params.merchantId);
-    const { EmailService } = await import("@/services/email.service");
-    res.json({
-      success: true,
-      message: result.emailed
-        ? `Invite email sent to ${result.email}`
-        : "Invite link created (email not sent — copy the link)",
-      emailStatus: await EmailService.status(),
-      ...result,
-    });
-  } catch (error) {
-    console.error("Error sending merchant invite:", error);
-    res.status(400).json({
-      error: error instanceof Error ? error.message : "Failed to send invite",
-    });
-  }
-});
-
-/**
- * GET /api/superadmin/platform-settings/email
- * Whether transactional email (Brevo/SendGrid) is configured
- */
-router.get("/platform-settings/email", async (_req: Request, res: Response) => {
-  try {
-    const { EmailService } = await import("@/services/email.service");
-    res.json({ success: true, email: await EmailService.status() });
-  } catch (error) {
-    res.status(500).json({
-      error: error instanceof Error ? error.message : "Failed to get email settings",
-    });
-  }
-});
-
-/**
- * PUT /api/superadmin/platform-settings/email
- * Save Brevo credentials (platform invite / notification emails)
- */
-router.put("/platform-settings/email", async (req: Request, res: Response) => {
-  try {
-    const email = await PlatformSettingsService.updateBrevoSettings(req.body || {});
-    res.json({ success: true, email });
-  } catch (error) {
-    res.status(400).json({
-      error: error instanceof Error ? error.message : "Failed to update email settings",
-    });
   }
 });
 
@@ -408,42 +375,6 @@ router.post("/licenses/issue-seats", async (req: Request, res: Response) => {
 });
 
 /**
- * POST /api/superadmin/licenses/issue-for-device
- * Issue activation code bound to the Android POS device ID (shown in the app)
- */
-router.post("/licenses/issue-for-device", async (req: Request, res: Response) => {
-  try {
-    const { merchantId, posDeviceId, deviceId, licenseType, customDays, deviceType } = req.body;
-    const androidId = posDeviceId || deviceId;
-    if (!merchantId || !androidId) {
-      return res.status(400).json({ error: "merchantId and posDeviceId (from POS app) are required" });
-    }
-
-    const issued = await LicenseAdminService.issueForPosDeviceId(
-      merchantId,
-      String(androidId),
-      licenseType || "yearly",
-      customDays != null ? Number(customDays) : undefined,
-      deviceType || "tablet"
-    );
-
-    res.status(201).json({
-      success: true,
-      message: issued.reused
-        ? "Existing active license for this device"
-        : "Activation code issued for device",
-      license: issued,
-      licenses: [issued],
-    });
-  } catch (error) {
-    console.error("Error issuing device license:", error);
-    res.status(400).json({
-      error: error instanceof Error ? error.message : "Failed to issue device license",
-    });
-  }
-});
-
-/**
  * GET /api/superadmin/licenses
  * Get all licenses
  */
@@ -598,104 +529,5 @@ router.get("/analytics/subscription-distribution", async (req: Request, res: Res
     res.status(500).json({ error: error instanceof Error ? error.message : "Failed to get distribution" });
   }
 });
-
-// ============================================================================
-// SUBSCRIPTION PLANS
-// ============================================================================
-
-router.get("/plans", async (_req: Request, res: Response) => {
-  try {
-    const plans = await SubscriptionPlansService.listAll(true);
-    res.json({ success: true, plans });
-  } catch (error) {
-    console.error("Error listing plans:", error);
-    res.status(500).json({ error: error instanceof Error ? error.message : "Failed to list plans" });
-  }
-});
-
-router.post("/plans", async (req: Request, res: Response) => {
-  try {
-    const plan = await SubscriptionPlansService.create(req.body);
-    res.status(201).json({ success: true, plan });
-  } catch (error) {
-    console.error("Error creating plan:", error);
-    res.status(400).json({ error: error instanceof Error ? error.message : "Failed to create plan" });
-  }
-});
-
-router.put("/plans/:planId", async (req: Request, res: Response) => {
-  try {
-    const plan = await SubscriptionPlansService.update(req.params.planId, req.body);
-    res.json({ success: true, plan });
-  } catch (error) {
-    console.error("Error updating plan:", error);
-    res.status(400).json({ error: error instanceof Error ? error.message : "Failed to update plan" });
-  }
-});
-
-router.delete("/plans/:planId", async (req: Request, res: Response) => {
-  try {
-    const plan = await SubscriptionPlansService.remove(req.params.planId);
-    res.json({ success: true, plan });
-  } catch (error) {
-    console.error("Error deleting plan:", error);
-    res.status(400).json({ error: error instanceof Error ? error.message : "Failed to delete plan" });
-  }
-});
-
-// ============================================================================
-// PLATFORM ADYEN (subscription payments settle here)
-// ============================================================================
-
-router.get("/platform-settings/adyen", async (_req: Request, res: Response) => {
-  try {
-    const adyen = await PlatformSettingsService.getAdyenSettingsPublic();
-    res.json({ success: true, adyen });
-  } catch (error) {
-    console.error("Error getting platform Adyen settings:", error);
-    res.status(500).json({
-      error: error instanceof Error ? error.message : "Failed to get Adyen settings",
-    });
-  }
-});
-
-router.put("/platform-settings/adyen", async (req: Request, res: Response) => {
-  try {
-    const adyen = await PlatformSettingsService.updateAdyenSettings(req.body || {});
-    res.json({ success: true, adyen });
-  } catch (error) {
-    console.error("Error updating platform Adyen settings:", error);
-    res.status(400).json({
-      error: error instanceof Error ? error.message : "Failed to update Adyen settings",
-    });
-  }
-});
-
-router.get("/subscription-payments", async (req: Request, res: Response) => {
-  try {
-    const limit = Math.min(parseInt(String(req.query.limit || "50"), 10) || 50, 200);
-    const db = getDb();
-    const payments = await db.query.subscriptionPayments.findMany({
-      orderBy: [desc(schema.subscriptionPayments.createdAt)],
-      limit,
-      with: { plan: true, merchant: true },
-    });
-    res.json({
-      success: true,
-      payments: payments.map((p) => ({
-        ...p,
-        merchant: p.merchant
-          ? { id: p.merchant.id, name: p.merchant.name, email: p.merchant.email }
-          : null,
-      })),
-    });
-  } catch (error) {
-    console.error("Error listing subscription payments:", error);
-    res.status(500).json({
-      error: error instanceof Error ? error.message : "Failed to list payments",
-    });
-  }
-});
-
 
 export default router;

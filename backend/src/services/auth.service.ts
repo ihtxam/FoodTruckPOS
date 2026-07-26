@@ -10,6 +10,8 @@ export interface JWTPayload {
   merchantId?: string;
   customerId?: string;
   name?: string;
+  /** Set when a superadmin opens a merchant panel */
+  impersonatedBy?: string;
 }
 
 export class AuthService {
@@ -112,13 +114,6 @@ export class AuthService {
 
       if (!merchant) {
         throw new Error("Invalid email or password");
-      }
-
-      // Invite-only accounts (no password chosen yet) cannot log in with a password
-      if (!merchant.passwordSetAt && merchant.inviteTokenHash) {
-        throw new Error(
-          "Password not set yet. Use the invite link from your email to create a password."
-        );
       }
 
       // Verify password
@@ -246,6 +241,45 @@ export class AuthService {
   }
 
   /**
+   * Issue a merchant JWT so a superadmin can open that merchant's panel.
+   */
+  static async impersonateMerchant(superadminId: string, merchantId: string) {
+    const db = getDb();
+
+    const merchant = await db.query.merchants.findFirst({
+      where: eq(schema.merchants.id, merchantId),
+    });
+
+    if (!merchant) {
+      throw new Error("Merchant not found");
+    }
+
+    if (merchant.status === "suspended" || merchant.status === "expired") {
+      throw new Error(`Cannot open panel: merchant is ${merchant.status}`);
+    }
+
+    const token = this.generateToken({
+      id: merchant.id,
+      email: merchant.email,
+      role: "merchant",
+      merchantId: merchant.id,
+      name: merchant.name,
+      impersonatedBy: superadminId,
+    });
+
+    return {
+      token,
+      merchant: {
+        id: merchant.id,
+        email: merchant.email,
+        name: merchant.name,
+        status: merchant.status,
+      },
+      impersonatedBy: superadminId,
+    };
+  }
+
+  /**
    * Verify merchant email (for password reset, etc.)
    */
   static async getMerchantById(merchantId: string) {
@@ -283,13 +317,7 @@ export class AuthService {
 
       await db
         .update(schema.merchants)
-        .set({
-          passwordHash,
-          passwordSetAt: new Date(),
-          inviteTokenHash: null,
-          inviteTokenExpiresAt: null,
-          updatedAt: new Date(),
-        })
+        .set({ passwordHash })
         .where(eq(schema.merchants.id, merchantId));
 
       return { success: true };

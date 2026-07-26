@@ -14,6 +14,7 @@ import {
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
+import { DragHandle, SortableContainer, SortableRow } from '@/components/SortableList';
 
 interface Extra {
   id: string;
@@ -60,6 +61,7 @@ interface Product {
   specifications?: SpecRow[];
   extras?: Extra[];
   allowExtras?: boolean;
+  sortOrder?: number;
   modifierGroups?: ModifierGroupSummary[];
 }
 
@@ -135,6 +137,7 @@ export default function Products() {
   const [form, setForm] = useState<FormState>(emptyForm());
   const [allModifierGroups, setAllModifierGroups] = useState<ModifierGroupSummary[]>([]);
   const [modifierPickerOpen, setModifierPickerOpen] = useState(false);
+  const [reordering, setReordering] = useState(false);
 
   const load = async () => {
     try {
@@ -168,6 +171,32 @@ export default function Products() {
     }
     return counts;
   }, [products]);
+
+  const persistProductOrder = async (next: Product[]) => {
+    const prev = products;
+    setProducts(next);
+    setReordering(true);
+    try {
+      const res = await api.put('/merchant/products/reorder', {
+        orderedIds: next.map((p) => p.id),
+      });
+      if (res.data.products?.length) {
+        setProducts(res.data.products);
+      }
+    } catch (error: any) {
+      setProducts(prev);
+      toast.error(error.response?.data?.error || 'Failed to save product order');
+    } finally {
+      setReordering(false);
+    }
+  };
+
+  const onReorderFiltered = (nextFiltered: Product[]) => {
+    const filteredIds = new Set(nextFiltered.map((p) => p.id));
+    let i = 0;
+    const merged = products.map((p) => (filteredIds.has(p.id) ? nextFiltered[i++] : p));
+    void persistProductOrder(merged);
+  };
 
   const filteredProducts = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -479,7 +508,7 @@ export default function Products() {
                   : 'border-[var(--border)] bg-[var(--bg-elevated)] hover:bg-[var(--bg-muted)]'
               }`}
             >
-              <div className="text-[10px] opacity-80">Uncategorized</div>
+              <div className="text-[10px] opacity-80">{t('uncategorized')}</div>
               <div className="mt-0.5 text-base font-semibold tabular-nums">{categoryCounts.get('__none__') || 0}</div>
             </button>
           )}
@@ -490,20 +519,27 @@ export default function Products() {
         {filteredProducts.length === 0 && (
           <div className="card border-dashed px-4 py-10 text-center">
             <Package className="mx-auto muted" size={28} />
-            <p className="mt-2 text-sm font-semibold">No products found</p>
-            <p className="text-xs muted mt-1">Create one or import an Excel catalog.</p>
+            <p className="mt-2 text-sm font-semibold">{t('noProductsFound')}</p>
+            <p className="text-xs muted mt-1">{t('createOrImport')}</p>
             <button
               type="button"
               onClick={openCreate}
               className="btn-primary mt-3"
             >
               <Plus size={14} />
-              Add Product
+              {t('addProduct')}
             </button>
           </div>
         )}
 
-        {filteredProducts.map((product) => {
+        <SortableContainer
+          as="div"
+          className="space-y-2"
+          items={filteredProducts}
+          onReorder={onReorderFiltered}
+          disabled={reordering}
+        >
+          {filteredProducts.map((product) => {
           const extras = product.extras || [];
           const tiers = product.bulkPricing || [];
           const sizes = product.specifications || [];
@@ -511,11 +547,19 @@ export default function Products() {
           const stockOk = product.stock > 20;
 
           return (
-            <article
+            <SortableRow
               key={product.id}
+              id={product.id}
+              as="div"
               className="overflow-hidden card !p-0"
+              disabled={reordering}
             >
+              {({ attributes, listeners }) => (
+              <>
               <div className="flex items-stretch gap-2 p-3">
+                <div className="flex items-center shrink-0">
+                  <DragHandle attributes={attributes} listeners={listeners} />
+                </div>
                 <button
                   type="button"
                   className="flex flex-1 items-center gap-4 text-left min-w-0"
@@ -640,37 +684,53 @@ export default function Products() {
                   )}
 
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-1.5 text-sm">
-                    <InfoCard label="Category" value={categoryName(product.categoryId)} />
-                    <InfoCard label="Type" value={productTypeLabel(product)} />
-                    <InfoCard label="Stock" value={`${product.stock} units`} />
-                    <InfoCard label="Barcode" value={product.barcode || '—'} />
+                    <InfoCard label={t('category')} value={categoryName(product.categoryId)} />
+                    <InfoCard label={t('type')} value={productTypeLabel(product)} />
+                    <InfoCard label={t('stock')} value={`${product.stock} units`} />
+                    <InfoCard label={t('barcode')} value={product.barcode || '—'} />
                   </div>
                 </div>
               )}
-            </article>
+              </>
+              )}
+            </SortableRow>
           );
         })}
+        </SortableContainer>
       </section>
 
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-3">
-          <div className="max-h-[94vh] w-full max-w-2xl overflow-y-auto rounded-t-lg sm:rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] shadow-xl">
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-3"
+          onClick={closeModal}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') closeModal();
+          }}
+          role="presentation"
+        >
+          <div
+            className="max-h-[94vh] w-full max-w-2xl overflow-y-auto rounded-t-lg sm:rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+          >
             <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[var(--border)] bg-[var(--bg-elevated)] px-4 py-3">
               <h2 className="text-base font-semibold">
-                {editingId ? 'Edit product' : 'Add product'}
+                {editingId ? t('editProduct') : t('addProduct')}
               </h2>
               <button
                 type="button"
                 onClick={closeModal}
-                className="rounded-md p-1.5 muted hover:bg-[var(--bg-muted)]"
+                className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md muted hover:bg-[var(--bg-muted)]"
+                aria-label={t('close')}
               >
-                <X size={16} />
+                <X size={20} />
               </button>
             </div>
 
             <form onSubmit={onSubmit} className="space-y-3 px-4 py-3">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <Field label="Product Name *">
+                <Field label={`${t('productName')} *`}>
                   <input
                     className="field-input"
                     value={form.name}
@@ -678,13 +738,13 @@ export default function Products() {
                     required
                   />
                 </Field>
-                <Field label="Category *">
+                <Field label={`${t('category')} *`}>
                   <select
                     className="field-input"
                     value={form.categoryId}
                     onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
                   >
-                    <option value="">Select category</option>
+                    <option value="">{t('selectCategory')}</option>
                     {categories.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name}
@@ -692,7 +752,7 @@ export default function Products() {
                     ))}
                   </select>
                 </Field>
-                <Field label="Product Code / SKU">
+                <Field label={t('productCode')}>
                   <input
                     className="field-input"
                     placeholder="For quick search when ordering"
@@ -710,7 +770,7 @@ export default function Products() {
                 </Field>
               </div>
 
-              <Field label="Description">
+              <Field label={t('description')}>
                 <textarea
                   className="field-input min-h-[64px]"
                   rows={2}
@@ -721,7 +781,7 @@ export default function Products() {
 
               <div>
                 <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide muted">
-                  Button color
+                  
                 </p>
                 <div className="flex flex-wrap items-center gap-1.5">
                   {BUTTON_COLORS.map((color) => (
@@ -751,7 +811,7 @@ export default function Products() {
                     checked={form.isOpenPrice}
                     onChange={(e) => setForm({ ...form, isOpenPrice: e.target.checked })}
                   />
-                  Open price item
+                  {t('openPriceItem')}
                 </label>
                 <label className="inline-flex items-center gap-2">
                   <input
@@ -759,15 +819,15 @@ export default function Products() {
                     checked={form.soldByWeight}
                     onChange={(e) => setForm({ ...form, soldByWeight: e.target.checked })}
                   />
-                  Weighing product
+                  {t('weighingProduct')}
                 </label>
               </div>
 
               <div className="rounded-md border border-[var(--border)] p-3 space-y-2.5">
                 <div className="flex items-center justify-between gap-2">
                   <div>
-                    <h3 className="text-sm font-semibold">Sizes</h3>
-                    <p className="text-[11px] muted">e.g. Small / Regular / Large — each with its own price</p>
+                    <h3 className="text-sm font-semibold">{t('sizes')}</h3>
+                    <p className="text-[11px] muted">{t('sizesHint')}</p>
                   </div>
                   <button
                     type="button"
@@ -799,7 +859,7 @@ export default function Products() {
                     >
                       <input
                         className="field-input"
-                        placeholder="Size name (Small, Large…)"
+                        placeholder={t('sizeName')}
                         value={spec.name}
                         onChange={(e) => {
                           const next = [...form.specifications];
@@ -835,8 +895,8 @@ export default function Products() {
                           setForm({ ...form, specifications: next });
                         }}
                       >
-                        <option value="in_stock">In stock</option>
-                        <option value="out_of_stock">Out of stock</option>
+                        <option value="in_stock">{t('inStock')}</option>
+                        <option value="out_of_stock">{t('outOfStock')}</option>
                       </select>
                       <label className="inline-flex items-center gap-1 text-[11px] muted">
                         <input
@@ -854,7 +914,7 @@ export default function Products() {
                             })
                           }
                         />
-                        Default
+                        {t('default')}
                       </label>
                       <button
                         type="button"
@@ -879,10 +939,8 @@ export default function Products() {
               <div className="rounded-md border border-[var(--border)] p-3 space-y-2.5">
                 <div className="flex items-center justify-between gap-2">
                   <div>
-                    <h3 className="text-sm font-semibold">Modifiers / Add-ons</h3>
-                    <p className="text-[11px] muted mt-0.5">
-                      Link groups from Modifiers.
-                    </p>
+                    <h3 className="text-sm font-semibold">{t('modifiersAddons')}</h3>
+                    <p className="text-[11px] muted mt-0.5">{t('modifiersHint')}</p>
                   </div>
                   <button
                     type="button"
@@ -895,7 +953,7 @@ export default function Products() {
                 <div className="divide-y divide-[var(--border)] rounded-md border border-[var(--border)]">
                   {linkedModifierGroups.length === 0 && (
                     <p className="px-3 py-4 text-center text-xs muted">
-                      No modifiers linked yet.
+                      {t('noModifiersLinked')}
                     </p>
                   )}
                   {linkedModifierGroups.map((g) => (
@@ -936,7 +994,7 @@ export default function Products() {
                   disabled={saving}
                   className="btn-primary flex-1"
                 >
-                  {saving ? 'Saving…' : editingId ? t('save') : 'Create product'}
+                  {saving ? t('saving') : editingId ? t('save') : t('createProduct')}
                 </button>
               </div>
             </form>
@@ -948,7 +1006,7 @@ export default function Products() {
         <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
           <div className="w-full max-w-lg rounded-t-lg sm:rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] shadow-xl">
             <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3">
-              <h3 className="text-sm font-semibold">Add modifiers</h3>
+              <h3 className="text-sm font-semibold">{t('addModifiers')}</h3>
               <button
                 type="button"
                 onClick={() => setModifierPickerOpen(false)}

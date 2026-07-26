@@ -1,5 +1,5 @@
 import { getDb, schema } from "@/db";
-import { eq, and, like, desc, or } from "drizzle-orm";
+import { eq, and, like, desc, asc, or, max, sql, lt } from "drizzle-orm";
 
 export class ProductService {
   /**
@@ -41,6 +41,13 @@ export class ProductService {
     const db = getDb();
 
     try {
+      const [{ nextSort }] = await db
+        .select({
+          nextSort: sql<number>`coalesce(${max(schema.products.sortOrder)}, -1) + 1`,
+        })
+        .from(schema.products)
+        .where(eq(schema.products.merchantId, merchantId));
+
       const product = await db
         .insert(schema.products)
         .values({
@@ -65,6 +72,7 @@ export class ProductService {
           specifications: extras?.specifications || [],
           buttonColor: extras?.buttonColor || null,
           allowExtras: !!extras?.allowExtras,
+          sortOrder: Number(nextSort) || 0,
           clientId: extras?.clientId,
         })
         .returning();
@@ -113,7 +121,7 @@ export class ProductService {
         },
         limit,
         offset,
-        orderBy: desc(schema.products.createdAt),
+        orderBy: [asc(schema.products.sortOrder), desc(schema.products.createdAt)],
       });
 
       return products;
@@ -121,6 +129,43 @@ export class ProductService {
       console.error("Error getting products:", error);
       throw error;
     }
+  }
+
+  /**
+   * Persist display order for products (ordered id list).
+   */
+  static async reorderProducts(merchantId: string, orderedIds: string[]) {
+    const db = getDb();
+    if (!Array.isArray(orderedIds) || orderedIds.length === 0) {
+      throw new Error("orderedIds is required");
+    }
+
+    const existing = await db.query.products.findMany({
+      where: eq(schema.products.merchantId, merchantId),
+      columns: { id: true },
+    });
+    const owned = new Set(existing.map((p) => p.id));
+    for (const id of orderedIds) {
+      if (!owned.has(id)) {
+        throw new Error("Invalid product id in reorder list");
+      }
+    }
+
+    await db.transaction(async (tx) => {
+      for (let i = 0; i < orderedIds.length; i++) {
+        await tx
+          .update(schema.products)
+          .set({ sortOrder: i, updatedAt: new Date() })
+          .where(
+            and(
+              eq(schema.products.id, orderedIds[i]),
+              eq(schema.products.merchantId, merchantId)
+            )
+          );
+      }
+    });
+
+    return this.getProducts(merchantId, 1, Math.max(orderedIds.length, 200));
   }
 
   /**
@@ -318,6 +363,3 @@ export class ProductService {
     }
   }
 }
-
-// Import missing functions
-import { lt, or, asc } from "drizzle-orm";

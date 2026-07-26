@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
 import { ShoppingCart, Users, Package, Gift } from 'lucide-react';
+import { useI18n } from '@/lib/i18n';
 
 interface Stats {
   totalOrders: number;
@@ -12,6 +13,7 @@ interface Stats {
 }
 
 export default function Overview() {
+  const { t } = useI18n();
   const [stats, setStats] = useState<Stats>({
     totalOrders: 0,
     totalCustomers: 0,
@@ -41,23 +43,23 @@ export default function Overview() {
         setLoading(false);
       }
     };
-    load();
+    void load();
   }, []);
 
-  if (loading) return <div className="text-center py-10 muted text-sm">Loading...</div>;
+  if (loading) return <div className="text-center py-10 muted text-sm">{t('loading')}</div>;
 
   const cards = [
-    { label: 'Products', value: stats.totalProducts, icon: Package, path: '/merchant/products' },
-    { label: 'Orders', value: stats.totalOrders, icon: ShoppingCart, path: '/merchant/orders' },
-    { label: 'Customers', value: stats.totalCustomers, icon: Users, path: '/merchant/customers' },
-    { label: 'Loyalty cards', value: stats.totalCards, icon: Gift, path: '/merchant/loyalty' },
+    { label: t('products'), value: stats.totalProducts, icon: Package, path: '/merchant/products' },
+    { label: t('orders'), value: stats.totalOrders, icon: ShoppingCart, path: '/merchant/orders' },
+    { label: t('customers'), value: stats.totalCustomers, icon: Users, path: '/merchant/customers' },
+    { label: t('loyaltyCards'), value: stats.totalCards, icon: Gift, path: '/merchant/loyalty' },
   ];
 
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="page-title">Overview</h1>
-        <p className="page-sub">Quick snapshot of your shop. Use the menu for Products, Loyalty, and Settings.</p>
+        <h1 className="page-title">{t('overview')}</h1>
+        <p className="page-sub">{t('overviewSub')}</p>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">

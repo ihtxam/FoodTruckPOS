@@ -2,7 +2,6 @@ import { FormEvent, ReactNode, useEffect, useMemo, useState } from 'react';
 import {
   ChevronDown,
   ChevronUp,
-  GripVertical,
   Plus,
   Search,
   Trash2,
@@ -10,6 +9,8 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
+import { useI18n } from '@/lib/i18n';
+import { DragHandle, SortableContainer, SortableRow } from '@/components/SortableList';
 
 type PricingType = 'free' | 'fixed' | 'toppings_by_size';
 type SelectionType = 'optional' | 'required';
@@ -64,6 +65,7 @@ type FormState = {
 };
 
 const emptyOption = (): ModifierOption => ({
+  id: `opt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
   name: '',
   price: 0,
   saleStatus: 'in_stock',
@@ -83,6 +85,7 @@ const emptyForm = (): FormState => ({
 });
 
 export default function Modifiers() {
+  const { t } = useI18n();
   const [groups, setGroups] = useState<ModifierGroup[]>([]);
   const [products, setProducts] = useState<ProductOption[]>([]);
   const [loading, setLoading] = useState(true);
@@ -160,7 +163,10 @@ export default function Modifiers() {
       defaultCollapsed: group.defaultCollapsed,
       allowMultipleSameItem: group.allowMultipleSameItem,
       options: group.options.length
-        ? group.options.map((o) => ({ ...o }))
+        ? group.options.map((o, i) => ({
+            ...o,
+            id: o.id || `opt-${group.id}-${i}`,
+          }))
         : [emptyOption()],
       productIds: [...(group.productIds || [])],
     });
@@ -267,7 +273,7 @@ export default function Modifiers() {
           className="inline-flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-700"
         >
           <Plus size={18} />
-          Add New Group
+          {t('addNewGroup')}
         </button>
       </div>
 
@@ -293,7 +299,7 @@ export default function Modifiers() {
               onClick={openCreate}
               className="mt-4 inline-flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white"
             >
-              <Plus size={16} /> Add New Group
+              <Plus size={16} />{t('addNewGroup')}
             </button>
           </div>
         )}
@@ -357,7 +363,7 @@ export default function Modifiers() {
           >
             <div className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4">
               <h2 className="text-xl font-bold text-slate-900">
-                {editingId ? 'Edit Group' : 'Add New Group'}
+                {editingId ? t('editGroup') : t('addNewGroup')}
               </h2>
               <button type="button" onClick={closeEditor} className="rounded-lg p-2 hover:bg-slate-100">
                 <X size={18} />
@@ -463,7 +469,7 @@ export default function Modifiers() {
 
                 <div>
                   <div className="mb-2 flex items-center justify-between">
-                    <h3 className="font-semibold text-slate-900">Options</h3>
+                    <h3 className="font-semibold text-slate-900">{t('options')}</h3>
                     <button
                       type="button"
                       onClick={() =>
@@ -488,99 +494,126 @@ export default function Modifiers() {
                           <th className="px-2 py-2 w-10" />
                         </tr>
                       </thead>
-                      <tbody>
-                        {form.options.map((opt, idx) => (
-                          <tr key={idx} className="border-t border-slate-100">
-                            <td className="px-2 py-2 text-slate-300">
-                              <GripVertical size={16} />
-                            </td>
-                            <td className="px-2 py-2">
-                              <input
-                                className="field"
-                                placeholder="Option Name"
-                                value={opt.name}
-                                onChange={(e) => {
-                                  const options = [...form.options];
-                                  options[idx] = { ...options[idx], name: e.target.value };
-                                  setForm({ ...form, options });
-                                }}
-                              />
-                            </td>
-                            {form.pricingType !== 'free' && (
-                              <td className="px-2 py-2">
-                                <div className="relative">
-                                  <input
-                                    className="field pr-12"
-                                    type="number"
-                                    step="0.01"
-                                    value={opt.price}
-                                    onChange={(e) => {
-                                      const options = [...form.options];
-                                      options[idx] = {
-                                        ...options[idx],
-                                        price: Number(e.target.value) || 0,
-                                      };
-                                      setForm({ ...form, options });
-                                    }}
-                                  />
-                                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">
-                                    CHF
-                                  </span>
-                                </div>
-                              </td>
-                            )}
-                            <td className="px-2 py-2">
-                              <select
-                                className="field"
-                                value={opt.saleStatus}
-                                onChange={(e) => {
-                                  const options = [...form.options];
-                                  options[idx] = {
-                                    ...options[idx],
-                                    saleStatus: e.target.value as SaleStatus,
-                                  };
-                                  setForm({ ...form, options });
-                                }}
-                              >
-                                <option value="in_stock">In stock</option>
-                                <option value="out_of_stock">Out of stock</option>
-                              </select>
-                            </td>
-                            <td className="px-2 py-2 text-center">
-                              <input
-                                type="checkbox"
-                                className="accent-teal-600"
-                                checked={opt.isDefault}
-                                onChange={(e) => {
-                                  const options = [...form.options];
-                                  options[idx] = {
-                                    ...options[idx],
-                                    isDefault: e.target.checked,
-                                  };
-                                  setForm({ ...form, options });
-                                }}
-                              />
-                            </td>
-                            <td className="px-2 py-2">
-                              <button
-                                type="button"
-                                className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"
-                                onClick={() =>
-                                  setForm({
-                                    ...form,
-                                    options:
-                                      form.options.length > 1
-                                        ? form.options.filter((_, i) => i !== idx)
-                                        : [emptyOption()],
-                                  })
-                                }
-                              >
-                                <Trash2 size={16} />
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
+                      <SortableContainer
+                        as="tbody"
+                        items={form.options.map((o, i) => ({
+                          ...o,
+                          id: o.id || `opt-row-${i}`,
+                        }))}
+                        onReorder={(next) =>
+                          setForm({
+                            ...form,
+                            options: next.map((row, idx) => ({
+                              ...row,
+                              sortOrder: idx,
+                            })),
+                          })
+                        }
+                      >
+                        {form.options.map((opt, idx) => {
+                          const rowId = opt.id || `opt-row-${idx}`;
+                          return (
+                            <SortableRow
+                              key={rowId}
+                              id={rowId}
+                              as="tr"
+                              className="border-t border-slate-100 bg-white"
+                            >
+                              {({ attributes, listeners }) => (
+                                <>
+                                  <td className="px-2 py-2">
+                                    <DragHandle attributes={attributes} listeners={listeners} />
+                                  </td>
+                                  <td className="px-2 py-2">
+                                    <input
+                                      className="field"
+                                      placeholder="Option Name"
+                                      value={opt.name}
+                                      onChange={(e) => {
+                                        const options = [...form.options];
+                                        options[idx] = { ...options[idx], name: e.target.value };
+                                        setForm({ ...form, options });
+                                      }}
+                                    />
+                                  </td>
+                                  {form.pricingType !== 'free' && (
+                                    <td className="px-2 py-2">
+                                      <div className="relative">
+                                        <input
+                                          className="field pr-12"
+                                          type="number"
+                                          step="0.01"
+                                          value={opt.price}
+                                          onChange={(e) => {
+                                            const options = [...form.options];
+                                            options[idx] = {
+                                              ...options[idx],
+                                              price: Number(e.target.value) || 0,
+                                            };
+                                            setForm({ ...form, options });
+                                          }}
+                                        />
+                                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">
+                                          CHF
+                                        </span>
+                                      </div>
+                                    </td>
+                                  )}
+                                  <td className="px-2 py-2">
+                                    <select
+                                      className="field"
+                                      value={opt.saleStatus}
+                                      onChange={(e) => {
+                                        const options = [...form.options];
+                                        options[idx] = {
+                                          ...options[idx],
+                                          saleStatus: e.target.value as SaleStatus,
+                                        };
+                                        setForm({ ...form, options });
+                                      }}
+                                    >
+                                      <option value="in_stock">In stock</option>
+                                      <option value="out_of_stock">Out of stock</option>
+                                    </select>
+                                  </td>
+                                  <td className="px-2 py-2 text-center">
+                                    <input
+                                      type="checkbox"
+                                      className="accent-teal-600"
+                                      checked={opt.isDefault}
+                                      onChange={(e) => {
+                                        const options = [...form.options];
+                                        options[idx] = {
+                                          ...options[idx],
+                                          isDefault: e.target.checked,
+                                        };
+                                        setForm({ ...form, options });
+                                      }}
+                                    />
+                                  </td>
+                                  <td className="px-2 py-2">
+                                    <button
+                                      type="button"
+                                      className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"
+                                      onClick={() =>
+                                        setForm({
+                                          ...form,
+                                          options:
+                                            form.options.length > 1
+                                              ? form.options.filter((_, i) => i !== idx)
+                                              : [emptyOption()],
+                                        })
+                                      }
+                                    >
+                                      <Trash2 size={16} />
+                                    </button>
+                                  </td>
+                                </>
+                              )}
+                            </SortableRow>
+                          );
+                        })}
+                      </SortableContainer>
                     </table>
                   </div>
                 </div>
