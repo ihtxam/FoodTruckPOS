@@ -137,7 +137,7 @@ router.post("/merchants/:merchantId/send-invite", async (req: Request, res: Resp
       message: result.emailed
         ? `Invite email sent to ${result.email}`
         : "Invite link created (email not sent — copy the link)",
-      emailStatus: EmailService.status(),
+      emailStatus: await EmailService.status(),
       ...result,
     });
   } catch (error) {
@@ -155,10 +155,25 @@ router.post("/merchants/:merchantId/send-invite", async (req: Request, res: Resp
 router.get("/platform-settings/email", async (_req: Request, res: Response) => {
   try {
     const { EmailService } = await import("@/services/email.service");
-    res.json({ success: true, email: EmailService.status() });
+    res.json({ success: true, email: await EmailService.status() });
   } catch (error) {
     res.status(500).json({
       error: error instanceof Error ? error.message : "Failed to get email settings",
+    });
+  }
+});
+
+/**
+ * PUT /api/superadmin/platform-settings/email
+ * Save Brevo credentials (platform invite / notification emails)
+ */
+router.put("/platform-settings/email", async (req: Request, res: Response) => {
+  try {
+    const email = await PlatformSettingsService.updateBrevoSettings(req.body || {});
+    res.json({ success: true, email });
+  } catch (error) {
+    res.status(400).json({
+      error: error instanceof Error ? error.message : "Failed to update email settings",
     });
   }
 });

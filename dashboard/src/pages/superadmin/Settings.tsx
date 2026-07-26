@@ -32,6 +32,16 @@ type AdyenSettings = {
   usingEnvFallback?: boolean;
 };
 
+type EmailSettings = {
+  configured: boolean;
+  provider?: string | null;
+  fromEmail: string;
+  fromName: string;
+  apiKeyMasked?: string;
+  apiKeySet: boolean;
+  usingEnvFallback?: boolean;
+};
+
 const emptyPlan = {
   name: '',
   slug: '',
