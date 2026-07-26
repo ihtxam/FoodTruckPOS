@@ -101,8 +101,8 @@ export class MerchantInviteService {
       }
     } else {
       emailError =
-        "Email is not configured (SENDGRID_API_KEY / SENDGRID_FROM_EMAIL). Copy the invite link instead.";
-      console.warn(`Invite email skipped (SendGrid not configured). Link: ${inviteUrl}`);
+        "Email is not configured (BREVO_API_KEY / BREVO_FROM_EMAIL). Copy the invite link instead.";
+      console.warn(`Invite email skipped (Brevo/SendGrid not configured). Link: ${inviteUrl}`);
     }
 
     const db = getDb();

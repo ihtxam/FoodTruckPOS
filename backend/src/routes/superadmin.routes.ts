@@ -131,17 +131,34 @@ router.post("/merchants", async (req: Request, res: Response) => {
 router.post("/merchants/:merchantId/send-invite", async (req: Request, res: Response) => {
   try {
     const result = await MerchantInviteService.sendInviteEmail(req.params.merchantId);
+    const { EmailService } = await import("@/services/email.service");
     res.json({
       success: true,
       message: result.emailed
         ? `Invite email sent to ${result.email}`
         : "Invite link created (email not sent — copy the link)",
+      emailStatus: EmailService.status(),
       ...result,
     });
   } catch (error) {
     console.error("Error sending merchant invite:", error);
     res.status(400).json({
       error: error instanceof Error ? error.message : "Failed to send invite",
+    });
+  }
+});
+
+/**
+ * GET /api/superadmin/platform-settings/email
+ * Whether transactional email (Brevo/SendGrid) is configured
+ */
+router.get("/platform-settings/email", async (_req: Request, res: Response) => {
+  try {
+    const { EmailService } = await import("@/services/email.service");
+    res.json({ success: true, email: EmailService.status() });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to get email settings",
     });
   }
 });
