@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { getDb, schema } from "./index";
 import { AuthService } from "../services/auth.service";
 import { generateSyncApiKey } from "../services/chaslay-compat.service";
+import { SubscriptionPlansService } from "../services/subscription-plans.service";
 
 dotenv.config();
 
@@ -226,6 +227,7 @@ async function seedDemoShop() {
 
 async function seed() {
   await seedSuperadmin();
+  await SubscriptionPlansService.ensureDefaults();
   await seedDemoShop();
 }
 

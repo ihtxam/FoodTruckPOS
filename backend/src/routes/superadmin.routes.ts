@@ -3,6 +3,10 @@ import { verifyToken, requireSuperadmin } from "@/middleware/auth.middleware";
 import { MerchantService } from "@/services/merchant.service";
 import { LicenseAdminService } from "@/services/license-admin.service";
 import { AnalyticsService } from "@/services/analytics.service";
+import { SubscriptionPlansService } from "@/services/subscription-plans.service";
+import { PlatformSettingsService } from "@/services/platform-settings.service";
+import { getDb, schema } from "@/db";
+import { desc } from "drizzle-orm";
 
 const router = Router();
 
@@ -535,5 +539,104 @@ router.get("/analytics/subscription-distribution", async (req: Request, res: Res
     res.status(500).json({ error: error instanceof Error ? error.message : "Failed to get distribution" });
   }
 });
+
+// ============================================================================
+// SUBSCRIPTION PLANS
+// ============================================================================
+
+router.get("/plans", async (_req: Request, res: Response) => {
+  try {
+    const plans = await SubscriptionPlansService.listAll(true);
+    res.json({ success: true, plans });
+  } catch (error) {
+    console.error("Error listing plans:", error);
+    res.status(500).json({ error: error instanceof Error ? error.message : "Failed to list plans" });
+  }
+});
+
+router.post("/plans", async (req: Request, res: Response) => {
+  try {
+    const plan = await SubscriptionPlansService.create(req.body);
+    res.status(201).json({ success: true, plan });
+  } catch (error) {
+    console.error("Error creating plan:", error);
+    res.status(400).json({ error: error instanceof Error ? error.message : "Failed to create plan" });
+  }
+});
+
+router.put("/plans/:planId", async (req: Request, res: Response) => {
+  try {
+    const plan = await SubscriptionPlansService.update(req.params.planId, req.body);
+    res.json({ success: true, plan });
+  } catch (error) {
+    console.error("Error updating plan:", error);
+    res.status(400).json({ error: error instanceof Error ? error.message : "Failed to update plan" });
+  }
+});
+
+router.delete("/plans/:planId", async (req: Request, res: Response) => {
+  try {
+    const plan = await SubscriptionPlansService.remove(req.params.planId);
+    res.json({ success: true, plan });
+  } catch (error) {
+    console.error("Error deleting plan:", error);
+    res.status(400).json({ error: error instanceof Error ? error.message : "Failed to delete plan" });
+  }
+});
+
+// ============================================================================
+// PLATFORM ADYEN (subscription payments settle here)
+// ============================================================================
+
+router.get("/platform-settings/adyen", async (_req: Request, res: Response) => {
+  try {
+    const adyen = await PlatformSettingsService.getAdyenSettingsPublic();
+    res.json({ success: true, adyen });
+  } catch (error) {
+    console.error("Error getting platform Adyen settings:", error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to get Adyen settings",
+    });
+  }
+});
+
+router.put("/platform-settings/adyen", async (req: Request, res: Response) => {
+  try {
+    const adyen = await PlatformSettingsService.updateAdyenSettings(req.body || {});
+    res.json({ success: true, adyen });
+  } catch (error) {
+    console.error("Error updating platform Adyen settings:", error);
+    res.status(400).json({
+      error: error instanceof Error ? error.message : "Failed to update Adyen settings",
+    });
+  }
+});
+
+router.get("/subscription-payments", async (req: Request, res: Response) => {
+  try {
+    const limit = Math.min(parseInt(String(req.query.limit || "50"), 10) || 50, 200);
+    const db = getDb();
+    const payments = await db.query.subscriptionPayments.findMany({
+      orderBy: [desc(schema.subscriptionPayments.createdAt)],
+      limit,
+      with: { plan: true, merchant: true },
+    });
+    res.json({
+      success: true,
+      payments: payments.map((p) => ({
+        ...p,
+        merchant: p.merchant
+          ? { id: p.merchant.id, name: p.merchant.name, email: p.merchant.email }
+          : null,
+      })),
+    });
+  } catch (error) {
+    console.error("Error listing subscription payments:", error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to list payments",
+    });
+  }
+});
+
 
 export default router;
