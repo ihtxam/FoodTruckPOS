@@ -114,6 +114,13 @@ export class AuthService {
         throw new Error("Invalid email or password");
       }
 
+      // Invite-only accounts (no password chosen yet) cannot log in with a password
+      if (!merchant.passwordSetAt && merchant.inviteTokenHash) {
+        throw new Error(
+          "Password not set yet. Use the invite link from your email to create a password."
+        );
+      }
+
       // Verify password
       const isValid = await this.comparePassword(password, merchant.passwordHash);
       if (!isValid) {
@@ -276,7 +283,13 @@ export class AuthService {
 
       await db
         .update(schema.merchants)
-        .set({ passwordHash })
+        .set({
+          passwordHash,
+          passwordSetAt: new Date(),
+          inviteTokenHash: null,
+          inviteTokenExpiresAt: null,
+          updatedAt: new Date(),
+        })
         .where(eq(schema.merchants.id, merchantId));
 
       return { success: true };

@@ -4,6 +4,7 @@ import { Toaster } from 'react-hot-toast';
 import { useAuthStore } from '@/store/auth';
 
 import LoginPage from '@/pages/LoginPage';
+import SetPasswordPage from '@/pages/SetPasswordPage';
 import SuperadminDashboard from '@/pages/superadmin/Dashboard';
 import MerchantDashboard from '@/pages/merchant/Dashboard';
 import OrderingPage from '@/pages/shop/OrderingPage';
@@ -46,6 +47,7 @@ function App() {
       <BrowserRouter>
         <Routes>
           {!shopMode && <Route path="/login" element={<LoginPage />} />}
+          {!shopMode && <Route path="/set-password" element={<SetPasswordPage />} />}
           <Route path="/receipt/:saleId" element={<ReceiptPage />} />
           <Route path="/shop/:merchantSlug" element={<OrderingPage />} />
           <Route path="/shop/:merchantSlug/checkout" element={<CheckoutPage />} />

@@ -154,4 +154,45 @@ router.post("/change-password", verifyToken, requireMerchant, async (req: Reques
   }
 });
 
+/**
+ * GET /api/auth/invite/:token
+ * Preview invite (public) — used by set-password page
+ */
+router.get("/invite/:token", async (req: Request, res: Response) => {
+  try {
+    const { MerchantInviteService } = await import("@/services/merchant-invite.service");
+    const invite = await MerchantInviteService.getInvitePreview(req.params.token);
+    res.json({ success: true, invite });
+  } catch (error) {
+    res.status(400).json({
+      error: error instanceof Error ? error.message : "Invalid or expired invite link",
+    });
+  }
+});
+
+/**
+ * POST /api/auth/set-password
+ * Accept invite token and set merchant password (public)
+ */
+router.post("/set-password", async (req: Request, res: Response) => {
+  try {
+    const { token, password } = req.body || {};
+    if (!token || !password) {
+      return res.status(400).json({ error: "token and password are required" });
+    }
+    const { MerchantInviteService } = await import("@/services/merchant-invite.service");
+    const merchant = await MerchantInviteService.acceptInvite(token, password);
+    res.json({
+      success: true,
+      message: "Password created. You can sign in now.",
+      merchant,
+    });
+  } catch (error) {
+    console.error("Error setting password from invite:", error);
+    res.status(400).json({
+      error: error instanceof Error ? error.message : "Failed to set password",
+    });
+  }
+});
+
 export default router;

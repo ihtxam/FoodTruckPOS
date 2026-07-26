@@ -89,6 +89,12 @@ export const merchants = pgTable(
     trialEndsAt: timestamp("trial_ends_at"),
     subscriptionEndsAt: timestamp("subscription_ends_at"),
     passwordHash: varchar("password_hash", { length: 255 }).notNull(),
+    /** Set when merchant chooses a password (invite accepted or admin set one) */
+    passwordSetAt: timestamp("password_set_at"),
+    /** SHA-256 of one-time invite / password-setup token */
+    inviteTokenHash: varchar("invite_token_hash", { length: 64 }),
+    inviteTokenExpiresAt: timestamp("invite_token_expires_at"),
+    inviteSentAt: timestamp("invite_sent_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
@@ -98,6 +104,7 @@ export const merchants = pgTable(
     slugIdx: uniqueIndex("merchants_slug_idx").on(table.slug),
     subdomainIdx: uniqueIndex("merchants_subdomain_idx").on(table.subdomain),
     syncApiKeyIdx: uniqueIndex("merchants_sync_api_key_idx").on(table.syncApiKey),
+    inviteTokenIdx: index("merchants_invite_token_hash_idx").on(table.inviteTokenHash),
   })
 );
 
