@@ -18,6 +18,7 @@ export type CmsShopContextValue = {
   menu: CmsMenuCategory[];
   storeHours: Record<string, Record<string, Array<{ open: string; close: string }>>>;
   merchantName?: string;
+  reservationsEnabled?: boolean;
 };
 
 const CmsShopContext = createContext<CmsShopContextValue | null>(null);

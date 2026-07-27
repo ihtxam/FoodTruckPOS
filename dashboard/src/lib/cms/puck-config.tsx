@@ -10,8 +10,55 @@ function resolveHref(href: string | undefined, base: string) {
   if (href === '/menu' || href.startsWith('/menu')) {
     return `${base}/menu${href.slice(5)}` || `${base}/menu`;
   }
+  if (href === '/reservations' || href.startsWith('/reservations')) {
+    return `${base}/reservations${href.slice('/reservations'.length)}` || `${base}/reservations`;
+  }
   if (href.startsWith('/')) return `${base}${href === '/' ? '' : href}` || '/';
   return href;
+}
+
+function isReservationsPath(href: string | undefined) {
+  if (!href) return true;
+  return href === '/reservations' || href.startsWith('/reservations');
+}
+
+/** Ensure a mid-page reservations band exists when online booking is enabled. */
+export function withReservationsHomeCtas(data: Data, reservationsEnabled: boolean): Data {
+  if (!reservationsEnabled || !Array.isArray(data.content)) return data;
+  const content = data.content.map((block) => {
+    if (block.type === 'Hero') {
+      const props = { ...(block.props || {}) } as Record<string, unknown>;
+      if (!props.secondaryCtaLabel) {
+        props.secondaryCtaLabel = 'Reservations';
+        props.secondaryCtaHref = props.secondaryCtaHref || '/reservations';
+      }
+      return { ...block, props };
+    }
+    if (block.type === 'Cta') {
+      const props = { ...(block.props || {}) } as Record<string, unknown>;
+      if (!props.secondaryLabel) {
+        props.secondaryLabel = 'Book a table';
+        props.secondaryHref = props.secondaryHref || '/reservations';
+      }
+      return { ...block, props };
+    }
+    return block;
+  });
+  if (!content.some((b) => b.type === 'ReservationsCta')) {
+    const posIdx = content.findIndex((b) => b.type === 'PosMenu');
+    const insertAt = posIdx >= 0 ? posIdx + 1 : Math.min(2, content.length);
+    content.splice(insertAt, 0, {
+      type: 'ReservationsCta',
+      props: {
+        id: 'auto-reservations-cta',
+        title: 'Reserve a table',
+        subtitle: 'Book online and we will have everything ready when you arrive.',
+        ctaLabel: 'Book a table',
+        ctaHref: '/reservations',
+      },
+    });
+  }
+  return { ...data, content };
 }
 
 function ProductGrid({
@@ -51,12 +98,22 @@ function HeroBlock({
   subtitle,
   ctaLabel,
   ctaHref,
+  secondaryCtaLabel,
+  secondaryCtaHref,
   imageUrl,
   align,
 }: CmsPuckProps['Hero']) {
   const shop = useCmsShop();
   const base = shop?.basePath || '';
   const bg = imageUrl || '';
+  const secondaryHref = secondaryCtaHref || '/reservations';
+  const secondaryLabel = (() => {
+    if (secondaryCtaLabel) {
+      if (isReservationsPath(secondaryHref) && !shop?.reservationsEnabled) return '';
+      return secondaryCtaLabel;
+    }
+    return shop?.reservationsEnabled ? 'Reservations' : '';
+  })();
   return (
     <section
       className="relative min-h-[48vh] flex items-end md:items-center"
@@ -79,18 +136,38 @@ function HeroBlock({
       >
         <h1 className="text-4xl md:text-6xl font-semibold tracking-tight">{title}</h1>
         {subtitle ? (
-          <p className="mt-4 text-base md:text-lg text-stone-100/90 max-w-2xl mx-auto">{subtitle}</p>
+          <p
+            className={`mt-4 text-base md:text-lg text-stone-100/90 max-w-2xl ${
+              align === 'left' ? '' : 'mx-auto'
+            }`}
+          >
+            {subtitle}
+          </p>
         ) : null}
-        {ctaLabel ? (
-          <div className={`mt-8 ${align === 'left' ? '' : 'flex justify-center'}`}>
-            <Link
-              to={resolveHref(ctaHref, base)}
-              className="inline-block bg-white text-stone-900 font-semibold px-6 py-3 text-sm"
-            >
-              {ctaLabel}
-            </Link>
+        {(ctaLabel || secondaryLabel) && (
+          <div
+            className={`mt-8 flex flex-wrap gap-3 ${
+              align === 'left' ? '' : 'justify-center'
+            }`}
+          >
+            {ctaLabel ? (
+              <Link
+                to={resolveHref(ctaHref, base)}
+                className="inline-block bg-white text-stone-900 font-semibold px-6 py-3 text-sm"
+              >
+                {ctaLabel}
+              </Link>
+            ) : null}
+            {secondaryLabel ? (
+              <Link
+                to={resolveHref(secondaryHref, base)}
+                className="inline-block border border-white/80 text-white font-semibold px-6 py-3 text-sm"
+              >
+                {secondaryLabel}
+              </Link>
+            ) : null}
           </div>
-        ) : null}
+        )}
       </div>
     </section>
   );
@@ -159,6 +236,14 @@ function CtaBlock(props: CmsPuckProps['Cta']) {
   const { title, subtitle, primaryLabel, primaryHref, secondaryLabel, secondaryHref } = props;
   const shop = useCmsShop();
   const base = shop?.basePath || '';
+  const secondHref = secondaryHref || '/reservations';
+  const secondLabel = (() => {
+    if (secondaryLabel) {
+      if (isReservationsPath(secondHref) && !shop?.reservationsEnabled) return '';
+      return secondaryLabel;
+    }
+    return shop?.reservationsEnabled ? 'Book a table' : '';
+  })();
   return (
     <section className="bg-stone-900 text-white">
       <div className="max-w-5xl mx-auto px-4 py-14 text-center">
@@ -173,12 +258,40 @@ function CtaBlock(props: CmsPuckProps['Cta']) {
               {primaryLabel}
             </Link>
           ) : null}
-          {secondaryLabel ? (
-            <Link to={resolveHref(secondaryHref, base)} className="border border-white/70 px-5 py-2.5 text-sm">
-              {secondaryLabel}
+          {secondLabel ? (
+            <Link
+              to={resolveHref(secondHref, base)}
+              className="border border-white/70 px-5 py-2.5 text-sm"
+            >
+              {secondLabel}
             </Link>
           ) : null}
         </div>
+      </div>
+    </section>
+  );
+}
+
+function ReservationsCtaBlock(props: CmsPuckProps['ReservationsCta']) {
+  const shop = useCmsShop();
+  if (!shop?.reservationsEnabled) return null;
+  const base = shop.basePath || '';
+  const title = props.title || 'Reserve a table';
+  const subtitle =
+    props.subtitle || 'Book online and we will have everything ready when you arrive.';
+  const label = props.ctaLabel || 'Book a table';
+  const href = resolveHref(props.ctaHref || '/reservations', base);
+  return (
+    <section className="border-y border-stone-200 bg-stone-100/80">
+      <div className="max-w-3xl mx-auto px-4 py-14 text-center">
+        <h2 className="text-2xl md:text-3xl font-semibold tracking-tight">{title}</h2>
+        {subtitle ? <p className="mt-3 text-stone-600">{subtitle}</p> : null}
+        <Link
+          to={href}
+          className="mt-6 inline-block bg-stone-900 text-white font-semibold px-6 py-3 text-sm"
+        >
+          {label}
+        </Link>
       </div>
     </section>
   );
@@ -208,6 +321,8 @@ export type CmsPuckProps = {
     subtitle: string;
     ctaLabel: string;
     ctaHref: string;
+    secondaryCtaLabel: string;
+    secondaryCtaHref: string;
     imageUrl: string;
     align: 'left' | 'center';
   };
@@ -232,6 +347,12 @@ export type CmsPuckProps = {
     secondaryLabel: string;
     secondaryHref: string;
   };
+  ReservationsCta: {
+    title: string;
+    subtitle: string;
+    ctaLabel: string;
+    ctaHref: string;
+  };
   ImageBlock: { imageUrl: string; alt: string; caption: string; href: string };
   Spacer: { size: 'sm' | 'md' | 'lg' };
 };
@@ -250,7 +371,7 @@ export const cmsPuckConfig: Config<{
     render: ({ children }) => <div className="cms-puck-root min-h-full">{children}</div>,
   },
   categories: {
-    layout: { title: 'Layout', components: ['Hero', 'Cta', 'Spacer', 'ImageBlock'] },
+    layout: { title: 'Layout', components: ['Hero', 'Cta', 'ReservationsCta', 'Spacer', 'ImageBlock'] },
     content: { title: 'Content', components: ['Heading', 'Text', 'Html'] },
     shop: { title: 'Shop', components: ['PosMenu', 'ShopHours'] },
   },
@@ -262,6 +383,8 @@ export const cmsPuckConfig: Config<{
         subtitle: { type: 'textarea', label: 'Subtitle' },
         ctaLabel: { type: 'text', label: 'Button label' },
         ctaHref: { type: 'text', label: 'Button link' },
+        secondaryCtaLabel: { type: 'text', label: '2nd button label' },
+        secondaryCtaHref: { type: 'text', label: '2nd button link' },
         imageUrl: { type: 'text', label: 'Background image URL' },
         align: {
           type: 'radio',
@@ -277,6 +400,8 @@ export const cmsPuckConfig: Config<{
         subtitle: 'A short welcome line',
         ctaLabel: 'Order now',
         ctaHref: '/menu',
+        secondaryCtaLabel: 'Reservations',
+        secondaryCtaHref: '/reservations',
         imageUrl: '',
         align: 'center',
       },
@@ -402,10 +527,26 @@ export const cmsPuckConfig: Config<{
         subtitle: '',
         primaryLabel: 'Order now',
         primaryHref: '/menu',
-        secondaryLabel: '',
-        secondaryHref: '',
+        secondaryLabel: 'Book a table',
+        secondaryHref: '/reservations',
       },
       render: (props) => <CtaBlock {...props} />,
+    },
+    ReservationsCta: {
+      label: 'Reservations CTA',
+      fields: {
+        title: { type: 'text', label: 'Title' },
+        subtitle: { type: 'textarea', label: 'Subtitle' },
+        ctaLabel: { type: 'text', label: 'Button label' },
+        ctaHref: { type: 'text', label: 'Button link' },
+      },
+      defaultProps: {
+        title: 'Reserve a table',
+        subtitle: 'Book online and we will have everything ready when you arrive.',
+        ctaLabel: 'Book a table',
+        ctaHref: '/reservations',
+      },
+      render: (props) => <ReservationsCtaBlock {...props} />,
     },
     ImageBlock: {
       label: 'Image',
