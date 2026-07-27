@@ -6,6 +6,7 @@ import '@puckeditor/core/puck.css';
 import { resolveShopKey, shopBasePath } from '@/lib/shop-cart';
 import { useI18n } from '@/lib/i18n';
 import ShopLangSwitcher from '@/components/shop/ShopLangSwitcher';
+import { CalendarDays, ShoppingBag } from 'lucide-react';
 import { cmsPuckConfig, emptyPuckData, withReservationsHomeCtas } from '@/lib/cms/puck-config';
 import { CmsShopProvider } from '@/lib/cms/CmsShopContext';
 
@@ -123,28 +124,40 @@ export default function ShopHomePage() {
       {themeCss ? <style dangerouslySetInnerHTML={{ __html: themeCss }} /> : null}
       <div className="cms-puck-page min-h-screen bg-stone-50 text-stone-900">
         <header className="border-b border-stone-200 bg-white/90 backdrop-blur sticky top-0 z-20">
-          <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3 min-w-0">
+          <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between gap-2">
+            <Link
+              to={base || '/'}
+              className="flex items-center gap-2.5 min-w-0"
+              aria-label={merchant.name}
+            >
               {merchant.shopLogoUrl ? (
-                <img src={merchant.shopLogoUrl} alt="" className="h-9 w-9 object-cover rounded-full" />
-              ) : null}
-              <span className="font-semibold tracking-tight truncate">{merchant.name}</span>
-            </div>
-            <div className="flex items-center gap-3 shrink-0">
+                <img src={merchant.shopLogoUrl} alt="" className="h-9 w-9 object-cover" />
+              ) : (
+                <div className="h-9 w-9 bg-stone-900 text-white flex items-center justify-center font-bold text-xs shrink-0">
+                  {(merchant.name || 'M').slice(0, 2).toUpperCase()}
+                </div>
+              )}
+              <span className="hidden sm:inline font-semibold tracking-tight truncate">{merchant.name}</span>
+            </Link>
+            <div className="flex items-center gap-1 shrink-0">
               <ShopLangSwitcher />
               {merchant.reservationsEnabled ? (
                 <Link
                   to={`${base}/reservations`}
-                  className="text-sm font-semibold border border-stone-300 px-3 py-1.5 hover:border-stone-900 transition-colors"
+                  className="inline-flex h-9 w-9 items-center justify-center text-stone-700 hover:bg-stone-100"
+                  aria-label={t('shopReservations')}
+                  title={t('shopReservations')}
                 >
-                  {t('shopReservations')}
+                  <CalendarDays className="h-5 w-5" strokeWidth={1.75} />
                 </Link>
               ) : null}
               <Link
                 to={`${base}/menu`}
-                className="text-sm font-semibold border border-stone-900 px-3 py-1.5 hover:bg-stone-900 hover:text-white transition-colors"
+                className="inline-flex h-9 w-9 items-center justify-center text-stone-700 hover:bg-stone-100"
+                aria-label={t('cmsOrderOnline')}
+                title={t('cmsOrderOnline')}
               >
-                {t('cmsOrderOnline')}
+                <ShoppingBag className="h-5 w-5" strokeWidth={1.75} />
               </Link>
             </div>
           </div>
