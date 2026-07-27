@@ -86,6 +86,8 @@ export default function OrderingPage() {
   const [customer, setCustomer] = useState<any>(null);
   const [loyaltyBalance, setLoyaltyBalance] = useState(0);
   const [loyaltyRewards, setLoyaltyRewards] = useState<LoyaltyReward[]>([]);
+  const [loyaltyProgress, setLoyaltyProgress] = useState(0);
+  const [nextRewardPts, setNextRewardPts] = useState<number | null>(null);
 
   useEffect(() => {
     if (!shopKey) {
@@ -114,8 +116,16 @@ export default function OrderingPage() {
         setLoyaltyRewards(loyaltyData.rewards || []);
         if (token && loyaltyData.balance != null) {
           setLoyaltyBalance(Number(loyaltyData.balance) || 0);
+          setLoyaltyProgress(Number(loyaltyData.progressPercent) || 0);
+          setNextRewardPts(
+            loyaltyData.nextReward?.loyaltyRewardPoints != null
+              ? Number(loyaltyData.nextReward.loyaltyRewardPoints)
+              : null
+          );
         } else {
           setLoyaltyBalance(0);
+          setLoyaltyProgress(0);
+          setNextRewardPts(null);
         }
 
         if (token) {
@@ -389,6 +399,8 @@ export default function OrderingPage() {
   const loyaltyEnabled = !!merchant?.loyalty?.enabled;
   const unlockedRewards = loyaltyRewards.filter((r) => r.unlocked);
   const accountPath = `${shopBasePath(shopKey)}/account`;
+  const reservationsPath = `${shopBasePath(shopKey)}/reservations`;
+  const showReservations = !!merchant?.reservationsEnabled;
 
   const Basket = (
     <aside className="bg-white border border-stone-200 flex flex-col h-full">
@@ -571,16 +583,31 @@ export default function OrderingPage() {
             <ShopLangSwitcher />
             <nav className="hidden sm:flex items-center gap-4 text-sm font-medium">
               <span className="text-stone-900 border-b-2 border-stone-900 pb-0.5">{t('shopOrder')}</span>
+              {showReservations && (
+                <Link to={reservationsPath} className="text-stone-600 hover:text-stone-900">
+                  {t('shopReservations')}
+                </Link>
+              )}
               <Link to={accountPath} className="text-stone-600 hover:text-stone-900">
                 {t('shopAccount')}
               </Link>
             </nav>
-            <Link
-              to={accountPath}
-              className="sm:hidden text-sm font-semibold text-stone-800 underline underline-offset-2"
-            >
-              {t('shopAccount')}
-            </Link>
+            <div className="sm:hidden flex items-center gap-3">
+              {showReservations && (
+                <Link
+                  to={reservationsPath}
+                  className="text-sm font-semibold text-stone-800 underline underline-offset-2"
+                >
+                  {t('shopReservations')}
+                </Link>
+              )}
+              <Link
+                to={accountPath}
+                className="text-sm font-semibold text-stone-800 underline underline-offset-2"
+              >
+                {t('shopAccount')}
+              </Link>
+            </div>
             <button
               type="button"
               className="lg:hidden bg-stone-900 text-white px-4 py-2 text-sm font-semibold"

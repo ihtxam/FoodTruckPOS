@@ -470,6 +470,7 @@ router.get("/:slug", async (req: Request, res: Response) => {
           currency: "CHF",
         },
         loyalty: ShopLoyaltyService.programFromMerchant(merchant),
+        reservationsEnabled: !!merchant.reservationsEnabled,
         /** Merchant panel language — used as shop default when customer has no preference */
         language: merchant.panelLanguage || "en",
       },
@@ -516,6 +517,7 @@ router.get("/:slug/pages/home", async (req: Request, res: Response) => {
           address: merchant.address,
           city: merchant.city,
           phone: merchant.phone,
+          reservationsEnabled: !!merchant.reservationsEnabled,
         },
       },
     });
@@ -895,6 +897,95 @@ router.put("/:slug/auth/me", async (req: Request, res: Response) => {
     res.json({ success: true, customer });
   } catch (error) {
     res.status(400).json({ error: error instanceof Error ? error.message : "Update failed" });
+  }
+});
+
+/**
+ * GET /api/shop/:slug/reservations/config
+ */
+router.get("/:slug/reservations/config", async (req: Request, res: Response) => {
+  try {
+    const merchant = await resolveMerchant(req.params.slug);
+    if (!merchant?.shopEnabled) return res.status(404).json({ error: "Shop not found" });
+    const { ReservationService } = await import("@/services/reservation.service");
+    const config = ReservationService.getSettingsForMerchant(merchant);
+    if (!config.enabled) return res.status(404).json({ error: "Reservations are not enabled" });
+    res.json({
+      success: true,
+      config: {
+        enabled: config.enabled,
+        settings: config.settings,
+        hours: config.hours,
+        shopName: config.shopName,
+        address: config.address,
+        phone: config.phone,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : "Failed" });
+  }
+});
+
+/**
+ * GET /api/shop/:slug/reservations/slots?date=YYYY-MM-DD&partySize=2
+ */
+router.get("/:slug/reservations/slots", async (req: Request, res: Response) => {
+  try {
+    const merchant = await resolveMerchant(req.params.slug);
+    if (!merchant?.shopEnabled || !merchant.reservationsEnabled) {
+      return res.status(404).json({ error: "Reservations not available" });
+    }
+    const { ReservationService } = await import("@/services/reservation.service");
+    const date = String(req.query.date || "");
+    const partySize = Number(req.query.partySize) || 2;
+    const result = await ReservationService.getSlots(merchant.id, date, partySize);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Failed" });
+  }
+});
+
+/**
+ * POST /api/shop/:slug/reservations
+ */
+router.post("/:slug/reservations", async (req: Request, res: Response) => {
+  try {
+    const merchant = await resolveMerchant(req.params.slug);
+    if (!merchant?.shopEnabled || !merchant.reservationsEnabled) {
+      return res.status(404).json({ error: "Reservations not available" });
+    }
+    const { ReservationService, zurichLocalToDate } = await import("@/services/reservation.service");
+    const auth = optionalCustomer(req);
+    let reservedAt: Date;
+    if (req.body.date && req.body.time) {
+      reservedAt = zurichLocalToDate(String(req.body.date), String(req.body.time));
+    } else {
+      reservedAt = new Date(req.body.reservedAt);
+    }
+    const reservation = await ReservationService.create(merchant.id, {
+      guestName: req.body.guestName,
+      guestEmail: req.body.guestEmail,
+      guestPhone: req.body.guestPhone,
+      partySize: req.body.partySize,
+      reservedAt,
+      notes: req.body.notes,
+      source: "web",
+      customerId: auth.customerId || null,
+    });
+    res.status(201).json({
+      success: true,
+      reservation: {
+        id: reservation.id,
+        code: reservation.code,
+        status: reservation.status,
+        guestName: reservation.guestName,
+        partySize: reservation.partySize,
+        reservedAt: reservation.reservedAt,
+        durationMinutes: reservation.durationMinutes,
+      },
+    });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Failed to book" });
   }
 });
 

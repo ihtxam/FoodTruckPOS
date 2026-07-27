@@ -15,6 +15,7 @@ import Settings from './Settings';
 import Billing from './Billing';
 import OnlineShop from './OnlineShop';
 import FloorPlan from './FloorPlan';
+import Reservations from './Reservations';
 import WebPos from './WebPos';
 import api from '@/lib/api';
 import { I18nProvider, useI18n, type Locale } from '@/lib/i18n';
@@ -71,6 +72,7 @@ function MerchantShell() {
     { label: t('shop'), path: '/merchant/online-shop', icon: '🌐' },
     { label: t('cmsWebsite'), path: '/merchant/website', icon: '✏️' },
     { label: t('floorPlan'), path: '/merchant/floor-plan', icon: '🪑' },
+    { label: t('reservations'), path: '/merchant/reservations', icon: '📅' },
     { label: t('billing'), path: '/merchant/billing', icon: '💼' },
     { label: t('settings'), path: '/merchant/settings', icon: '⚙️' },
   ];
@@ -116,6 +118,7 @@ function MerchantShell() {
             />
             <Route path="terminals" element={<Terminals />} />
             <Route path="floor-plan" element={<FloorPlan />} />
+            <Route path="reservations" element={<Reservations />} />
             <Route path="billing" element={<Billing />} />
             <Route path="settings" element={<Settings />} />
           </Routes>
