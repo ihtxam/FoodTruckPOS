@@ -84,6 +84,11 @@ export default function ShopHomePage() {
   }, [seoTitle]);
 
   const themeCss = useMemo(() => themeToCss(theme), [theme]);
+  const renderData = useMemo(
+    () => withReservationsHomeCtas(data, Boolean(merchant?.reservationsEnabled)),
+    [data, merchant?.reservationsEnabled],
+  );
+  const hasContent = Array.isArray(data.content) && data.content.length > 0;
 
   if (loading) {
     return (
@@ -103,12 +108,6 @@ export default function ShopHomePage() {
       </div>
     );
   }
-
-  const hasContent = Array.isArray(data.content) && data.content.length > 0;
-  const renderData = useMemo(
-    () => withReservationsHomeCtas(data, Boolean(merchant?.reservationsEnabled)),
-    [data, merchant?.reservationsEnabled],
-  );
 
   return (
     <CmsShopProvider
