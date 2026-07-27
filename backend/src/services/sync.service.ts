@@ -98,6 +98,10 @@ export class SyncService {
     ]);
 
     const diningTables = await FloorPlanService.listTablesForSync(merchantId);
+    const { ReservationService } = await import("@/services/reservation.service");
+    const reservations = merchant?.reservationsEnabled
+      ? await ReservationService.listForSync(merchantId)
+      : [];
 
     return {
       serverTime: new Date().toISOString(),
@@ -115,6 +119,7 @@ export class SyncService {
       rfidReaders: readers,
       onlineOrders,
       diningTables,
+      reservations,
       merchantSettings: merchant
         ? {
             taxTakeawayRate: merchant.taxTakeawayRate,
@@ -126,6 +131,7 @@ export class SyncService {
             shopEnabled: merchant.shopEnabled,
             floorPlanEnabled: merchant.floorPlanEnabled,
             paxOrderingEnabled: merchant.paxOrderingEnabled,
+            reservationsEnabled: merchant.reservationsEnabled,
             adyenMerchantAccount: merchant.adyenMerchantAccount,
             adyenClientId: merchant.adyenClientId,
             panelLanguage: merchant.panelLanguage,

@@ -128,6 +128,14 @@ export default function ShopHomePage() {
             </div>
             <div className="flex items-center gap-3 shrink-0">
               <ShopLangSwitcher />
+              {merchant.reservationsEnabled ? (
+                <Link
+                  to={`${base}/reservations`}
+                  className="text-sm font-semibold border border-stone-300 px-3 py-1.5 hover:border-stone-900 transition-colors"
+                >
+                  {t('shopReservations')}
+                </Link>
+              ) : null}
               <Link
                 to={`${base}/menu`}
                 className="text-sm font-semibold border border-stone-900 px-3 py-1.5 hover:bg-stone-900 hover:text-white transition-colors"

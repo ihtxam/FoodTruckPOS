@@ -100,11 +100,30 @@ export const merchants = pgTable(
     floorPlanEnabled: boolean("floor_plan_enabled").default(false).notNull(),
     // When true: order & bill per person (Person 1…) at a table; kitchen tickets split by seat
     paxOrderingEnabled: boolean("pax_ordering_enabled").default(false).notNull(),
+    /** Online / phone restaurant table reservations */
+    reservationsEnabled: boolean("reservations_enabled").default(false).notNull(),
+    /**
+     * Reservation module settings:
+     * {
+     *   dineInHoursMode: 'same_as_takeaway' | 'custom',
+     *   slotIntervalMinutes, seatingDurationMinutes, bufferMinutes,
+     *   minPartySize, maxPartySize, minHoursBefore, maxDaysAhead,
+     *   autoAccept, sendConfirmationEmail, sendStatusEmails,
+     *   maxCoversPerSlot, policiesText
+     * }
+     */
+    reservationSettings: json("reservation_settings").$type<ReservationSettings | null>(),
     status: varchar("status", { length: 50 }).default("active").notNull(), // active, suspended, trial, expired
     subscriptionPlan: varchar("subscription_plan", { length: 50 }).default("free"), // free, starter, professional, enterprise
     trialEndsAt: timestamp("trial_ends_at"),
     subscriptionEndsAt: timestamp("subscription_ends_at"),
     passwordHash: varchar("password_hash", { length: 255 }).notNull(),
+    /** Set when merchant chooses a password (invite accepted or admin set one) */
+    passwordSetAt: timestamp("password_set_at"),
+    /** SHA-256 of one-time invite / password-setup token */
+    inviteTokenHash: varchar("invite_token_hash", { length: 64 }),
+    inviteTokenExpiresAt: timestamp("invite_token_expires_at"),
+    inviteSentAt: timestamp("invite_sent_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
@@ -115,6 +134,77 @@ export const merchants = pgTable(
     subdomainIdx: uniqueIndex("merchants_subdomain_idx").on(table.subdomain),
     customDomainIdx: uniqueIndex("merchants_custom_domain_idx").on(table.customDomain),
     syncApiKeyIdx: uniqueIndex("merchants_sync_api_key_idx").on(table.syncApiKey),
+    inviteTokenIdx: index("merchants_invite_token_hash_idx").on(table.inviteTokenHash),
+  })
+);
+
+// ============================================================================
+// SUBSCRIPTION PLANS (platform SaaS tiers)
+// ============================================================================
+
+export const subscriptionPlans = pgTable(
+  "subscription_plans",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: varchar("name", { length: 100 }).notNull(),
+    slug: varchar("slug", { length: 50 }).notNull().unique(),
+    description: text("description"),
+    priceMonthly: decimal("price_monthly", { precision: 10, scale: 2 }).notNull().default("0"),
+    priceYearly: decimal("price_yearly", { precision: 10, scale: 2 }),
+    currency: varchar("currency", { length: 3 }).notNull().default("CHF"),
+    maxDevices: integer("max_devices").notNull().default(1),
+    maxProducts: integer("max_products"),
+    features: json("features").$type<string[]>().default([]),
+    isActive: boolean("is_active").notNull().default(true),
+    /** Visible for merchants to purchase in their panel */
+    isPublic: boolean("is_public").notNull().default(true),
+    sortOrder: integer("sort_order").notNull().default(0),
+    trialDays: integer("trial_days").notNull().default(0),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    slugIdx: uniqueIndex("subscription_plans_slug_idx").on(table.slug),
+    activeIdx: index("subscription_plans_active_idx").on(table.isActive),
+  })
+);
+
+/** Platform-wide key/value settings (e.g. platform Adyen credentials) */
+export const platformSettings = pgTable("platform_settings", {
+  key: varchar("key", { length: 100 }).primaryKey(),
+  value: text("value"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+/** Merchant subscription purchases paid to the platform Adyen account */
+export const subscriptionPayments = pgTable(
+  "subscription_payments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    merchantId: uuid("merchant_id")
+      .notNull()
+      .references(() => merchants.id, { onDelete: "cascade" }),
+    planId: uuid("plan_id")
+      .notNull()
+      .references(() => subscriptionPlans.id, { onDelete: "restrict" }),
+    billingCycle: varchar("billing_cycle", { length: 20 }).notNull(), // monthly | yearly
+    amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+    currency: varchar("currency", { length: 3 }).notNull().default("CHF"),
+    status: varchar("status", { length: 30 }).notNull().default("pending"), // pending | paid | failed | cancelled
+    adyenSessionId: varchar("adyen_session_id", { length: 255 }),
+    adyenPspReference: varchar("adyen_psp_reference", { length: 255 }),
+    adyenResultCode: varchar("adyen_result_code", { length: 50 }),
+    paidAt: timestamp("paid_at"),
+    periodStart: timestamp("period_start"),
+    periodEnd: timestamp("period_end"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    merchantIdIdx: index("subscription_payments_merchant_id_idx").on(table.merchantId),
+    planIdIdx: index("subscription_payments_plan_id_idx").on(table.planId),
+    statusIdx: index("subscription_payments_status_idx").on(table.status),
+    sessionIdx: index("subscription_payments_session_idx").on(table.adyenSessionId),
   })
 );
 
@@ -597,6 +687,81 @@ export const diningTables = pgTable(
 );
 
 // ============================================================================
+// RESTAURANT RESERVATIONS
+// ============================================================================
+
+export type ReservationSettings = {
+  /** Use takeaway weekly hours for booking slots, or custom dine_in hours */
+  dineInHoursMode?: "same_as_takeaway" | "custom";
+  /** Minutes between bookable start times (15 / 30 / 60) */
+  slotIntervalMinutes?: number;
+  /** Expected seating length used for overlap / capacity */
+  seatingDurationMinutes?: number;
+  /** Extra gap after a reservation before the next can start on shared capacity */
+  bufferMinutes?: number;
+  minPartySize?: number;
+  maxPartySize?: number;
+  /** Guest must book at least this many hours before the slot */
+  minHoursBefore?: number;
+  /** How far ahead guests can book (days) */
+  maxDaysAhead?: number;
+  /** If true, new web bookings become confirmed immediately */
+  autoAccept?: boolean;
+  sendConfirmationEmail?: boolean;
+  sendStatusEmails?: boolean;
+  /** Soft capacity per slot (covers). Null/0 = sum of table seats or unlimited */
+  maxCoversPerSlot?: number | null;
+  policiesText?: string | null;
+};
+
+export type ReservationStatus =
+  | "pending"
+  | "confirmed"
+  | "seated"
+  | "completed"
+  | "cancelled"
+  | "rejected"
+  | "no_show";
+
+export const reservations = pgTable(
+  "reservations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    merchantId: uuid("merchant_id")
+      .notNull()
+      .references(() => merchants.id, { onDelete: "cascade" }),
+    code: varchar("code", { length: 32 }).notNull(),
+    customerId: uuid("customer_id").references(() => customers.id, { onDelete: "set null" }),
+    guestName: varchar("guest_name", { length: 200 }).notNull(),
+    guestEmail: varchar("guest_email", { length: 255 }),
+    guestPhone: varchar("guest_phone", { length: 50 }).notNull(),
+    partySize: integer("party_size").notNull().default(2),
+    reservedAt: timestamp("reserved_at", { withTimezone: true }).notNull(),
+    durationMinutes: integer("duration_minutes").notNull().default(90),
+    status: varchar("status", { length: 30 }).notNull().default("pending"),
+    tableId: uuid("table_id").references(() => diningTables.id, { onDelete: "set null" }),
+    tableLabel: varchar("table_label", { length: 50 }),
+    notes: text("notes"),
+    internalNotes: text("internal_notes"),
+    source: varchar("source", { length: 30 }).notNull().default("web"), // web | phone | pos | dashboard
+    confirmationSentAt: timestamp("confirmation_sent_at", { withTimezone: true }),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+    seatedAt: timestamp("seated_at", { withTimezone: true }),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    merchantReservedIdx: index("reservations_merchant_reserved_idx").on(
+      table.merchantId,
+      table.reservedAt
+    ),
+    merchantStatusIdx: index("reservations_merchant_status_idx").on(table.merchantId, table.status),
+    merchantCodeUq: uniqueIndex("reservations_merchant_code_uq").on(table.merchantId, table.code),
+  })
+);
+
+// ============================================================================
 // CHASLAY ANDROID FLOOR SYNC (waiter ↔ main POS coordination)
 // ============================================================================
 
@@ -922,7 +1087,6 @@ export const dailyReports = pgTable(
   })
 );
 
-
 // ============================================================================
 // CMS PAGES (merchant website / homepage builder)
 // ============================================================================
@@ -1009,7 +1173,15 @@ export const merchantsRelations = relations(merchants, ({ many }) => ({
   modifierGroups: many(modifierGroups),
   floorPlans: many(floorPlans),
   diningTables: many(diningTables),
+  reservations: many(reservations),
+  subscriptionPayments: many(subscriptionPayments),
   cmsPages: many(cmsPages),
+}));
+
+export const reservationsRelations = relations(reservations, ({ one }) => ({
+  merchant: one(merchants, { fields: [reservations.merchantId], references: [merchants.id] }),
+  customer: one(customers, { fields: [reservations.customerId], references: [customers.id] }),
+  table: one(diningTables, { fields: [reservations.tableId], references: [diningTables.id] }),
 }));
 
 export const floorPlansRelations = relations(floorPlans, ({ one, many }) => ({
@@ -1095,4 +1267,19 @@ export const deliveryZonesRelations = relations(deliveryZones, ({ one }) => ({
 
 export const paymentTerminalsRelations = relations(paymentTerminals, ({ one }) => ({
   merchant: one(merchants, { fields: [paymentTerminals.merchantId], references: [merchants.id] }),
+}));
+
+export const subscriptionPlansRelations = relations(subscriptionPlans, ({ many }) => ({
+  payments: many(subscriptionPayments),
+}));
+
+export const subscriptionPaymentsRelations = relations(subscriptionPayments, ({ one }) => ({
+  merchant: one(merchants, {
+    fields: [subscriptionPayments.merchantId],
+    references: [merchants.id],
+  }),
+  plan: one(subscriptionPlans, {
+    fields: [subscriptionPayments.planId],
+    references: [subscriptionPlans.id],
+  }),
 }));

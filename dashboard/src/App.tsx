@@ -12,6 +12,7 @@ import OrderingPage from '@/pages/shop/OrderingPage';
 import CheckoutPage from '@/pages/shop/CheckoutPage';
 import OrderConfirmationPage from '@/pages/shop/OrderConfirmationPage';
 import AccountPage from '@/pages/shop/AccountPage';
+import ReservationsPage from '@/pages/shop/ReservationsPage';
 import ReceiptPage from '@/pages/ReceiptPage';
 import ProtectedRoute from '@/components/ProtectedRoute';
 
@@ -108,6 +109,14 @@ function App() {
               </ShopRoutes>
             }
           />
+          <Route
+            path="/shop/:merchantSlug/reservations"
+            element={
+              <ShopRoutes>
+                <ReservationsPage />
+              </ShopRoutes>
+            }
+          />
 
           {/* shop.domain/{slug} — Chaslay-style path shops */}
           {shopHub && (
@@ -141,6 +150,14 @@ function App() {
                 element={
                   <ShopRoutes>
                     <AccountPage />
+                  </ShopRoutes>
+                }
+              />
+              <Route
+                path="/:merchantSlug/reservations"
+                element={
+                  <ShopRoutes>
+                    <ReservationsPage />
                   </ShopRoutes>
                 }
               />
@@ -199,6 +216,14 @@ function App() {
                 }
               />
               <Route
+                path="/reservations"
+                element={
+                  <ShopRoutes>
+                    <ReservationsPage />
+                  </ShopRoutes>
+                }
+              />
+              <Route
                 path="/"
                 element={
                   <ShopRoutes>
@@ -249,6 +274,14 @@ function App() {
                 element={
                   <ShopRoutes>
                     <AccountPage />
+                  </ShopRoutes>
+                }
+              />
+              <Route
+                path="/reservations"
+                element={
+                  <ShopRoutes>
+                    <ReservationsPage />
                   </ShopRoutes>
                 }
               />

@@ -15,6 +15,7 @@ import cmsRoutes from "@/routes/cms.routes";
 import rfidReadersRoutes from "@/routes/rfid-readers.routes";
 import deliveryZonesRoutes from "@/routes/delivery-zones.routes";
 import floorPlansRoutes from "@/routes/floor-plans.routes";
+import reservationsRoutes from "@/routes/reservations.routes";
 import receiptsRoutes from "@/routes/receipts.routes";
 import chaslayRoutes from "@/routes/chaslay";
 import webhooksRoutes from "@/routes/webhooks.routes";
@@ -97,6 +98,7 @@ app.use("/api/merchant/cms", cmsRoutes);
 app.use("/api/rfid-readers", rfidReadersRoutes);
 app.use("/api/delivery-zones", deliveryZonesRoutes);
 app.use("/api/merchant/floor-plans", floorPlansRoutes);
+app.use("/api/merchant/reservations", reservationsRoutes);
 app.use("/api/receipts", receiptsRoutes);
 app.use("/api/webhooks", webhooksRoutes);
 /** Chaslay / FoodTruck Android POS (Retrofit /v1/* contract) */
