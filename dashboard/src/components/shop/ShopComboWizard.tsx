@@ -521,13 +521,24 @@ export default function ShopComboWizard({ product, onClose, onConfirm }: Props) 
               </button>
               <button
                 type="button"
-                onClick={() =>
+                onClick={() => {
+                  for (const slot of slots) {
+                    const count = selections.filter((s) => s.slotId === slot.id).length;
+                    if (count < (slot.minPick || 1)) {
+                      setError(
+                        (slot.minPick || 1) === 1
+                          ? `Please choose an option for "${slot.name}"`
+                          : `Please choose ${slot.minPick} options for "${slot.name}"`
+                      );
+                      return;
+                    }
+                  }
                   onConfirm({
                     comboSelections: selections,
                     selectedExtras: comboExtras,
                     unitPrice,
-                  })
-                }
+                  });
+                }}
                 className="flex-1 bg-stone-900 text-white py-3 font-semibold"
               >
                 Add to basket · CHF {unitPrice.toFixed(2)}

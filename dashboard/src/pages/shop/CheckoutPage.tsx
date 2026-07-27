@@ -231,6 +231,26 @@ export default function CheckoutPage() {
 
   const patch = (p: Partial<ShopCheckoutDraft>) => setDraft((d) => ({ ...d, ...p }));
 
+  const setLineQty = (lineId: string, quantity: number) => {
+    setDraft((d) => {
+      const items =
+        quantity <= 0
+          ? d.items.filter((i) => (i.lineId || i.id) !== lineId)
+          : d.items.map((i) =>
+              (i.lineId || i.id) === lineId ? { ...i, quantity } : i
+            );
+      const next = { ...d, items };
+      if (shopKey) saveCart(shopKey, next);
+      if (!items.length) {
+        clearCart(shopKey);
+        navigate(`${shopBasePath(shopKey) || '/'}`, { replace: true });
+      }
+      return next;
+    });
+  };
+
+  const removeLine = (lineId: string) => setLineQty(lineId, 0);
+
   const checkDelivery = async () => {
     if (draft.channel !== 'delivery') return true;
     if (!draft.address.trim()) {
@@ -387,9 +407,12 @@ export default function CheckoutPage() {
           items: draft.items.map((i) => ({
             productId: i.id,
             quantity: i.quantity,
-            selectedExtras: (i.selectedExtras || []).map((e) => ({ id: e.id })),
+            selectedExtras: (i.selectedExtras || [])
+              .filter((e) => e.id && !String(e.id).startsWith('combo:'))
+              .map((e) => ({ id: e.id })),
             comboSelections: (i.comboSelections || []).map((c) => ({
               slotId: c.slotId,
+              slotName: c.slotName,
               productId: c.productId,
               selectedExtras: (c.selectedExtras || []).map((e) => ({ id: e.id })),
             })),
@@ -969,25 +992,65 @@ export default function CheckoutPage() {
                 </div>
               </dl>
 
-              <ul className="border-t border-stone-100 pt-3 space-y-2 text-sm">
-                {draft.items.map((i) => (
-                  <li key={i.lineId || i.id} className="flex justify-between gap-3">
-                    <span className="min-w-0">
-                      {i.quantity}× {i.name}
-                      {!!i.comboSelections?.length && (
-                        <span className="block text-xs text-stone-500 mt-0.5">
-                          {i.comboSelections.map((c) => c.productName).join(' · ')}
-                        </span>
-                      )}
-                      {!!i.selectedExtras?.length && (
-                        <span className="block text-xs text-stone-500 mt-0.5">
-                          {i.selectedExtras.map((e) => e.name).join(', ')}
-                        </span>
-                      )}
-                    </span>
-                    <span className="shrink-0">CHF {(i.price * i.quantity).toFixed(2)}</span>
-                  </li>
-                ))}
+              <ul className="border-t border-stone-100 pt-3 space-y-3 text-sm">
+                {draft.items.map((i) => {
+                  const lineKey = i.lineId || i.id;
+                  return (
+                    <li key={lineKey} className="flex justify-between gap-3 items-start">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium">
+                          {i.name}
+                          {i.loyaltyReward && (
+                            <span className="ml-1 text-xs font-semibold text-teal-800">
+                              {t('shopFree')}
+                            </span>
+                          )}
+                        </p>
+                        {!!i.comboSelections?.length && (
+                          <p className="text-xs text-stone-500 mt-0.5">
+                            {i.comboSelections
+                              .map((c) => `${c.slotName}: ${c.productName}`)
+                              .join(' · ')}
+                          </p>
+                        )}
+                        {!!i.selectedExtras?.length && (
+                          <p className="text-xs text-stone-500 mt-0.5">
+                            {i.selectedExtras.map((e) => e.name).join(', ')}
+                          </p>
+                        )}
+                        <div className="mt-2 flex items-center gap-2">
+                          <button
+                            type="button"
+                            className="w-7 h-7 border border-stone-300 text-sm font-semibold"
+                            onClick={() => setLineQty(lineKey, i.quantity - 1)}
+                            aria-label="-"
+                          >
+                            −
+                          </button>
+                          <span className="w-6 text-center font-semibold">{i.quantity}</span>
+                          <button
+                            type="button"
+                            className="w-7 h-7 border border-stone-300 text-sm font-semibold"
+                            onClick={() => setLineQty(lineKey, i.quantity + 1)}
+                            aria-label="+"
+                          >
+                            +
+                          </button>
+                          <button
+                            type="button"
+                            className="ml-2 text-xs text-stone-500 underline"
+                            onClick={() => removeLine(lineKey)}
+                          >
+                            {t('delete')}
+                          </button>
+                        </div>
+                      </div>
+                      <span className="shrink-0 font-medium">
+                        CHF {(i.price * i.quantity).toFixed(2)}
+                      </span>
+                    </li>
+                  );
+                })}
               </ul>
 
               <button
@@ -1007,29 +1070,66 @@ export default function CheckoutPage() {
         </div>
 
         <aside className="bg-white border border-stone-200 p-5 h-fit sticky top-4 space-y-3">
-          <h2 className="font-bold text-lg">{t('shopYourOrder')}</h2>
-          <ul className="text-sm space-y-2">
-            {draft.items.map((i) => (
-              <li key={i.lineId || i.id} className="flex justify-between gap-2">
-                <span className="min-w-0">
-                  {i.quantity}× {i.name}
-                  {i.loyaltyReward && (
-                    <span className="ml-1 text-xs font-semibold text-teal-800">{t('shopFree')}</span>
-                  )}
-                  {!!i.comboSelections?.length && (
-                    <span className="block text-xs text-stone-500 mt-0.5">
-                      {i.comboSelections.map((c) => c.productName).join(' · ')}
-                    </span>
-                  )}
-                  {!!i.selectedExtras?.length && (
-                    <span className="block text-xs text-stone-500 mt-0.5">
-                      {i.selectedExtras.map((e) => e.name).join(', ')}
-                    </span>
-                  )}
-                </span>
-                <span className="shrink-0">CHF {(i.price * i.quantity).toFixed(2)}</span>
-              </li>
-            ))}
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="font-bold text-lg">{t('shopYourOrder')}</h2>
+            <Link
+              to={`${shopBasePath(shopKey)}/menu`}
+              className="text-xs font-semibold underline text-stone-600"
+            >
+              {t('shopAddMore')}
+            </Link>
+          </div>
+          <ul className="text-sm space-y-3">
+            {draft.items.map((i) => {
+              const lineKey = i.lineId || i.id;
+              return (
+                <li key={lineKey} className="flex justify-between gap-2 items-start">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium">
+                      {i.name}
+                      {i.loyaltyReward && (
+                        <span className="ml-1 text-xs font-semibold text-teal-800">{t('shopFree')}</span>
+                      )}
+                    </p>
+                    {!!i.comboSelections?.length && (
+                      <p className="text-xs text-stone-500 mt-0.5">
+                        {i.comboSelections.map((c) => `${c.slotName}: ${c.productName}`).join(' · ')}
+                      </p>
+                    )}
+                    {!!i.selectedExtras?.length && (
+                      <p className="text-xs text-stone-500 mt-0.5">
+                        {i.selectedExtras.map((e) => e.name).join(', ')}
+                      </p>
+                    )}
+                    <div className="mt-1.5 flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        className="w-7 h-7 border border-stone-300 text-sm font-semibold"
+                        onClick={() => setLineQty(lineKey, i.quantity - 1)}
+                      >
+                        −
+                      </button>
+                      <span className="w-5 text-center font-semibold">{i.quantity}</span>
+                      <button
+                        type="button"
+                        className="w-7 h-7 border border-stone-300 text-sm font-semibold"
+                        onClick={() => setLineQty(lineKey, i.quantity + 1)}
+                      >
+                        +
+                      </button>
+                      <button
+                        type="button"
+                        className="ml-1 text-xs text-stone-500 underline"
+                        onClick={() => removeLine(lineKey)}
+                      >
+                        {t('delete')}
+                      </button>
+                    </div>
+                  </div>
+                  <span className="shrink-0">CHF {(i.price * i.quantity).toFixed(2)}</span>
+                </li>
+              );
+            })}
           </ul>
           <div className="border-t border-stone-100 pt-3 text-sm space-y-1">
             <div className="flex justify-between">
