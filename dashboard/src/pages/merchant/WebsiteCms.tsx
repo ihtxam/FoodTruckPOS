@@ -1,13 +1,11 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
+import { Puck, type Data } from '@puckeditor/core';
+import '@puckeditor/core/puck.css';
 import api from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
-import { ensureCmsChaiBlocks } from '@/lib/cms/chai-blocks';
+import { cmsPuckConfig, emptyPuckData } from '@/lib/cms/puck-config';
 import { CmsShopProvider } from '@/lib/cms/CmsShopContext';
-
-// ChaiBuilder CSS + editor (heavy) — load only in this page
-import '@chaibuilder/sdk/styles';
-import { ChaiBuilderEditor, type ChaiBlock } from '@chaibuilder/sdk';
 
 type CmsPage = {
   id: string;
@@ -16,7 +14,7 @@ type CmsPage = {
   isHomepage: boolean;
   status: string;
   templateKey?: string | null;
-  blocks: ChaiBlock[];
+  blocks: Data | unknown;
   theme?: Record<string, unknown> | null;
   seoTitle?: string | null;
   seoDescription?: string | null;
@@ -34,7 +32,12 @@ type Site = {
   shopCustomDomainUrl?: string | null;
 };
 
-ensureCmsChaiBlocks();
+function asPuckData(blocks: Data | unknown, title = ''): Data {
+  if (blocks && typeof blocks === 'object' && !Array.isArray(blocks) && Array.isArray((blocks as Data).content)) {
+    return blocks as Data;
+  }
+  return emptyPuckData(title) as Data;
+}
 
 export default function WebsiteCms() {
   const { t } = useI18n();
@@ -45,13 +48,14 @@ export default function WebsiteCms() {
   const [customDomain, setCustomDomain] = useState('');
   const [savingSite, setSavingSite] = useState(false);
   const [editing, setEditing] = useState<CmsPage | null>(null);
+  const [draft, setDraft] = useState<Data>(emptyPuckData() as Data);
   const [createOpen, setCreateOpen] = useState(false);
   const [newTitle, setNewTitle] = useState('Homepage');
   const [newTemplate, setNewTemplate] = useState('restaurant');
   const [asHomepage, setAsHomepage] = useState(true);
   const [menuPreview, setMenuPreview] = useState<any[]>([]);
   const [storeHours, setStoreHours] = useState<Record<string, any>>({});
-  const [publishBusy, setPublishBusy] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   const shopCtx = useMemo(
     () => ({
@@ -74,7 +78,8 @@ export default function WebsiteCms() {
         api.get('/merchant/settings').catch(() => null),
         api.get('/merchant/products', { params: { limit: 200 } }).catch(() => null),
       ]);
-      setPages(pagesRes.data.pages || []);
+      const nextPages = (pagesRes.data.pages || []) as CmsPage[];
+      setPages(nextPages);
       setTemplates(templatesRes.data.templates || []);
       const s = siteRes.data.site as Site;
       setSite(s);
@@ -82,7 +87,6 @@ export default function WebsiteCms() {
       const hours = settingsRes?.data?.settings?.storeHours || {};
       setStoreHours(hours);
 
-      // Build a lightweight menu preview from merchant products
       const products = menuRes?.data?.products || menuRes?.data?.data || [];
       const byCat = new Map<string, { id: string; name: string; items: any[] }>();
       for (const p of products) {
@@ -99,6 +103,7 @@ export default function WebsiteCms() {
         });
       }
       setMenuPreview(Array.from(byCat.values()));
+      if (!nextPages.length) setCreateOpen(true);
     } catch (error: any) {
       toast.error(error.response?.data?.error || t('cmsLoadFailed'));
     } finally {
@@ -138,7 +143,8 @@ export default function WebsiteCms() {
       });
       const page = res.data.page as CmsPage;
       setCreateOpen(false);
-      setEditing({ ...page, blocks: (page.blocks || []) as ChaiBlock[] });
+      setEditing(page);
+      setDraft(asPuckData(page.blocks, page.title));
       await load();
       toast.success(t('cmsPageCreated'));
     } catch (error: any) {
@@ -150,29 +156,27 @@ export default function WebsiteCms() {
     try {
       const res = await api.get(`/merchant/cms/pages/${pageId}`);
       const page = res.data.page as CmsPage;
-      setEditing({ ...page, blocks: (page.blocks || []) as ChaiBlock[] });
+      setEditing(page);
+      setDraft(asPuckData(page.blocks, page.title));
     } catch (error: any) {
       toast.error(error.response?.data?.error || t('cmsLoadFailed'));
     }
   };
 
-  const persistPage = async (
-    blocks: ChaiBlock[],
-    theme: Record<string, unknown> | undefined,
-    status?: 'draft' | 'published'
-  ) => {
+  const persistPage = async (data: Data, status?: 'draft' | 'published') => {
     if (!editing) return false;
     try {
       const res = await api.put(`/merchant/cms/pages/${editing.id}`, {
         title: editing.title,
         slug: editing.slug,
         isHomepage: editing.isHomepage,
-        blocks,
-        theme: theme ?? editing.theme ?? null,
+        blocks: data,
+        theme: editing.theme ?? null,
         status: status || editing.status,
       });
       const page = res.data.page as CmsPage;
-      setEditing({ ...page, blocks: (page.blocks || []) as ChaiBlock[] });
+      setEditing(page);
+      setDraft(asPuckData(page.blocks, page.title));
       await load();
       return true;
     } catch (error: any) {
@@ -181,27 +185,24 @@ export default function WebsiteCms() {
     }
   };
 
-  const onChaiSave = async ({
-    blocks,
-    theme,
-  }: {
-    blocks: ChaiBlock[];
-    theme?: Record<string, unknown>;
-    autoSave?: boolean;
-  }) => {
-    const ok = await persistPage(blocks, theme);
-    if (ok) toast.success(t('saved'));
-    return ok;
+  const saveDraft = async (data?: Data) => {
+    setBusy(true);
+    try {
+      const ok = await persistPage(data || draft);
+      if (ok) toast.success(t('saved'));
+    } finally {
+      setBusy(false);
+    }
   };
 
   const publish = async () => {
     if (!editing) return;
-    setPublishBusy(true);
+    setBusy(true);
     try {
-      const ok = await persistPage(editing.blocks || [], editing.theme || undefined, 'published');
+      const ok = await persistPage(draft, 'published');
       if (ok) toast.success(t('cmsPublished'));
     } finally {
-      setPublishBusy(false);
+      setBusy(false);
     }
   };
 
@@ -209,7 +210,10 @@ export default function WebsiteCms() {
     if (!confirm(t('cmsDeleteConfirm'))) return;
     try {
       await api.delete(`/merchant/cms/pages/${pageId}`);
-      if (editing?.id === pageId) setEditing(null);
+      if (editing?.id === pageId) {
+        setEditing(null);
+        setDraft(emptyPuckData() as Data);
+      }
       await load();
       toast.success(t('deleted'));
     } catch (error: any) {
@@ -252,30 +256,33 @@ export default function WebsiteCms() {
             <div className="flex gap-2">
               <button
                 type="button"
+                className="btn-secondary text-sm"
+                disabled={busy}
+                onClick={() => void saveDraft()}
+              >
+                {t('cmsSaveDraft')}
+              </button>
+              <button
+                type="button"
                 className="btn-primary text-sm"
-                disabled={publishBusy}
-                onClick={() => publish()}
+                disabled={busy}
+                onClick={() => void publish()}
               >
                 {t('cmsPublish')}
               </button>
             </div>
           </div>
-          <div className="flex-1 min-h-0 relative">
-            <ChaiBuilderEditor
+          <div className="flex-1 min-h-0 relative overflow-hidden">
+            <Puck
               key={editing.id}
-              pageId={editing.id}
-              blocks={(editing.blocks || []) as ChaiBlock[]}
-              theme={(editing.theme || undefined) as any}
-              autoSave={false}
-              onSave={onChaiSave as any}
-              permissions={[
-                'add_block',
-                'delete_block',
-                'edit_block',
-                'edit_theme',
-                'save_page',
-                'move_block',
-              ]}
+              config={cmsPuckConfig}
+              data={draft}
+              onChange={(data) => setDraft(data)}
+              onPublish={async (data) => {
+                setDraft(data);
+                await persistPage(data, 'published');
+                toast.success(t('cmsPublished'));
+              }}
             />
           </div>
         </div>
@@ -288,7 +295,7 @@ export default function WebsiteCms() {
       <div>
         <h1 className="text-xl font-semibold">{t('cmsWebsite')}</h1>
         <p className="text-sm muted mt-1">{t('cmsWebsiteHint')}</p>
-        <p className="text-xs muted mt-1">{t('cmsChaiHint')}</p>
+        <p className="text-xs muted mt-1">{t('cmsPuckHint')}</p>
       </div>
 
       <form onSubmit={saveSite} className="rounded-md border border-[var(--border)] bg-[var(--bg)] p-4 space-y-3">
@@ -326,6 +333,11 @@ export default function WebsiteCms() {
           onSubmit={createPage}
           className="rounded-md border border-[var(--border)] bg-[var(--bg-muted)] p-4 space-y-3"
         >
+          {!pages.length && (
+            <p className="text-xs rounded-md border border-amber-200 bg-amber-50 text-amber-900 px-3 py-2">
+              {t('cmsNoPages')}
+            </p>
+          )}
           <label className="text-xs font-medium block">{t('title')}</label>
           <input className="input" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} />
           <label className="text-xs font-medium block">{t('cmsTemplate')}</label>
@@ -341,7 +353,12 @@ export default function WebsiteCms() {
             {t('cmsIsHomepage')}
           </label>
           <div className="flex gap-2 justify-end">
-            <button type="button" className="btn-secondary" onClick={() => setCreateOpen(false)}>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => setCreateOpen(false)}
+              disabled={!pages.length}
+            >
               {t('cancel')}
             </button>
             <button type="submit" className="btn-primary">
@@ -352,7 +369,7 @@ export default function WebsiteCms() {
       )}
 
       <div className="space-y-2">
-        {pages.length === 0 && (
+        {pages.length === 0 && !createOpen && (
           <p className="text-sm muted border border-dashed border-[var(--border)] rounded-md p-6 text-center">
             {t('cmsNoPages')}
           </p>
