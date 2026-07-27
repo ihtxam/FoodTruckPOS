@@ -115,7 +115,7 @@ export default function Billing() {
         checkout.create('dropin').mount(dropinRef.current);
         dropinMounted.current = true;
       } catch {
-        setPayMsg('Could not load Adyen payment form. Check platform Adyen client key.');
+        setPayMsg('Could not load payment form. Check platform Swisspayout client key.');
       }
     })();
 
@@ -171,8 +171,8 @@ export default function Billing() {
         </p>
         {!adyenReady && (
           <p className="mt-3 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2">
-            Platform Adyen is not configured yet. Free plans can still be activated; paid plans require
-            the platform owner to add Adyen credentials in Superadmin → Settings.
+            Platform Swisspayout is not configured yet. Free plans can still be activated; paid plans require
+            the platform owner to add Swisspayout credentials in Superadmin → Settings.
           </p>
         )}
       </div>
@@ -234,7 +234,7 @@ export default function Billing() {
                   className="btn btn-primary mt-4 w-full disabled:opacity-50"
                   onClick={() => void startCheckout(plan)}
                 >
-                  {isCurrent ? 'Current plan' : price <= 0 ? 'Activate free' : 'Buy with Adyen'}
+                  {isCurrent ? 'Current plan' : price <= 0 ? 'Activate free' : 'Buy with card'}
                 </button>
               </div>
             );
@@ -251,7 +251,7 @@ export default function Billing() {
             <div>
               <h2 className="text-lg font-semibold">Pay for {checkoutPlan.name}</h2>
               <p className="text-sm text-gray-600">
-                Secure checkout via Adyen — payment goes to the platform account.
+                Secure checkout via Swisspayout — payment goes to the platform account.
               </p>
             </div>
             <button

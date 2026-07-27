@@ -588,11 +588,16 @@ export default function OrderingPage() {
                   {t('shopReservations')}
                 </Link>
               )}
-              <Link to={accountPath} className="text-stone-600 hover:text-stone-900">
-                {t('shopAccount')}
+              <Link
+                to={accountPath}
+                className="text-stone-600 hover:text-stone-900 p-1"
+                aria-label={t('shopAccount')}
+                title={t('shopAccount')}
+              >
+                <AccountIcon />
               </Link>
             </nav>
-            <div className="sm:hidden flex items-center gap-3">
+            <div className="sm:hidden flex items-center gap-2">
               {showReservations && (
                 <Link
                   to={reservationsPath}
@@ -603,18 +608,13 @@ export default function OrderingPage() {
               )}
               <Link
                 to={accountPath}
-                className="text-sm font-semibold text-stone-800 underline underline-offset-2"
+                className="p-1.5 text-stone-800"
+                aria-label={t('shopAccount')}
+                title={t('shopAccount')}
               >
-                {t('shopAccount')}
+                <AccountIcon />
               </Link>
             </div>
-            <button
-              type="button"
-              className="lg:hidden bg-stone-900 text-white px-4 py-2 text-sm font-semibold"
-              onClick={() => setMobileBasket(true)}
-            >
-              {t('shopBasketCount')} ({itemCount})
-            </button>
           </div>
         </div>
       </header>
@@ -684,7 +684,11 @@ export default function OrderingPage() {
         </div>
       </section>
 
-      <div className="max-w-7xl mx-auto px-4 py-6 grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-6 items-start">
+      <div
+        className={`max-w-7xl mx-auto px-4 py-6 grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-6 items-start${
+          itemCount > 0 ? ' pb-28 lg:pb-6' : ''
+        }`}
+      >
         <div>
           {loyaltyEnabled && unlockedRewards.length > 0 && (
             <div className="mb-5 space-y-2">
@@ -831,6 +835,26 @@ export default function OrderingPage() {
         <div className="hidden lg:block sticky top-20 h-[calc(100vh-6rem)]">{Basket}</div>
       </div>
 
+      {itemCount > 0 && (
+        <div className="lg:hidden fixed bottom-0 inset-x-0 z-40 border-t border-stone-200 bg-white/95 backdrop-blur safe-bottom">
+          <div className="max-w-7xl mx-auto px-4 py-3">
+            <button
+              type="button"
+              className="w-full bg-stone-900 text-white px-4 py-3.5 text-sm font-semibold flex items-center justify-between gap-3"
+              onClick={() => setMobileBasket(true)}
+            >
+              <span className="flex items-center gap-2 min-w-0">
+                <CartIcon />
+                <span className="truncate">
+                  {t('shopBasketCount')} · {itemCount}
+                </span>
+              </span>
+              <span className="shrink-0 tabular-nums">CHF {cartTotal.toFixed(2)}</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {mobileBasket && (
         <div className="lg:hidden fixed inset-0 z-50 bg-black/40" onClick={() => setMobileBasket(false)}>
           <div
@@ -871,5 +895,35 @@ export default function OrderingPage() {
         />
       )}
     </div>
+  );
+}
+
+function AccountIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden className="block">
+      <circle cx="12" cy="8" r="3.25" stroke="currentColor" strokeWidth="1.75" />
+      <path
+        d="M5.5 19.25c1.6-3.1 3.9-4.5 6.5-4.5s4.9 1.4 6.5 4.5"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function CartIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden className="block shrink-0">
+      <path
+        d="M3.5 5.5h1.6l1.4 10.2a1.5 1.5 0 0 0 1.5 1.3h8.7a1.5 1.5 0 0 0 1.5-1.2l1.1-6.3H7"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <circle cx="10" cy="19.5" r="1.1" fill="currentColor" />
+      <circle cx="16.5" cy="19.5" r="1.1" fill="currentColor" />
+    </svg>
   );
 }

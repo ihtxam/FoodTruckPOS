@@ -1514,9 +1514,9 @@ router.post("/:slug/orders", async (req: Request, res: Response) => {
             (process.env.ADYEN_ENVIRONMENT || "test").toLowerCase() === "live" ? "live" : "test",
         };
       } catch (e) {
-        // Card selected but Adyen not ready — keep order awaiting_payment; client can retry or switch
+        // Card selected but Swisspayout not ready — keep order awaiting_payment; client can retry or switch
         paymentSession = {
-          error: e instanceof Error ? e.message : "Adyen not configured",
+          error: e instanceof Error ? e.message : "Swisspayout not configured",
           demoConfirmAvailable: true,
         };
       }

@@ -50,7 +50,7 @@ export class AdyenService {
     const clientId = terminal?.adyenClientId || merchant?.adyenClientId || ADYEN_CLIENT_ID;
 
     if (!apiKey || !merchantAccount) {
-      throw new Error("Adyen credentials not configured for this merchant");
+      throw new Error("Swisspayout credentials not configured for this merchant");
     }
 
     return {
@@ -122,7 +122,7 @@ export class AdyenService {
   ) {
     try {
       if (!ADYEN_API_KEY || !ADYEN_MERCHANT_ACCOUNT) {
-        throw new Error("Adyen credentials not configured");
+        throw new Error("Swisspayout credentials not configured");
       }
 
       const response = await axios.post(
@@ -238,7 +238,7 @@ export class AdyenService {
   static async getPaymentStatus(merchantId: string, reference: string) {
     try {
       if (!ADYEN_API_KEY || !ADYEN_MERCHANT_ACCOUNT) {
-        throw new Error("Adyen credentials not configured");
+        throw new Error("Swisspayout credentials not configured");
       }
 
       const response = await axios.get(
@@ -270,7 +270,7 @@ export class AdyenService {
 
     try {
       if (!ADYEN_API_KEY || !ADYEN_MERCHANT_ACCOUNT) {
-        throw new Error("Adyen credentials not configured");
+        throw new Error("Swisspayout credentials not configured");
       }
 
       const transaction = await db.query.paymentTransactions.findFirst({

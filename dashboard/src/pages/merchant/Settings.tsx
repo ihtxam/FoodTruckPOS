@@ -220,7 +220,7 @@ export default function Settings() {
       setApiKey('');
       toast.success(t('adyenSaved'));
     } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Failed to save Adyen credentials');
+      toast.error(error.response?.data?.error || 'Failed to save Swisspayout credentials');
     } finally {
       setSavingAdyen(false);
     }
@@ -539,6 +539,18 @@ export default function Settings() {
             <div className="space-y-8">
               <form onSubmit={saveAdyen} className="space-y-5">
                 <Section title={t('adyenCredentials')} description={t('adyenSettingsHint')}>
+                  <div className="rounded-md border border-[var(--border)] bg-[var(--bg-muted)] px-3 py-3 text-sm space-y-1.5 mb-1">
+                    <p className="font-medium">{t('swisspayoutSignup')}</p>
+                    <p className="text-xs muted">{t('swisspayoutSignupHint')}</p>
+                    <a
+                      href="https://swisspayout.com"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-block text-sm font-semibold underline underline-offset-2"
+                    >
+                      {t('swisspayoutSignupCta')} → swisspayout.com
+                    </a>
+                  </div>
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <Field label={t('merchantAccount')}>
                       <input
