@@ -927,11 +927,23 @@ export const dailyReports = pgTable(
 // CMS PAGES (merchant website / homepage builder)
 // ============================================================================
 
-/** ChaiBuilder SDK block JSON (`_id`, `_type`, optional `_parent`, …) */
+/** Puck editor page data (`content` + `root`) */
+export type CmsPuckItem = {
+  type: string;
+  props: Record<string, unknown>;
+};
+
+export type CmsPuckData = {
+  content: CmsPuckItem[];
+  root: { props?: Record<string, unknown> };
+  zones?: Record<string, CmsPuckItem[]>;
+};
+
+/** @deprecated legacy ChaiBuilder block — migrated on read */
 export type CmsBlock = {
-  _id: string;
-  _type: string;
-  _parent?: string | null;
+  _id?: string;
+  _type?: string;
+  type?: string;
   [key: string]: unknown;
 };
 
@@ -949,9 +961,9 @@ export const cmsPages = pgTable(
     isHomepage: boolean("is_homepage").notNull().default(false),
     status: varchar("status", { length: 20 }).notNull().default("draft"),
     templateKey: varchar("template_key", { length: 40 }),
-    /** ChaiBuilder blocks array */
-    blocks: json("blocks").$type<CmsBlock[]>().notNull().default([]),
-    /** ChaiBuilder theme values */
+    /** Puck Data JSON (`{ content, root }`) — legacy Chai arrays are migrated in the service */
+    blocks: json("blocks").$type<CmsPuckData | CmsBlock[]>().notNull().default({ content: [], root: {} }),
+    /** Optional theme / metadata */
     theme: json("theme").$type<CmsTheme | null>(),
     seoTitle: varchar("seo_title", { length: 200 }),
     seoDescription: text("seo_description"),

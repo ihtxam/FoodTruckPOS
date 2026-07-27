@@ -1,5 +1,5 @@
 import { and, asc, desc, eq } from "drizzle-orm";
-import { getDb, schema, type CmsBlock, type CmsTheme } from "@/db";
+import { getDb, schema, type CmsPuckData, type CmsTheme } from "@/db";
 import { randomUUID } from "crypto";
 
 function slugify(raw: string): string {
@@ -16,154 +16,86 @@ function bid() {
   return randomUUID();
 }
 
-function chaiBlock(type: string, props: Record<string, unknown> = {}, parent?: string | null): CmsBlock {
-  const block: CmsBlock = { _id: bid(), _type: type, ...props };
-  if (parent) block._parent = parent;
-  return block;
+function item(type: string, props: Record<string, unknown> = {}) {
+  return { type, props: { id: bid(), ...props } };
 }
 
-/** Build ChaiBuilder-compatible block trees for starter templates */
-function restaurantBlocks(shopName: string): CmsBlock[] {
-  const hero = chaiBlock("Box", {
-    tag: "section",
-    styles: "#styles:,min-h-[52vh] flex flex-col items-center justify-center px-6 py-20 bg-stone-900 text-white text-center",
-    backgroundImage: "",
-  });
-  const heading = chaiBlock(
-    "Heading",
-    {
-      tag: "h1",
-      styles: "#styles:,text-4xl md:text-6xl font-semibold tracking-tight",
-      content: shopName,
-    },
-    hero._id
-  );
-  const sub = chaiBlock(
-    "Paragraph",
-    {
-      styles: "#styles:,mt-4 text-base md:text-lg text-stone-200 max-w-2xl",
-      content: "Fresh dishes, crafted with care. Order online for pickup or delivery.",
-    },
-    hero._id
-  );
-  const cta = chaiBlock(
-    "Button",
-    {
-      styles: "#styles:,mt-8 bg-white text-stone-900 px-6 py-3 rounded-none font-semibold",
-      content: "Order now",
-      icon: "",
-      iconSize: 16,
-      iconPos: "order-last",
-      link: { type: "url", href: "/menu", target: "_self" },
-      prefetchLink: true,
-    },
-    hero._id
-  );
-  const story = chaiBlock("CustomHTML", {
-    styles: "#styles:,max-w-3xl mx-auto px-4 py-10",
-    htmlCode: `<p>Welcome to <strong>${shopName}</strong>. Explore our menu — the same catalog as our POS.</p>`,
-  });
-  const menu = chaiBlock("PosMenu", {
-    styles: "#styles:,max-w-5xl mx-auto px-4 py-12",
-    title: "Our menu",
-    subtitle: "Straight from the kitchen",
-    mode: "full",
-    showPrices: true,
-    limit: 8,
-    ctaLabel: "Full menu & checkout",
-    ctaHref: "/menu",
-  });
-  const hours = chaiBlock("ShopHours", {
-    styles: "#styles:,max-w-5xl mx-auto px-4 py-10 text-center",
-    title: "Opening hours",
-    channel: "display",
-  });
-  const ctaBox = chaiBlock("Box", {
-    tag: "section",
-    styles: "#styles:,bg-stone-900 text-white px-6 py-14 text-center",
-    backgroundImage: "",
-  });
-  const ctaTitle = chaiBlock(
-    "Heading",
-    {
-      tag: "h2",
-      styles: "#styles:,text-2xl md:text-3xl font-semibold",
-      content: "Hungry?",
-    },
-    ctaBox._id
-  );
-  const ctaBtn = chaiBlock(
-    "Button",
-    {
-      styles: "#styles:,mt-6 bg-white text-stone-900 px-5 py-2.5 font-semibold",
-      content: "Order online",
-      icon: "",
-      iconSize: 16,
-      iconPos: "order-last",
-      link: { type: "url", href: "/menu", target: "_self" },
-      prefetchLink: true,
-    },
-    ctaBox._id
-  );
-  return [hero, heading, sub, cta, story, menu, hours, ctaBox, ctaTitle, ctaBtn];
+function emptyData(title = ""): CmsPuckData {
+  return { content: [], root: { props: { title } } };
 }
 
-function foodTruckBlocks(shopName: string): CmsBlock[] {
-  const hero = chaiBlock("Box", {
-    tag: "section",
-    styles: "#styles:,min-h-[48vh] flex flex-col items-center justify-center px-6 py-16 bg-amber-900 text-amber-50 text-center",
-    backgroundImage: "",
-  });
-  const heading = chaiBlock(
-    "Heading",
-    {
-      tag: "h1",
-      styles: "#styles:,text-4xl md:text-5xl font-semibold tracking-tight",
-      content: shopName,
-    },
-    hero._id
-  );
-  const sub = chaiBlock(
-    "Paragraph",
-    {
-      styles: "#styles:,mt-3 text-amber-100 max-w-xl",
-      content: "Street food. Real flavor. Find us or order ahead.",
-    },
-    hero._id
-  );
-  const menu = chaiBlock("PosMenu", {
-    styles: "#styles:,max-w-5xl mx-auto px-4 py-12",
-    title: "Today's favourites",
-    subtitle: "",
-    mode: "featured",
-    showPrices: true,
-    limit: 6,
-    ctaLabel: "Order now",
-    ctaHref: "/menu",
-  });
-  const html = chaiBlock("CustomHTML", {
-    styles: "#styles:,max-w-3xl mx-auto px-4 py-6",
-    htmlCode:
-      '<div style="padding:1.25rem;border:1px dashed #a8a29e;text-align:center"><p style="margin:0">Drop your own HTML here — maps, events, embeds…</p></div>',
-  });
-  const hours = chaiBlock("ShopHours", {
-    styles: "#styles:,max-w-5xl mx-auto px-4 py-8 text-center",
-    title: "When we're open",
-    channel: "display",
-  });
-  const cta = chaiBlock(
-    "Button",
-    {
-      styles: "#styles:,mx-auto my-10 block w-fit bg-stone-900 text-white px-6 py-3 font-semibold",
-      content: "Start order",
-      icon: "",
-      iconSize: 16,
-      iconPos: "order-last",
-      link: { type: "url", href: "/menu", target: "_self" },
-      prefetchLink: true,
-    }
-  );
-  return [hero, heading, sub, menu, html, hours, cta];
+function restaurantData(shopName: string): CmsPuckData {
+  return {
+    root: { props: { title: shopName } },
+    content: [
+      item("Hero", {
+        title: shopName,
+        subtitle: "Fresh dishes, crafted with care. Order online for pickup or delivery.",
+        ctaLabel: "Order now",
+        ctaHref: "/menu",
+        imageUrl: "",
+        align: "center",
+      }),
+      item("Text", {
+        text: `Welcome to ${shopName}. Explore our menu — the same catalog as our POS.`,
+      }),
+      item("PosMenu", {
+        title: "Our menu",
+        subtitle: "Straight from the kitchen",
+        mode: "full",
+        showPrices: true,
+        limit: 8,
+        ctaLabel: "Full menu & checkout",
+        ctaHref: "/menu",
+      }),
+      item("ShopHours", { title: "Opening hours", channel: "display" }),
+      item("Cta", {
+        title: "Hungry?",
+        subtitle: "Order online in minutes.",
+        primaryLabel: "Order online",
+        primaryHref: "/menu",
+        secondaryLabel: "",
+        secondaryHref: "",
+      }),
+    ],
+  };
+}
+
+function foodTruckData(shopName: string): CmsPuckData {
+  return {
+    root: { props: { title: shopName } },
+    content: [
+      item("Hero", {
+        title: shopName,
+        subtitle: "Street food. Real flavor. Find us or order ahead.",
+        ctaLabel: "See the menu",
+        ctaHref: "/menu",
+        imageUrl: "",
+        align: "center",
+      }),
+      item("PosMenu", {
+        title: "Today's favourites",
+        subtitle: "",
+        mode: "featured",
+        showPrices: true,
+        limit: 6,
+        ctaLabel: "Order now",
+        ctaHref: "/menu",
+      }),
+      item("Html", {
+        html: '<div style="padding:1.25rem;border:1px dashed #a8a29e;text-align:center"><p style="margin:0">Drop your own HTML here — maps, events, embeds…</p></div>',
+      }),
+      item("ShopHours", { title: "When we're open", channel: "display" }),
+      item("Cta", {
+        title: "Order ahead",
+        subtitle: "",
+        primaryLabel: "Start order",
+        primaryHref: "/menu",
+        secondaryLabel: "",
+        secondaryHref: "",
+      }),
+    ],
+  };
 }
 
 export type CmsTemplateKey = "blank" | "restaurant" | "food_truck";
@@ -172,80 +104,91 @@ export const CMS_TEMPLATES: Array<{
   key: CmsTemplateKey;
   name: string;
   description: string;
-  blocks: (shopName: string) => CmsBlock[];
+  data: (shopName: string) => CmsPuckData;
 }> = [
   {
     key: "blank",
     name: "Blank",
     description: "Empty canvas — drag blocks in the builder",
-    blocks: () => [],
+    data: (name) => emptyData(name),
   },
   {
     key: "restaurant",
     name: "Restaurant",
     description: "Hero, story, POS menu, hours, and order CTA",
-    blocks: restaurantBlocks,
+    data: restaurantData,
   },
   {
     key: "food_truck",
     name: "Food truck",
     description: "Bold hero, featured menu, HTML spot, CTA",
-    blocks: foodTruckBlocks,
+    data: foodTruckData,
   },
 ];
 
-function normalizeBlocks(blocks: unknown): CmsBlock[] {
-  if (!Array.isArray(blocks)) return [];
-  return blocks
-    .filter((b): b is Record<string, unknown> => !!b && typeof b === "object")
-    .map((b) => {
-      // Already ChaiBuilder format
-      if (typeof b._type === "string") {
-        return {
-          ...b,
-          _id: typeof b._id === "string" ? b._id : bid(),
-          _type: b._type,
-        } as CmsBlock;
+/** Accept Puck data, or migrate legacy ChaiBuilder arrays. */
+export function normalizePuckData(raw: unknown, fallbackTitle = ""): CmsPuckData {
+  if (raw && typeof raw === "object" && !Array.isArray(raw) && Array.isArray((raw as any).content)) {
+    const data = raw as CmsPuckData;
+    return {
+      content: (data.content || []).map((c) => ({
+        type: String(c.type || "Text"),
+        props: {
+          id: typeof c.props?.id === "string" ? c.props.id : bid(),
+          ...(c.props || {}),
+        },
+      })),
+      root: data.root && typeof data.root === "object" ? data.root : { props: { title: fallbackTitle } },
+      zones: data.zones,
+    };
+  }
+
+  // Legacy ChaiBuilder array → best-effort Puck content
+  if (Array.isArray(raw)) {
+    const content: CmsPuckData["content"] = [];
+    for (const b of raw) {
+      if (!b || typeof b !== "object") continue;
+      const type = String((b as any)._type || (b as any).type || "");
+      if (type === "Heading" || type === "hero") {
+        content.push(
+          item("Hero", {
+            title: String((b as any).content || (b as any).title || fallbackTitle || "Welcome"),
+            subtitle: String((b as any).subtitle || ""),
+            ctaLabel: String((b as any).ctaLabel || "Order now"),
+            ctaHref: String((b as any).ctaHref || "/menu"),
+            imageUrl: String((b as any).imageUrl || ""),
+            align: "center",
+          })
+        );
+      } else if (type === "CustomHTML" || type === "html" || type === "richtext") {
+        content.push(item("Html", { html: String((b as any).htmlCode || (b as any).html || "") }));
+      } else if (type === "PosMenu" || type === "menu") {
+        content.push(
+          item("PosMenu", {
+            title: String((b as any).title || "Menu"),
+            subtitle: String((b as any).subtitle || ""),
+            mode: (b as any).mode === "featured" ? "featured" : "full",
+            showPrices: (b as any).showPrices !== false,
+            limit: Number((b as any).limit) || 8,
+            ctaLabel: String((b as any).ctaLabel || "Order online"),
+            ctaHref: String((b as any).ctaHref || "/menu"),
+          })
+        );
+      } else if (type === "ShopHours" || type === "hours") {
+        content.push(
+          item("ShopHours", {
+            title: String((b as any).title || "Hours"),
+            channel: String((b as any).channel || "display"),
+          })
+        );
+      } else if (type === "Paragraph") {
+        content.push(item("Text", { text: String((b as any).content || "") }));
       }
-      // Legacy simple CMS blocks → minimal Chai mapping
-      const legacyType = String(b.type || "CustomHTML");
-      if (legacyType === "html" || legacyType === "richtext") {
-        return chaiBlock("CustomHTML", {
-          styles: "#styles:,",
-          htmlCode: String(b.html || ""),
-        });
-      }
-      if (legacyType === "menu") {
-        return chaiBlock("PosMenu", {
-          styles: "#styles:,",
-          title: String(b.title || "Menu"),
-          subtitle: String(b.subtitle || ""),
-          mode: b.mode === "featured" ? "featured" : "full",
-          showPrices: b.showPrices !== false,
-          limit: Number(b.limit) || 8,
-          ctaLabel: String(b.ctaLabel || "Order online"),
-          ctaHref: String(b.ctaHref || "/menu"),
-        });
-      }
-      if (legacyType === "hours") {
-        return chaiBlock("ShopHours", {
-          styles: "#styles:,",
-          title: String(b.title || "Hours"),
-          channel: String(b.channel || "display"),
-        });
-      }
-      if (legacyType === "hero") {
-        return chaiBlock("Heading", {
-          tag: "h1",
-          styles: "#styles:,text-4xl font-semibold",
-          content: String(b.title || "Welcome"),
-        });
-      }
-      return chaiBlock("CustomHTML", {
-        styles: "#styles:,",
-        htmlCode: `<pre>${JSON.stringify(b).replace(/</g, "&lt;")}</pre>`,
-      });
-    });
+    }
+    return { content, root: { props: { title: fallbackTitle } } };
+  }
+
+  return emptyData(fallbackTitle);
 }
 
 export class CmsService {
@@ -267,7 +210,10 @@ export class CmsService {
       where: and(eq(schema.cmsPages.id, pageId), eq(schema.cmsPages.merchantId, merchantId)),
     });
     if (!page) throw new Error("Page not found");
-    return page;
+    return {
+      ...page,
+      blocks: normalizePuckData(page.blocks, page.title),
+    };
   }
 
   static async createPage(
@@ -277,7 +223,7 @@ export class CmsService {
       slug?: string;
       isHomepage?: boolean;
       templateKey?: CmsTemplateKey;
-      blocks?: CmsBlock[];
+      blocks?: CmsPuckData | unknown;
       theme?: CmsTheme | null;
       seoTitle?: string;
       seoDescription?: string;
@@ -310,10 +256,10 @@ export class CmsService {
     const status = input.status === "published" ? "published" : "draft";
     const blocks =
       input.blocks !== undefined
-        ? normalizeBlocks(input.blocks)
+        ? normalizePuckData(input.blocks, title)
         : template
-          ? template.blocks(merchant.name)
-          : [];
+          ? template.data(merchant.name)
+          : emptyData(title);
 
     const [page] = await db
       .insert(schema.cmsPages)
@@ -339,7 +285,7 @@ export class CmsService {
         .where(eq(schema.merchants.id, merchantId));
     }
 
-    return page;
+    return { ...page, blocks: normalizePuckData(page.blocks, page.title) };
   }
 
   static async updatePage(
@@ -349,7 +295,7 @@ export class CmsService {
       title?: string;
       slug?: string;
       isHomepage?: boolean;
-      blocks?: CmsBlock[];
+      blocks?: CmsPuckData | unknown;
       theme?: CmsTheme | null;
       seoTitle?: string | null;
       seoDescription?: string | null;
@@ -370,7 +316,9 @@ export class CmsService {
       if (clash && clash.id !== pageId) throw new Error("Slug already in use");
       patch.slug = slug;
     }
-    if (input.blocks !== undefined) patch.blocks = normalizeBlocks(input.blocks);
+    if (input.blocks !== undefined) {
+      patch.blocks = normalizePuckData(input.blocks, String(patch.title || current.title));
+    }
     if (input.theme !== undefined) patch.theme = input.theme;
     if (input.seoTitle !== undefined) patch.seoTitle = input.seoTitle ? input.seoTitle.slice(0, 200) : null;
     if (input.seoDescription !== undefined) patch.seoDescription = input.seoDescription;
@@ -399,16 +347,14 @@ export class CmsService {
       .where(and(eq(schema.cmsPages.id, pageId), eq(schema.cmsPages.merchantId, merchantId)))
       .returning();
 
-    const homepage = page.isHomepage;
-    const published = page.status === "published";
-    if (homepage) {
+    if (page.isHomepage) {
       await db
         .update(schema.merchants)
-        .set({ cmsHomepageEnabled: published, updatedAt: new Date() })
+        .set({ cmsHomepageEnabled: page.status === "published", updatedAt: new Date() })
         .where(eq(schema.merchants.id, merchantId));
     }
 
-    return page;
+    return { ...page, blocks: normalizePuckData(page.blocks, page.title) };
   }
 
   static async deletePage(merchantId: string, pageId: string) {
@@ -429,24 +375,28 @@ export class CmsService {
 
   static async getPublishedHomepage(merchantId: string) {
     const db = getDb();
-    return db.query.cmsPages.findFirst({
+    const page = await db.query.cmsPages.findFirst({
       where: and(
         eq(schema.cmsPages.merchantId, merchantId),
         eq(schema.cmsPages.isHomepage, true),
         eq(schema.cmsPages.status, "published")
       ),
     });
+    if (!page) return null;
+    return { ...page, blocks: normalizePuckData(page.blocks, page.title) };
   }
 
   static async getPublishedBySlug(merchantId: string, slug: string) {
     const db = getDb();
-    return db.query.cmsPages.findFirst({
+    const page = await db.query.cmsPages.findFirst({
       where: and(
         eq(schema.cmsPages.merchantId, merchantId),
         eq(schema.cmsPages.slug, slugify(slug)),
         eq(schema.cmsPages.status, "published")
       ),
     });
+    if (!page) return null;
+    return { ...page, blocks: normalizePuckData(page.blocks, page.title) };
   }
 
   static async updateSiteSettings(
