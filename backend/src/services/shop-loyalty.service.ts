@@ -163,11 +163,12 @@ export class ShopLoyaltyService {
     return { discountChf, pointsUsed };
   }
 
-  static maxRedeemablePoints(subtotalChf: number, balance: number, redeemPointsPerChf: number) {
+  /** Max points redeemable as cash against a payable CHF base (food, fees, tax — not tip). */
+  static maxRedeemablePoints(payableChf: number, balance: number, redeemPointsPerChf: number) {
     const rate = Math.max(1, Math.floor(redeemPointsPerChf));
-    const maxBySubtotal = Math.floor(Math.max(0, subtotalChf)) * rate;
+    const maxByPayable = Math.floor(Math.max(0, payableChf)) * rate;
     const maxByBalance = Math.floor(balance / rate) * rate;
-    return Math.min(maxBySubtotal, maxByBalance);
+    return Math.min(maxByPayable, maxByBalance);
   }
 
   static async earnPoints(opts: {

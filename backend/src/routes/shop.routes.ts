@@ -1172,38 +1172,6 @@ router.post("/:slug/orders", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "No valid items" });
     }
 
-    let pointsDiscount = 0;
-    let cashPointsUsed = 0;
-    const requestedCashPoints = Math.max(0, Math.floor(Number(pointsToRedeem) || 0));
-    if (requestedCashPoints > 0 || rewardPointsNeeded > 0) {
-      if (!loyaltyProgram.enabled) {
-        return res.status(400).json({ error: "Loyalty program is not enabled" });
-      }
-      if (!authCustomer.customerId) {
-        return res.status(401).json({ error: "Login required to redeem points" });
-      }
-      const balance = await ShopLoyaltyService.getBalance(merchant.id, authCustomer.customerId);
-      if (balance < rewardPointsNeeded) {
-        return res.status(400).json({ error: "Insufficient loyalty points for free rewards" });
-      }
-      const balanceAfterRewards = balance - rewardPointsNeeded;
-      if (requestedCashPoints > 0) {
-        const maxPts = ShopLoyaltyService.maxRedeemablePoints(
-          subtotal,
-          balanceAfterRewards,
-          loyaltyProgram.redeemPointsPerChf
-        );
-        const usePts = Math.min(requestedCashPoints, maxPts);
-        const { discountChf, pointsUsed } = ShopLoyaltyService.computeCashDiscount(
-          usePts,
-          loyaltyProgram.redeemPointsPerChf
-        );
-        pointsDiscount = discountChf;
-        cashPointsUsed = pointsUsed;
-      }
-    }
-    const totalPointsRedeemed = rewardPointsNeeded + cashPointsUsed;
-
     let deliveryFee = 0;
     let deliveryZoneId: string | undefined;
     if (channel === "delivery") {
@@ -1225,6 +1193,43 @@ router.post("/:slug/orders", async (req: Request, res: Response) => {
       deliveryFee = parseFloat(zone.deliveryFee?.toString() || "0");
       deliveryZoneId = zone.id;
     }
+
+    // Points can cover food + delivery + tax (not tip / card fee)
+    const feeTaxPreview = roundMoney2((deliveryFee * taxRate) / 100);
+    const taxPreview = roundMoney2(taxAmount + feeTaxPreview);
+    const redeemableBase = roundMoney2(subtotal + deliveryFee + taxPreview);
+
+    let pointsDiscount = 0;
+    let cashPointsUsed = 0;
+    const requestedCashPoints = Math.max(0, Math.floor(Number(pointsToRedeem) || 0));
+    if (requestedCashPoints > 0 || rewardPointsNeeded > 0) {
+      if (!loyaltyProgram.enabled) {
+        return res.status(400).json({ error: "Loyalty program is not enabled" });
+      }
+      if (!authCustomer.customerId) {
+        return res.status(401).json({ error: "Login required to redeem points" });
+      }
+      const balance = await ShopLoyaltyService.getBalance(merchant.id, authCustomer.customerId);
+      if (balance < rewardPointsNeeded) {
+        return res.status(400).json({ error: "Insufficient loyalty points for free rewards" });
+      }
+      const balanceAfterRewards = balance - rewardPointsNeeded;
+      if (requestedCashPoints > 0) {
+        const maxPts = ShopLoyaltyService.maxRedeemablePoints(
+          redeemableBase,
+          balanceAfterRewards,
+          loyaltyProgram.redeemPointsPerChf
+        );
+        const usePts = Math.min(requestedCashPoints, maxPts);
+        const { discountChf, pointsUsed } = ShopLoyaltyService.computeCashDiscount(
+          usePts,
+          loyaltyProgram.redeemPointsPerChf
+        );
+        pointsDiscount = discountChf;
+        cashPointsUsed = pointsUsed;
+      }
+    }
+    const totalPointsRedeemed = rewardPointsNeeded + cashPointsUsed;
 
     let customerId = authCustomer.customerId;
     const emailNorm = customerEmail?.trim().toLowerCase();
@@ -1266,9 +1271,10 @@ router.post("/:slug/orders", async (req: Request, res: Response) => {
     taxAmount = roundMoney2(taxAmount + feeTax);
     subtotal = roundMoney2(subtotal);
     deliveryFee = roundMoney2(deliveryFee);
-    pointsDiscount = roundMoney2(pointsDiscount);
+    pointsDiscount = roundMoney2(Math.min(pointsDiscount, subtotal + deliveryFee + taxAmount));
     const orderNumber = `WEB-${Date.now()}-${uuidv4().substring(0, 6).toUpperCase()}`;
-    const preCardTotal = Math.max(0, subtotal - pointsDiscount) + deliveryFee + tip + taxAmount;
+    // Points discount applies to food + delivery + tax; tip and card fee remain payable
+    const preCardTotal = Math.max(0, subtotal + deliveryFee + taxAmount - pointsDiscount) + tip;
     const cardFeeFixed = Number(merchant.onlineCardFeeFixed || 0) || 0;
     const cardFeePercent = Number(merchant.onlineCardFeePercent || 0) || 0;
     const cardFee =

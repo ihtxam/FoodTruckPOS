@@ -212,7 +212,8 @@ export default function Loyalty() {
                 delivery excluded
               </li>
               <li>
-                Cash redeem: {program.redeemPointsPerChf || 100} pts = CHF 1.00 (floor)
+                Cash redeem: {program.redeemPointsPerChf || 100} pts = CHF 1.00 (floor). Checkout
+                “Pay with points” applies to food, delivery & tax (not tip).
               </li>
               <li>
                 Free product: set “Free with points” on a product → unlock when balance ≥ N
