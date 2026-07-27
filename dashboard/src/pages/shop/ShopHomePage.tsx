@@ -6,7 +6,7 @@ import '@puckeditor/core/puck.css';
 import { resolveShopKey, shopBasePath } from '@/lib/shop-cart';
 import { useI18n } from '@/lib/i18n';
 import ShopLangSwitcher from '@/components/shop/ShopLangSwitcher';
-import { cmsPuckConfig, emptyPuckData } from '@/lib/cms/puck-config';
+import { cmsPuckConfig, emptyPuckData, withReservationsHomeCtas } from '@/lib/cms/puck-config';
 import { CmsShopProvider } from '@/lib/cms/CmsShopContext';
 
 function asPuckData(blocks: unknown): Data {
@@ -105,6 +105,10 @@ export default function ShopHomePage() {
   }
 
   const hasContent = Array.isArray(data.content) && data.content.length > 0;
+  const renderData = useMemo(
+    () => withReservationsHomeCtas(data, Boolean(merchant?.reservationsEnabled)),
+    [data, merchant?.reservationsEnabled],
+  );
 
   return (
     <CmsShopProvider
@@ -114,6 +118,7 @@ export default function ShopHomePage() {
         menu,
         storeHours: merchant.storeHours || {},
         merchantName: merchant.name,
+        reservationsEnabled: Boolean(merchant.reservationsEnabled),
       }}
     >
       {themeCss ? <style dangerouslySetInnerHTML={{ __html: themeCss }} /> : null}
@@ -148,7 +153,7 @@ export default function ShopHomePage() {
 
         <main>
           {hasContent ? (
-            <Render config={cmsPuckConfig} data={data} />
+            <Render config={cmsPuckConfig} data={renderData} />
           ) : (
             <div className="max-w-3xl mx-auto px-4 py-20 text-center text-stone-500">
               {t('cmsEmptyBlocks')}
@@ -165,9 +170,16 @@ export default function ShopHomePage() {
               )}
               {merchant.phone && <p className="mt-1">{merchant.phone}</p>}
             </div>
-            <Link to={`${base}/menu`} className="underline self-start">
-              {t('cmsGoToMenu')}
-            </Link>
+            <div className="flex flex-wrap gap-4 self-start">
+              {merchant.reservationsEnabled ? (
+                <Link to={`${base}/reservations`} className="underline">
+                  {t('shopReservations')}
+                </Link>
+              ) : null}
+              <Link to={`${base}/menu`} className="underline">
+                {t('cmsGoToMenu')}
+              </Link>
+            </div>
           </div>
         </footer>
       </div>
