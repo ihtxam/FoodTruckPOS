@@ -118,6 +118,16 @@ export const merchants = pgTable(
      * }
      */
     reservationSettings: json("reservation_settings").$type<ReservationSettings | null>(),
+    /**
+     * Holiday / vacation mode (programmable in advance):
+     * {
+     *   manualActive?: boolean,
+     *   popupImageUrl?: string | null,
+     *   message?: string | null,
+     *   periods?: Array<{ id, startDate, endDate, title? }>  // YYYY-MM-DD inclusive (Europe/Zurich)
+     * }
+     */
+    vacationSettings: json("vacation_settings").$type<VacationSettings | null>(),
     status: varchar("status", { length: 50 }).default("active").notNull(), // active, suspended, trial, expired
     subscriptionPlan: varchar("subscription_plan", { length: 50 }).default("free"), // free, starter, professional, enterprise
     trialEndsAt: timestamp("trial_ends_at"),
@@ -727,6 +737,26 @@ export type ReservationStatus =
   | "cancelled"
   | "rejected"
   | "no_show";
+
+/** Programmable holiday / vacation closure for the online shop */
+export type VacationPeriod = {
+  id: string;
+  /** Inclusive start date YYYY-MM-DD (Europe/Zurich calendar) */
+  startDate: string;
+  /** Inclusive end date YYYY-MM-DD */
+  endDate: string;
+  title?: string | null;
+};
+
+export type VacationSettings = {
+  /** Force vacation on immediately (ignore / in addition to periods) */
+  manualActive?: boolean;
+  /** Popup image shown on homepage & shop while on vacation */
+  popupImageUrl?: string | null;
+  /** Optional visitor-facing message */
+  message?: string | null;
+  periods?: VacationPeriod[];
+};
 
 export const reservations = pgTable(
   "reservations",

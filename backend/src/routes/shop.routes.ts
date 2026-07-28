@@ -17,6 +17,7 @@ import { AuthService } from "@/services/auth.service";
 import { ModifierService } from "@/services/modifier.service";
 import { CmsService } from "@/services/cms.service";
 import { normalizeComboSlots } from "@/lib/combo";
+import { isVacationActive, isDateInVacationPeriods, vacationPublicPayload, VACATION_BLOCK_MESSAGE } from "@/lib/vacation";
 import { v4 as uuidv4 } from "uuid";
 
 const router = Router();
@@ -562,6 +563,7 @@ router.get("/:slug", async (req: Request, res: Response) => {
         },
         loyalty: ShopLoyaltyService.programFromMerchant(merchant),
         reservationsEnabled: !!merchant.reservationsEnabled,
+        vacation: vacationPublicPayload(merchant.vacationSettings),
         /** Merchant panel language — used as shop default when customer has no preference */
         language: merchant.panelLanguage || "en",
       },
@@ -609,6 +611,7 @@ router.get("/:slug/pages/home", async (req: Request, res: Response) => {
           city: merchant.city,
           phone: merchant.phone,
           reservationsEnabled: !!merchant.reservationsEnabled,
+          vacation: vacationPublicPayload(merchant.vacationSettings),
         },
       },
     });
@@ -1027,6 +1030,7 @@ router.get("/:slug/reservations/config", async (req: Request, res: Response) => 
     const { ReservationService } = await import("@/services/reservation.service");
     const config = ReservationService.getSettingsForMerchant(merchant);
     if (!config.enabled) return res.status(404).json({ error: "Reservations are not enabled" });
+    const vacation = vacationPublicPayload(merchant.vacationSettings);
     res.json({
       success: true,
       config: {
@@ -1036,6 +1040,7 @@ router.get("/:slug/reservations/config", async (req: Request, res: Response) => 
         shopName: config.shopName,
         address: config.address,
         phone: config.phone,
+        vacation,
       },
     });
   } catch (error) {
@@ -1052,8 +1057,19 @@ router.get("/:slug/reservations/slots", async (req: Request, res: Response) => {
     if (!merchant?.shopEnabled || !merchant.reservationsEnabled) {
       return res.status(404).json({ error: "Reservations not available" });
     }
-    const { ReservationService } = await import("@/services/reservation.service");
+    if (isVacationActive(merchant.vacationSettings)) {
+      return res.json({ success: true, slots: [], vacation: true, message: VACATION_BLOCK_MESSAGE });
+    }
     const date = String(req.query.date || "");
+    if (date && isDateInVacationPeriods(merchant.vacationSettings, date)) {
+      return res.json({
+        success: true,
+        slots: [],
+        vacation: true,
+        message: VACATION_BLOCK_MESSAGE,
+      });
+    }
+    const { ReservationService } = await import("@/services/reservation.service");
     const partySize = Number(req.query.partySize) || 2;
     const result = await ReservationService.getSlots(merchant.id, date, partySize);
     res.json({ success: true, ...result });
@@ -1071,6 +1087,9 @@ router.post("/:slug/reservations", async (req: Request, res: Response) => {
     if (!merchant?.shopEnabled || !merchant.reservationsEnabled) {
       return res.status(404).json({ error: "Reservations not available" });
     }
+    if (isVacationActive(merchant.vacationSettings)) {
+      return res.status(400).json({ error: VACATION_BLOCK_MESSAGE });
+    }
     const { ReservationService, zurichLocalToDate } = await import("@/services/reservation.service");
     const auth = optionalCustomer(req);
     let reservedAt: Date;
@@ -1078,6 +1097,22 @@ router.post("/:slug/reservations", async (req: Request, res: Response) => {
       reservedAt = zurichLocalToDate(String(req.body.date), String(req.body.time));
     } else {
       reservedAt = new Date(req.body.reservedAt);
+    }
+    const reservedYmd = String(req.body.date || "").slice(0, 10);
+    if (
+      (reservedYmd && isDateInVacationPeriods(merchant.vacationSettings, reservedYmd)) ||
+      (!reservedYmd &&
+        isDateInVacationPeriods(
+          merchant.vacationSettings,
+          new Intl.DateTimeFormat("en-CA", {
+            timeZone: "Europe/Zurich",
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+          }).format(reservedAt)
+        ))
+    ) {
+      return res.status(400).json({ error: VACATION_BLOCK_MESSAGE });
     }
     const reservation = await ReservationService.create(merchant.id, {
       guestName: req.body.guestName,
@@ -1141,6 +1176,9 @@ router.post("/:slug/orders", async (req: Request, res: Response) => {
     if (!merchant || !merchant.shopEnabled) {
       return res.status(404).json({ error: "Shop not found or closed" });
     }
+    if (isVacationActive(merchant.vacationSettings)) {
+      return res.status(400).json({ error: VACATION_BLOCK_MESSAGE });
+    }
 
     const {
       items,
@@ -1183,6 +1221,21 @@ router.post("/:slug/orders", async (req: Request, res: Response) => {
       guestCheckout?: boolean;
       pointsToRedeem?: number;
     };
+
+    if (scheduledFor) {
+      const when = new Date(scheduledFor);
+      if (!Number.isNaN(when.getTime())) {
+        const ymd = new Intl.DateTimeFormat("en-CA", {
+          timeZone: "Europe/Zurich",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        }).format(when);
+        if (isDateInVacationPeriods(merchant.vacationSettings, ymd)) {
+          return res.status(400).json({ error: VACATION_BLOCK_MESSAGE });
+        }
+      }
+    }
 
     if (!items?.length) {
       return res.status(400).json({ error: "Order items are required" });

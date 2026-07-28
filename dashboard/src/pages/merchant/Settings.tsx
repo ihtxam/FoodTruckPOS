@@ -37,6 +37,12 @@ interface SettingsData {
   status?: string | null;
   onlineCardFeeFixed?: string | null;
   onlineCardFeePercent?: string | null;
+  vacationSettings?: {
+    manualActive?: boolean;
+    popupImageUrl?: string | null;
+    message?: string | null;
+    periods?: Array<{ id: string; startDate: string; endDate: string; title?: string | null }>;
+  } | null;
 }
 
 interface AdyenCreds {
@@ -177,6 +183,7 @@ export default function Settings() {
     setSaving(true);
     try {
       const response = await api.put('/merchant/settings', {
+        name: settings.name,
         phone: settings.phone,
         address: settings.address,
         city: settings.city,
@@ -195,6 +202,12 @@ export default function Settings() {
         floorPlanEnabled: !!settings.floorPlanEnabled,
         paxOrderingEnabled: !!settings.paxOrderingEnabled,
         panelLanguage: settings.panelLanguage || locale,
+        vacationSettings: settings.vacationSettings || {
+          manualActive: false,
+          popupImageUrl: null,
+          message: null,
+          periods: [],
+        },
       });
       const next = response.data.merchant || response.data.settings || settings;
       setSettings((prev) => (prev ? { ...prev, ...next } : prev));
@@ -328,7 +341,12 @@ export default function Settings() {
               <Section title={t('businessSettings')} description={t('businessSettingsHint')}>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <Field label={t('businessName')}>
-                    <input className="input bg-[var(--bg-muted)]" value={settings.name} disabled />
+                    <input
+                      className="input"
+                      value={settings.name}
+                      onChange={(e) => setSettings({ ...settings, name: e.target.value })}
+                      required
+                    />
                   </Field>
                   <Field label={t('businessEmail')}>
                     <input className="input bg-[var(--bg-muted)]" value={settings.email} disabled />
@@ -369,6 +387,166 @@ export default function Settings() {
                       onChange={(e) => setSettings({ ...settings, country: e.target.value })}
                     />
                   </Field>
+                </div>
+              </Section>
+
+              <Section title={t('vacationHolidays')} description={t('vacationHolidaysHint')}>
+                <label className="flex items-start gap-2.5 rounded-md border border-[var(--border)] px-3 py-2.5 text-sm">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={!!settings.vacationSettings?.manualActive}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        vacationSettings: {
+                          ...(settings.vacationSettings || { periods: [] }),
+                          manualActive: e.target.checked,
+                        },
+                      })
+                    }
+                  />
+                  <span>
+                    <span className="font-medium block">{t('vacationManualActive')}</span>
+                    <span className="text-xs muted">{t('vacationManualHint')}</span>
+                  </span>
+                </label>
+                <Field label={t('vacationPopupImage')} hint={t('vacationPopupImageHint')}>
+                  <input
+                    className="input"
+                    value={settings.vacationSettings?.popupImageUrl || ''}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        vacationSettings: {
+                          ...(settings.vacationSettings || { periods: [] }),
+                          popupImageUrl: e.target.value,
+                        },
+                      })
+                    }
+                    placeholder="https://…"
+                  />
+                </Field>
+                <Field label={t('vacationMessage')}>
+                  <textarea
+                    className="input min-h-[4.5rem]"
+                    value={settings.vacationSettings?.message || ''}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        vacationSettings: {
+                          ...(settings.vacationSettings || { periods: [] }),
+                          message: e.target.value,
+                        },
+                      })
+                    }
+                    placeholder={t('vacationMessagePlaceholder')}
+                  />
+                </Field>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-medium">{t('vacationPeriods')}</span>
+                    <button
+                      type="button"
+                      className="btn-secondary text-xs"
+                      onClick={() => {
+                        const id =
+                          typeof crypto !== 'undefined' && crypto.randomUUID
+                            ? crypto.randomUUID()
+                            : `p-${Date.now()}`;
+                        const today = new Date().toISOString().slice(0, 10);
+                        setSettings({
+                          ...settings,
+                          vacationSettings: {
+                            ...(settings.vacationSettings || {}),
+                            periods: [
+                              ...(settings.vacationSettings?.periods || []),
+                              { id, startDate: today, endDate: today, title: '' },
+                            ],
+                          },
+                        });
+                      }}
+                    >
+                      {t('vacationAddPeriod')}
+                    </button>
+                  </div>
+                  {(settings.vacationSettings?.periods || []).length === 0 ? (
+                    <p className="text-xs muted">{t('vacationEmptyPeriods')}</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {(settings.vacationSettings?.periods || []).map((period, idx) => (
+                        <div
+                          key={period.id || idx}
+                          className="rounded-md border border-[var(--border)] p-3 space-y-2"
+                        >
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                            <Field label={t('vacationStart')}>
+                              <input
+                                className="input"
+                                type="date"
+                                value={period.startDate}
+                                onChange={(e) => {
+                                  const periods = [...(settings.vacationSettings?.periods || [])];
+                                  periods[idx] = { ...period, startDate: e.target.value };
+                                  setSettings({
+                                    ...settings,
+                                    vacationSettings: { ...settings.vacationSettings, periods },
+                                  });
+                                }}
+                                required
+                              />
+                            </Field>
+                            <Field label={t('vacationEnd')}>
+                              <input
+                                className="input"
+                                type="date"
+                                value={period.endDate}
+                                min={period.startDate}
+                                onChange={(e) => {
+                                  const periods = [...(settings.vacationSettings?.periods || [])];
+                                  periods[idx] = { ...period, endDate: e.target.value };
+                                  setSettings({
+                                    ...settings,
+                                    vacationSettings: { ...settings.vacationSettings, periods },
+                                  });
+                                }}
+                                required
+                              />
+                            </Field>
+                          </div>
+                          <Field label={t('vacationPeriodTitle')}>
+                            <input
+                              className="input"
+                              value={period.title || ''}
+                              onChange={(e) => {
+                                const periods = [...(settings.vacationSettings?.periods || [])];
+                                periods[idx] = { ...period, title: e.target.value };
+                                setSettings({
+                                  ...settings,
+                                  vacationSettings: { ...settings.vacationSettings, periods },
+                                });
+                              }}
+                            />
+                          </Field>
+                          <button
+                            type="button"
+                            className="text-xs text-red-700 underline"
+                            onClick={() => {
+                              const periods = (settings.vacationSettings?.periods || []).filter(
+                                (_, i) => i !== idx
+                              );
+                              setSettings({
+                                ...settings,
+                                vacationSettings: { ...settings.vacationSettings, periods },
+                              });
+                            }}
+                          >
+                            {t('vacationRemove')}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </Section>
 

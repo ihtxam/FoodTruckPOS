@@ -5,6 +5,7 @@ import axios from 'axios';
 import { resolveShopKey, shopBasePath } from '@/lib/shop-cart';
 import { useI18n } from '@/lib/i18n';
 import ShopLangSwitcher from '@/components/shop/ShopLangSwitcher';
+import ShopVacationPopup from '@/components/shop/ShopVacationPopup';
 
 type Slot = { time: string; available: boolean; remainingCovers: number };
 
@@ -146,6 +147,10 @@ export default function ReservationsPage() {
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
+    if (config?.vacation?.active) {
+      setError(t('shopVacationReservationsBlocked'));
+      return;
+    }
     if (!time) {
       setError(t('shopReservationsPickTime'));
       return;
@@ -195,6 +200,7 @@ export default function ReservationsPage() {
 
   return (
     <div className="min-h-screen bg-[#f6f5f2] text-stone-900 overflow-x-hidden">
+      <ShopVacationPopup vacation={config?.vacation} shopKey={shopKey} />
       <header className="sticky top-0 z-30 bg-white border-b border-stone-200">
         <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between gap-2">
           <Link
@@ -250,6 +256,12 @@ export default function ReservationsPage() {
             {error && (
               <div className="text-sm border border-red-200 bg-red-50 text-red-800 px-3 py-2">{error}</div>
             )}
+
+            {config?.vacation?.active ? (
+              <div className="text-sm border border-amber-200 bg-amber-50 text-amber-950 px-3 py-2">
+                {config.vacation.message?.trim() || t('shopVacationReservationsBlocked')}
+              </div>
+            ) : null}
 
             <fieldset className="space-y-2 min-w-0">
               <legend className="text-sm font-medium">{t('shopReservationsParty')}</legend>
@@ -479,10 +491,14 @@ export default function ReservationsPage() {
 
             <button
               type="submit"
-              disabled={submitting || !time}
+              disabled={submitting || !time || !!config?.vacation?.active}
               className="w-full bg-stone-900 text-white py-3 font-semibold disabled:opacity-40"
             >
-              {submitting ? t('saving') : t('shopReservationsBook')}
+              {config?.vacation?.active
+                ? t('shopVacationTitle')
+                : submitting
+                  ? t('saving')
+                  : t('shopReservationsBook')}
             </button>
           </form>
         )}

@@ -31,6 +31,7 @@ import { CalendarDays, ShoppingBag, User } from 'lucide-react';
 import { isLocale, useI18n } from '@/lib/i18n';
 import ShopLangSwitcher from '@/components/shop/ShopLangSwitcher';
 import ZipCityFields from '@/components/shop/ZipCityFields';
+import ShopVacationPopup from '@/components/shop/ShopVacationPopup';
 
 interface Product {
   id: string;
@@ -381,6 +382,10 @@ export default function OrderingPage() {
 
   const goCheckout = () => {
     if (!cart.length) return;
+    if (merchant?.vacation?.active) {
+      setError(t('shopVacationOrdersBlocked'));
+      return;
+    }
     if (channel === 'delivery' && deliveryInfo && !deliveryInfo.deliverable) {
       setError(t('shopOutsideDeliverySwitch'));
       return;
@@ -433,7 +438,8 @@ export default function OrderingPage() {
   const unlockedRewards = loyaltyRewards.filter((r) => r.unlocked);
   const accountPath = `${shopBasePath(shopKey)}/account`;
   const reservationsPath = `${shopBasePath(shopKey)}/reservations`;
-  const showReservations = !!merchant?.reservationsEnabled;
+  const vacationActive = !!merchant?.vacation?.active;
+  const showReservations = !!merchant?.reservationsEnabled && !vacationActive;
 
   const Basket = (
     <aside className="bg-white border border-stone-200 flex flex-col h-full">
@@ -580,14 +586,18 @@ export default function OrderingPage() {
 
         <button
           type="button"
-          disabled={!cart.length}
+          disabled={!cart.length || vacationActive}
           onClick={goCheckout}
           className="w-full bg-stone-900 text-white py-3 font-semibold disabled:opacity-40"
         >
-          {channelMeta?.open ? t('shopGoCheckout') : t('shopScheduleCheckout')}
+          {vacationActive
+            ? t('shopVacationTitle')
+            : channelMeta?.open
+              ? t('shopGoCheckout')
+              : t('shopScheduleCheckout')}
         </button>
         <p className="text-[11px] text-stone-400 text-center">
-          {t('shopCheckoutHint')}
+          {vacationActive ? t('shopVacationOrdersBlocked') : t('shopCheckoutHint')}
         </p>
       </div>
     </aside>
@@ -595,6 +605,7 @@ export default function OrderingPage() {
 
   return (
     <div className="min-h-screen bg-[#f6f5f2] text-stone-900">
+      <ShopVacationPopup vacation={merchant?.vacation} shopKey={shopKey} />
       <header className="sticky top-0 z-30 bg-white border-b border-stone-200">
         <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between gap-2">
           <Link

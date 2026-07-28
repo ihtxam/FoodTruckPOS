@@ -1,6 +1,8 @@
 import { getDb, schema } from "@/db";
+import type { VacationSettings } from "@/db/schema";
 import { eq, and, or } from "drizzle-orm";
 import { normalizeCustomDomain } from "@/services/cms.service";
+import { normalizeVacationSettings } from "@/lib/vacation";
 
 function maskSecret(value?: string | null): string | null {
   if (!value) return null;
@@ -82,6 +84,7 @@ export class MerchantSettingsService {
       pickupEtaMinutes: merchant.pickupEtaMinutes,
       deliveryEtaMinutes: merchant.deliveryEtaMinutes,
       deliveryMenuMarkup: merchant.deliveryMenuMarkup ?? "0",
+      vacationSettings: normalizeVacationSettings(merchant.vacationSettings),
       shopPathUrl: merchant.slug ? `https://${shopHost}/${merchant.slug}` : null,
       shopSubdomainUrl: merchant.subdomain ? `https://${merchant.subdomain}.${apex}` : null,
       shopCustomDomainUrl: merchant.customDomain ? `https://${merchant.customDomain}` : null,
@@ -100,6 +103,7 @@ export class MerchantSettingsService {
   static async updateMerchantSettings(
     merchantId: string,
     updates: {
+      name?: string;
       phone?: string;
       address?: string;
       city?: string;
@@ -128,6 +132,7 @@ export class MerchantSettingsService {
       pickupEtaMinutes?: number;
       deliveryEtaMinutes?: number;
       deliveryMenuMarkup?: number;
+      vacationSettings?: VacationSettings | null;
       adyenMerchantAccount?: string;
       adyenApiKey?: string;
       adyenClientId?: string;
@@ -140,6 +145,11 @@ export class MerchantSettingsService {
 
     const patch: Record<string, unknown> = { updatedAt: new Date() };
 
+    if (updates.name !== undefined) {
+      const name = String(updates.name || "").trim().slice(0, 255);
+      if (!name) throw new Error("Business name is required");
+      patch.name = name;
+    }
     if (updates.phone !== undefined) patch.phone = updates.phone;
     if (updates.address !== undefined) patch.address = updates.address;
     if (updates.city !== undefined) patch.city = updates.city;
@@ -218,6 +228,9 @@ export class MerchantSettingsService {
     }
     if (updates.cmsHomepageEnabled !== undefined) {
       patch.cmsHomepageEnabled = !!updates.cmsHomepageEnabled;
+    }
+    if (updates.vacationSettings !== undefined) {
+      patch.vacationSettings = normalizeVacationSettings(updates.vacationSettings);
     }
 
     // Auto-create slug when enabling shop without one

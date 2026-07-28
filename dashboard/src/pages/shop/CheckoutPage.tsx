@@ -25,6 +25,7 @@ import { roundMoney2, roundTo005, roundingAdjustment } from '@/lib/money';
 import { isLocale, useI18n } from '@/lib/i18n';
 import ShopLangSwitcher from '@/components/shop/ShopLangSwitcher';
 import ZipCityFields from '@/components/shop/ZipCityFields';
+import ShopVacationPopup from '@/components/shop/ShopVacationPopup';
 
 type Step = 'details' | 'payment' | 'review';
 type WhenMode = 'asap' | 'later';
@@ -398,6 +399,10 @@ export default function CheckoutPage() {
   };
 
   const placeOrder = async () => {
+    if (merchant?.vacation?.active) {
+      setError(t('shopVacationOrdersBlocked'));
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
@@ -489,6 +494,7 @@ export default function CheckoutPage() {
 
   return (
     <div className="min-h-screen bg-[#f6f5f2] text-stone-900">
+      <ShopVacationPopup vacation={merchant?.vacation} shopKey={shopKey} />
       <header className="bg-white border-b border-stone-200">
         <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between gap-3">
           <Link to={`${shopBasePath(shopKey) || '/'}`} className="font-bold tracking-tight min-w-0 truncate">
@@ -1145,10 +1151,12 @@ export default function CheckoutPage() {
               <button
                 type="button"
                 className="w-full bg-stone-900 text-white py-3.5 font-semibold disabled:opacity-40"
-                disabled={submitting}
+                disabled={submitting || !!merchant?.vacation?.active}
                 onClick={placeOrder}
               >
-                {submitting
+                {merchant?.vacation?.active
+                  ? t('shopVacationTitle')
+                  : submitting
                   ? t('shopPlacingOrder')
                   : pointsCoverFullOrder
                     ? t('shopPlaceOrderPoints')
