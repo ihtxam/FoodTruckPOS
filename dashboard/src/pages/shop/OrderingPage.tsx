@@ -27,12 +27,13 @@ import ShopComboWizard, {
   type ComboSlot,
   type ShopComboProduct,
 } from '@/components/shop/ShopComboWizard';
-import { CalendarDays, ShoppingBag, User } from 'lucide-react';
+import { CalendarDays, ChevronDown, LayoutGrid, Plus, Rows3, ShoppingBag, User } from 'lucide-react';
 import { isLocale, useI18n } from '@/lib/i18n';
 import ShopLangSwitcher from '@/components/shop/ShopLangSwitcher';
 import ZipCityFields from '@/components/shop/ZipCityFields';
 import ShopVacationPopup from '@/components/shop/ShopVacationPopup';
 import ShopNotAcceptingBanner from '@/components/shop/ShopNotAcceptingBanner';
+import ShopChannelPrompt from '@/components/shop/ShopChannelPrompt';
 
 interface Product {
   id: string;
@@ -92,6 +93,14 @@ export default function OrderingPage() {
   const [loyaltyRewards, setLoyaltyRewards] = useState<LoyaltyReward[]>([]);
   const [loyaltyProgress, setLoyaltyProgress] = useState(0);
   const [nextRewardPts, setNextRewardPts] = useState<number | null>(null);
+  const [gridCols, setGridCols] = useState<1 | 2>(() => {
+    try {
+      return localStorage.getItem('manupos_shop_grid') === '1' ? 1 : 2;
+    } catch {
+      return 2;
+    }
+  });
+  const [channelPromptOpen, setChannelPromptOpen] = useState(false);
 
   useEffect(() => {
     if (!shopKey) {
@@ -159,12 +168,26 @@ export default function OrderingPage() {
         const channels = data.channels || {};
         const preferred: ShopChannel[] = ['takeaway', 'delivery', 'dine_in'];
         const first = preferred.find((c) => channels[c]?.enabled);
+        const mode = String(data.channelSelectMode || 'checkout');
         setDraft((d) => {
-          const next = { ...d, channel: d.channel && channels[d.channel]?.enabled ? d.channel : first || 'takeaway' };
+          const next = {
+            ...d,
+            channel: d.channel && channels[d.channel]?.enabled ? d.channel : first || 'takeaway',
+          };
           saveCart(shopKey, next);
           return next;
         });
         setError(null);
+        // Popup at start when merchant asks for it and multiple channels exist
+        const enabledCount = preferred.filter((c) => channels[c]?.enabled).length;
+        if (mode === 'popup_start' && enabledCount > 1) {
+          try {
+            const key = `manupos_channel_prompted_${shopKey}`;
+            if (!sessionStorage.getItem(key)) setChannelPromptOpen(true);
+          } catch {
+            setChannelPromptOpen(true);
+          }
+        }
       } catch (e: any) {
         setError(e.response?.data?.error || t('shopFailedLoad'));
       } finally {
@@ -439,6 +462,38 @@ export default function OrderingPage() {
     { id: 'dine_in', label: t('shopDineIn') },
   ];
   const channelButtons = allChannels.filter((c) => channels[c.id]?.enabled);
+  const channelSelectMode = String(merchant?.channelSelectMode || 'checkout') as
+    | 'checkout'
+    | 'popup_start'
+    | 'menu';
+  const showMenuChannelButtons = channelSelectMode === 'menu' && channelButtons.length > 1;
+  const channelLabel =
+    channelButtons.find((c) => c.id === channel)?.label || t('shopPickup');
+  const etaMin = channelMeta?.etaMinutes || 30;
+
+  const setGrid = (cols: 1 | 2) => {
+    setGridCols(cols);
+    try {
+      localStorage.setItem('manupos_shop_grid', String(cols));
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const openChannelPrompt = () => {
+    if (channelButtons.length <= 1) return;
+    setChannelPromptOpen(true);
+  };
+
+  const confirmChannelPrompt = () => {
+    try {
+      sessionStorage.setItem(`manupos_channel_prompted_${shopKey}`, '1');
+    } catch {
+      /* ignore */
+    }
+    setChannelPromptOpen(false);
+    setError(null);
+  };
   const loyaltyEnabled = !!merchant?.loyalty?.enabled;
   const unlockedRewards = loyaltyRewards.filter((r) => r.unlocked);
   const accountPath = `${shopBasePath(shopKey)}/account`;
@@ -674,68 +729,101 @@ export default function OrderingPage() {
         </div>
       ) : null}
 
-      <section className="bg-white border-b border-stone-200">
+      <section className="bg-white border-b border-stone-100">
+        <div className="max-w-7xl mx-auto px-4 pt-3 pb-2">
+          <button
+            type="button"
+            onClick={openChannelPrompt}
+            className="mx-auto flex w-full max-w-lg items-center justify-center gap-1.5 rounded-full border border-stone-200 bg-stone-50 px-3 py-2 text-[12px] sm:text-[13px] text-stone-700 hover:border-stone-300"
+          >
+            <span className="font-semibold text-stone-900">{channelLabel}</span>
+            <span className="text-stone-300">|</span>
+            <span className="truncate font-medium">{merchant?.name}</span>
+            <span className="text-stone-300">|</span>
+            <span className="tabular-nums whitespace-nowrap">
+              {etaMin}–{etaMin + 10} {t('shopMins')}
+            </span>
+            {channelButtons.length > 1 ? <ChevronDown className="h-3.5 w-3.5 text-stone-400 shrink-0" /> : null}
+          </button>
+        </div>
+
         {merchant?.shopBannerUrl && (
           <div
-            className="h-36 md:h-48 w-full bg-cover bg-center"
+            className="h-40 md:h-52 w-full bg-cover bg-center"
             style={{ backgroundImage: `url(${merchant.shopBannerUrl})` }}
           />
         )}
-        <div className="max-w-7xl mx-auto px-4 py-5">
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight uppercase">{merchant?.name}</h1>
-          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-stone-600">
-            <span>
-              {merchant?.address}
-              {merchant?.city ? `, ${merchant.city}` : ''}
-              {mapsUrl && (
-                <>
-                  {' · '}
-                  <a href={mapsUrl} target="_blank" rel="noreferrer" className="underline text-stone-900">
-                    {t('shopOpenMaps')}
-                  </a>
-                </>
-              )}
-            </span>
-          </div>
-          <div className="mt-2 flex flex-wrap items-center gap-3 text-sm">
-            <span className="font-medium">
-              {(merchant?.displayHours?.todayLabel || channelMeta?.todayLabel) || t('shopHoursNotSet')}
-            </span>
-            <span
-              className={`px-2 py-0.5 text-xs font-semibold ${
-                channelMeta?.open ? 'bg-teal-100 text-teal-900' : 'bg-stone-200 text-stone-700'
-              }`}
-            >
-              {channelMeta?.open ? t('shopOpenNow') : t('shopClosed')}
-            </span>
-          </div>
 
-          <div className="mt-4 flex flex-wrap gap-2">
-            {channelButtons.map((c) => {
-              const meta = channels[c.id];
-              return (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() => {
-                    patch({ channel: c.id });
-                    setError(null);
-                    setDeliveryInfo(null);
-                  }}
-                  className={`px-4 py-2 text-sm font-semibold border ${
-                    channel === c.id
-                      ? 'bg-stone-900 text-white border-stone-900'
-                      : 'bg-white text-stone-800 border-stone-300'
+        <div className="max-w-7xl mx-auto px-4 py-4 space-y-2">
+          {!merchant?.shopBannerUrl ? (
+            <h1 className="text-xl md:text-2xl font-bold tracking-tight">{merchant?.name}</h1>
+          ) : null}
+          <div className="flex flex-wrap items-start justify-between gap-2 text-[13px] text-stone-600">
+            <div className="min-w-0 space-y-1">
+              {(merchant?.address || merchant?.city) && (
+                <p>
+                  <span className="text-stone-800 font-medium">{merchant?.name}</span>
+                  {merchant?.address ? ` · ${merchant.address}` : ''}
+                  {merchant?.city ? `, ${merchant.city}` : ''}
+                  {mapsUrl ? (
+                    <>
+                      {' · '}
+                      <a href={mapsUrl} target="_blank" rel="noreferrer" className="font-medium text-rose-600 hover:underline">
+                        {t('shopGetMap')}
+                      </a>
+                    </>
+                  ) : null}
+                </p>
+              )}
+              <p className="flex flex-wrap items-center gap-2">
+                <span>
+                  {(merchant?.displayHours?.todayLabel || channelMeta?.todayLabel) || t('shopHoursNotSet')}
+                </span>
+                <span
+                  className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                    channelMeta?.open ? 'bg-emerald-50 text-emerald-700' : 'bg-stone-100 text-stone-600'
                   }`}
                 >
-                  {c.label}
-                  <span className="ml-2 font-normal opacity-80">
-                    {meta.etaMinutes}–{meta.etaMinutes + 10} min
-                  </span>
-                </button>
-              );
-            })}
+                  {channelMeta?.open ? t('shopOpenNow') : t('shopClosed')}
+                </span>
+                <span className="text-stone-400">·</span>
+                <span>
+                  {channelLabel} {etaMin}–{etaMin + 10} {t('shopMins')}
+                </span>
+              </p>
+            </div>
           </div>
+
+          {showMenuChannelButtons ? (
+            <div className="flex flex-wrap gap-2 pt-1">
+              {channelButtons.map((c) => {
+                const meta = channels[c.id];
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => {
+                      patch({ channel: c.id });
+                      setError(null);
+                      setDeliveryInfo(null);
+                    }}
+                    className={`rounded-full px-3.5 py-1.5 text-sm font-semibold border ${
+                      channel === c.id
+                        ? 'bg-stone-900 text-white border-stone-900'
+                        : 'bg-white text-stone-700 border-stone-200'
+                    }`}
+                  >
+                    {c.label}
+                    <span className="ml-1.5 font-normal opacity-70">{meta.etaMinutes} {t('shopMins')}</span>
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+
+          {channelSelectMode === 'checkout' && channelButtons.length > 1 ? (
+            <p className="text-[12px] text-stone-500">{t('shopChannelAtCheckoutHint')}</p>
+          ) : null}
         </div>
       </section>
 
@@ -785,37 +873,69 @@ export default function OrderingPage() {
             </div>
           )}
 
-          <div className="sticky top-16 z-20 -mx-4 px-4 py-3 bg-[#f6f5f2]/80 backdrop-blur border-b border-stone-200/80 mb-4">
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              <button
-                type="button"
-                onClick={() => setSelectedCategory('all')}
-                className={`whitespace-nowrap px-3 py-1.5 text-sm font-medium border ${
-                  selectedCategory === 'all'
-                    ? 'bg-white border-stone-900 text-stone-900'
-                    : 'bg-transparent border-transparent text-stone-600'
-                }`}
-              >
-                {t('shopAllCategories')}
-              </button>
-              {menu.map((cat) => (
+          <div className="sticky top-16 z-20 -mx-4 px-4 py-2.5 bg-[#f6f5f2]/90 backdrop-blur border-b border-stone-200/70 mb-4">
+            <div className="flex items-center gap-2">
+              <div className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto pb-0.5">
                 <button
-                  key={cat.id}
                   type="button"
-                  onClick={() => setSelectedCategory(cat.id)}
-                  className={`whitespace-nowrap px-3 py-1.5 text-sm font-medium border ${
-                    selectedCategory === cat.id
-                      ? 'bg-white border-stone-900 text-stone-900'
-                      : 'bg-transparent border-transparent text-stone-600'
+                  onClick={() => setSelectedCategory('all')}
+                  className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-medium ${
+                    selectedCategory === 'all'
+                      ? 'bg-stone-900 text-white'
+                      : 'bg-transparent text-stone-600 hover:bg-white'
                   }`}
                 >
-                  {cat.name}
+                  {t('shopAllCategories')}
                 </button>
-              ))}
+                {menu.map((cat) => (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => setSelectedCategory(cat.id)}
+                    className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-medium ${
+                      selectedCategory === cat.id
+                        ? 'bg-stone-900 text-white'
+                        : 'bg-transparent text-stone-600 hover:bg-white'
+                    }`}
+                  >
+                    {cat.name}
+                  </button>
+                ))}
+              </div>
+              <div className="flex shrink-0 items-center rounded-full border border-stone-200 bg-white p-0.5">
+                <button
+                  type="button"
+                  className={`inline-flex h-8 w-8 items-center justify-center rounded-full ${
+                    gridCols === 1 ? 'bg-stone-900 text-white' : 'text-stone-500'
+                  }`}
+                  aria-label={t('shopOneColumn')}
+                  title={t('shopOneColumn')}
+                  onClick={() => setGrid(1)}
+                >
+                  <Rows3 className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  className={`inline-flex h-8 w-8 items-center justify-center rounded-full ${
+                    gridCols === 2 ? 'bg-stone-900 text-white' : 'text-stone-500'
+                  }`}
+                  aria-label={t('shopTwoColumn')}
+                  title={t('shopTwoColumn')}
+                  onClick={() => setGrid(2)}
+                >
+                  <LayoutGrid className="h-4 w-4" />
+                </button>
+              </div>
             </div>
           </div>
 
-          <div className="space-y-3">
+          <div
+            className={
+              gridCols === 2
+                ? 'grid grid-cols-2 gap-3 sm:gap-4'
+                : 'grid grid-cols-1 gap-3 max-w-xl'
+            }
+          >
             {visibleItems.map((product) => {
               const rewardPts =
                 product.loyaltyRewardPoints != null && Number(product.loyaltyRewardPoints) >= 1
@@ -823,64 +943,64 @@ export default function OrderingPage() {
                   : null;
               const unlocked = rewardPts != null && customer && loyaltyBalance >= rewardPts;
               return (
-                <div
-                  key={product.id}
-                  className="bg-white border border-stone-200 p-4 flex gap-4 hover:border-stone-400 transition-colors"
-                >
-                  <button
-                    type="button"
-                    onClick={() => handleProductClick(product)}
-                    className="flex-1 min-w-0 text-left"
-                  >
-                    <div className="font-semibold text-stone-900 flex flex-wrap items-center gap-2">
-                      <span>{product.name}</span>
-                      {rewardPts != null && (
-                        <span className="text-[11px] font-semibold bg-amber-100 text-amber-900 px-1.5 py-0.5">
-                          {t('shopPtsBadge').replace('{n}', String(rewardPts))}
-                        </span>
-                      )}
-                    </div>
-                    {product.description && (
-                      <p className="text-sm text-stone-500 mt-1 line-clamp-2">{product.description}</p>
-                    )}
-                    <div className="mt-2 flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold">CHF {catalogUnitPrice(product.price).toFixed(2)}</span>
-                      {productHasComboSlots(product) ? (
-                        <span className="text-xs font-medium text-teal-800">Build combo</span>
-                      ) : productHasModifiers(product) ? (
-                        <span className="text-xs font-medium text-stone-500">Customize</span>
-                      ) : null}
-                    </div>
-                  </button>
-                  <div className="flex flex-col items-end gap-2 shrink-0">
+                <article key={product.id} className="group flex flex-col">
+                  <div className="relative aspect-square overflow-hidden bg-stone-100 rounded-sm">
                     {product.image ? (
                       <img
                         src={product.image}
                         alt=""
-                        className="w-24 h-24 object-cover bg-stone-100"
+                        className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"
                       />
                     ) : (
-                      <div className="w-24 h-24 bg-stone-100 flex items-center justify-center text-2xl text-stone-300">
-                        +
+                      <div className="flex h-full w-full items-center justify-center text-stone-300 text-3xl font-light">
+                        {(product.name || '?').slice(0, 1).toUpperCase()}
                       </div>
                     )}
-                    {unlocked && (
+                    <button
+                      type="button"
+                      onClick={() => handleProductClick(product)}
+                      className="absolute bottom-2 right-2 inline-flex h-9 w-9 items-center justify-center rounded-full bg-rose-500 text-white shadow-md hover:bg-rose-600 active:scale-95"
+                      aria-label={`${t('shopAdd')} ${product.name}`}
+                    >
+                      <Plus className="h-5 w-5" strokeWidth={2.5} />
+                    </button>
+                    {unlocked ? (
                       <button
                         type="button"
                         onClick={() => addConfiguredItem(product, [], 0, [], true)}
-                        className="text-xs font-semibold bg-teal-800 text-white px-2 py-1"
+                        className="absolute left-2 top-2 rounded-full bg-teal-800 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white"
                       >
                         {t('shopFree')}
                       </button>
-                    )}
+                    ) : null}
                   </div>
-                </div>
+                  <button
+                    type="button"
+                    onClick={() => handleProductClick(product)}
+                    className="mt-2 text-left"
+                  >
+                    <p className="font-semibold text-stone-900 text-sm sm:text-[15px] leading-snug line-clamp-2 uppercase tracking-wide">
+                      {product.name}
+                    </p>
+                    {gridCols === 1 && product.description ? (
+                      <p className="mt-0.5 text-sm text-stone-500 line-clamp-2">{product.description}</p>
+                    ) : null}
+                    <p className="mt-0.5 text-sm text-stone-700 tabular-nums">
+                      CHF {catalogUnitPrice(product.price).toFixed(2)}
+                    </p>
+                    {rewardPts != null ? (
+                      <p className="mt-0.5 text-[11px] font-medium text-amber-800">
+                        {t('shopPtsBadge').replace('{n}', String(rewardPts))}
+                      </p>
+                    ) : null}
+                  </button>
+                </article>
               );
             })}
-            {visibleItems.length === 0 && (
-              <p className="text-stone-500 py-12 text-center">{t('shopNoProducts')}</p>
-            )}
           </div>
+          {visibleItems.length === 0 && (
+            <p className="text-stone-500 py-12 text-center">{t('shopNoProducts')}</p>
+          )}
         </div>
 
         <div className="hidden lg:block sticky top-20 h-[calc(100vh-6rem)]">{Basket}</div>
@@ -925,6 +1045,33 @@ export default function OrderingPage() {
           }}
         />
       )}
+
+      <ShopChannelPrompt
+        open={channelPromptOpen}
+        title={t('shopChooseHow')}
+        subtitle={
+          channelSelectMode === 'popup_start'
+            ? t('shopChooseHowHint')
+            : t('shopChangeChannelHint')
+        }
+        options={channelButtons.map((c) => ({
+          id: c.id,
+          label: c.label,
+          etaMinutes: channels[c.id]?.etaMinutes || 30,
+          open: !!channels[c.id]?.open,
+          todayLabel: channels[c.id]?.todayLabel,
+        }))}
+        selected={channel}
+        confirmLabel={t('shopContinue')}
+        dismissible={channelSelectMode !== 'popup_start'}
+        onSelect={(id) => {
+          patch({ channel: id });
+          setDeliveryInfo(null);
+          setError(null);
+        }}
+        onConfirm={confirmChannelPrompt}
+        onClose={() => setChannelPromptOpen(false)}
+      />
     </div>
   );
 }
