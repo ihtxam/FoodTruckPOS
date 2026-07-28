@@ -62,6 +62,16 @@ export const merchants = pgTable(
     /** Custom apex/domain for CMS website (e.g. cafe.ch) — DNS CNAME to platform */
     customDomain: varchar("custom_domain", { length: 255 }),
     shopEnabled: boolean("shop_enabled").default(false).notNull(),
+    /**
+     * Soft close for online ordering (shop stays browsable).
+     * When false, visitors see “not accepting orders… please call us”.
+     */
+    acceptingOrders: boolean("accepting_orders").default(true).notNull(),
+    /**
+     * Soft close for online reservations (module can stay enabled).
+     * When false, visitors see “not accepting reservations… please call us”.
+     */
+    acceptingReservations: boolean("accepting_reservations").default(true).notNull(),
     /** When true, shop root serves published CMS homepage instead of menu */
     cmsHomepageEnabled: boolean("cms_homepage_enabled").default(false).notNull(),
     // Online ordering channels
@@ -757,7 +767,7 @@ export type VacationPeriod = {
   endDate: string;
   /** End time HH:mm (Europe/Zurich), default 23:59 */
   endTime?: string | null;
-  /** Period label shown on popup — multilingual */
+  /** Period label — deprecated, ignored in UI (title & message on settings are enough) */
   title?: LocalizedText | string | null;
 };
 

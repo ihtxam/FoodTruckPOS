@@ -10,6 +10,7 @@ import { CalendarDays, ShoppingBag } from 'lucide-react';
 import { cmsPuckConfig, emptyPuckData, withReservationsHomeCtas } from '@/lib/cms/puck-config';
 import { CmsShopProvider } from '@/lib/cms/CmsShopContext';
 import ShopVacationPopup from '@/components/shop/ShopVacationPopup';
+import ShopNotAcceptingBanner from '@/components/shop/ShopNotAcceptingBanner';
 
 function asPuckData(blocks: unknown): Data {
   if (blocks && typeof blocks === 'object' && !Array.isArray(blocks) && Array.isArray((blocks as Data).content)) {
@@ -96,9 +97,21 @@ export default function ShopHomePage() {
 
   const themeCss = useMemo(() => themeToCss(theme), [theme]);
   const vacationActive = Boolean(merchant?.vacation?.active);
+  const ordersPaused = merchant?.acceptingOrders === false;
+  const reservationsPaused = merchant?.acceptingReservations === false;
+  const showReservationsNav =
+    Boolean(merchant?.reservationsEnabled) && !vacationActive && !reservationsPaused;
+  const pauseBannerKind =
+    !vacationActive && ordersPaused && reservationsPaused && merchant?.reservationsEnabled
+      ? ('both' as const)
+      : !vacationActive && ordersPaused
+        ? ('orders' as const)
+        : !vacationActive && reservationsPaused && merchant?.reservationsEnabled
+          ? ('reservations' as const)
+          : null;
   const renderData = useMemo(
-    () => withReservationsHomeCtas(data, Boolean(merchant?.reservationsEnabled) && !vacationActive),
-    [data, merchant?.reservationsEnabled, vacationActive],
+    () => withReservationsHomeCtas(data, showReservationsNav),
+    [data, showReservationsNav],
   );
   const hasContent = Array.isArray(data.content) && data.content.length > 0;
 
@@ -133,7 +146,7 @@ export default function ShopHomePage() {
         menu,
         storeHours: merchant.storeHours || {},
         merchantName: merchant.name,
-        reservationsEnabled: Boolean(merchant.reservationsEnabled) && !vacationActive,
+        reservationsEnabled: showReservationsNav,
       }}
     >
       {themeCss ? <style dangerouslySetInnerHTML={{ __html: themeCss }} /> : null}
@@ -157,7 +170,7 @@ export default function ShopHomePage() {
             </Link>
             <div className="flex items-center gap-1 shrink-0">
               <ShopLangSwitcher />
-              {merchant.reservationsEnabled && !vacationActive ? (
+              {showReservationsNav ? (
                 <Link
                   to={`${base}/reservations`}
                   className="inline-flex h-9 w-9 items-center justify-center text-stone-700 hover:bg-stone-100"
@@ -180,6 +193,11 @@ export default function ShopHomePage() {
         </header>
 
         <main>
+          {pauseBannerKind ? (
+            <div className="max-w-5xl mx-auto px-4 pt-4">
+              <ShopNotAcceptingBanner kind={pauseBannerKind} phone={merchant.phone} />
+            </div>
+          ) : null}
           {hasContent ? (
             <Render config={cmsPuckConfig} data={renderData} />
           ) : (
@@ -199,7 +217,7 @@ export default function ShopHomePage() {
               {merchant.phone && <p className="mt-1">{merchant.phone}</p>}
             </div>
             <div className="flex flex-wrap gap-4 self-start">
-              {merchant.reservationsEnabled && !vacationActive ? (
+              {showReservationsNav ? (
                 <Link to={`${base}/reservations`} className="underline">
                   {t('shopReservations')}
                 </Link>

@@ -11,7 +11,6 @@ export type ShopVacationInfo = {
   active?: boolean;
   message?: LocalizedText | string | null;
   popupTitle?: LocalizedText | string | null;
-  label?: LocalizedText | string | null;
   popupImageUrl?: string | null;
 };
 
@@ -39,8 +38,7 @@ export default function ShopVacationPopup({ vacation, shopKey }: Props) {
   const { t, locale } = useI18n();
   const title = pickLocalized(vacation?.popupTitle, locale, t('shopVacationTitle'));
   const message = pickLocalized(vacation?.message, locale, t('shopVacationDefaultMsg'));
-  const label = pickLocalized(vacation?.label, locale, '');
-  const storageKey = `chaslay_vacation_dismissed:${shopKey || 'shop'}:${vacation?.popupImageUrl || ''}:${title}:${message}:${label}`;
+  const storageKey = `chaslay_vacation_dismissed:${shopKey || 'shop'}:${vacation?.popupImageUrl || ''}:${title}:${message}`;
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -87,9 +85,6 @@ export default function ShopVacationPopup({ vacation, shopKey }: Props) {
         ) : null}
         <div className="p-5 space-y-3 text-center">
           <h2 className="text-xl font-bold tracking-tight text-stone-900">{title}</h2>
-          {label ? (
-            <p className="text-sm font-medium text-stone-800">{label}</p>
-          ) : null}
           <p className="text-sm text-stone-600">{message}</p>
           <p className="text-xs text-stone-500">{t('shopVacationBrowseHint')}</p>
           <button

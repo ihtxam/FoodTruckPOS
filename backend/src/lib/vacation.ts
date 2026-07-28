@@ -169,11 +169,15 @@ export function vacationPublicPayload(
     message: settings.message,
     popupTitle: settings.popupTitle,
     popupImageUrl: settings.popupImageUrl,
-    /** Label of the currently active period (multilingual) */
-    label: activePeriod?.title || null,
     periods: settings.periods,
   };
 }
 
 export const VACATION_BLOCK_MESSAGE =
   "We are currently on vacation. Online orders and reservations are temporarily unavailable.";
+
+export const NOT_ACCEPTING_ORDERS_MESSAGE =
+  "We are not accepting orders at the moment, please call us";
+
+export const NOT_ACCEPTING_RESERVATIONS_MESSAGE =
+  "We are not accepting reservations at the moment, please call us";

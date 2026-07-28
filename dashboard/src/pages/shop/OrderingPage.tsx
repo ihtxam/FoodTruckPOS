@@ -32,6 +32,7 @@ import { isLocale, useI18n } from '@/lib/i18n';
 import ShopLangSwitcher from '@/components/shop/ShopLangSwitcher';
 import ZipCityFields from '@/components/shop/ZipCityFields';
 import ShopVacationPopup from '@/components/shop/ShopVacationPopup';
+import ShopNotAcceptingBanner from '@/components/shop/ShopNotAcceptingBanner';
 
 interface Product {
   id: string;
@@ -382,6 +383,10 @@ export default function OrderingPage() {
 
   const goCheckout = () => {
     if (!cart.length) return;
+    if (merchant?.acceptingOrders === false) {
+      setError(t('shopNotAcceptingOrders'));
+      return;
+    }
     if (merchant?.vacation?.active) {
       setError(t('shopVacationOrdersBlocked'));
       return;
@@ -439,7 +444,11 @@ export default function OrderingPage() {
   const accountPath = `${shopBasePath(shopKey)}/account`;
   const reservationsPath = `${shopBasePath(shopKey)}/reservations`;
   const vacationActive = !!merchant?.vacation?.active;
-  const showReservations = !!merchant?.reservationsEnabled && !vacationActive;
+  const ordersPaused = merchant?.acceptingOrders === false;
+  const showReservations =
+    !!merchant?.reservationsEnabled &&
+    !vacationActive &&
+    merchant?.acceptingReservations !== false;
 
   const Basket = (
     <aside className="bg-white border border-stone-200 flex flex-col h-full">
@@ -586,11 +595,13 @@ export default function OrderingPage() {
 
         <button
           type="button"
-          disabled={!cart.length || vacationActive}
+          disabled={!cart.length || vacationActive || ordersPaused}
           onClick={goCheckout}
           className="w-full bg-stone-900 text-white py-3 font-semibold disabled:opacity-40"
         >
-          {vacationActive
+          {ordersPaused
+            ? t('shopNotAcceptingOrders')
+            : vacationActive
             ? t('shopVacationTitle')
             : channelMeta?.open
               ? t('shopGoCheckout')
@@ -659,6 +670,12 @@ export default function OrderingPage() {
           </div>
         </div>
       </header>
+
+      {ordersPaused && !vacationActive ? (
+        <div className="max-w-7xl mx-auto px-4 pt-4">
+          <ShopNotAcceptingBanner kind="orders" phone={merchant?.phone} />
+        </div>
+      ) : null}
 
       <section className="bg-white border-b border-stone-200">
         {merchant?.shopBannerUrl && (
