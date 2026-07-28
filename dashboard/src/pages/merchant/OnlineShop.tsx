@@ -35,12 +35,6 @@ const DAYS = [
 type DayKey = (typeof DAYS)[number]['key'];
 type HoursChannelKey = 'takeaway' | 'dine_in' | 'delivery' | 'display';
 
-const ORDER_CHANNELS: { key: Exclude<HoursChannelKey, 'display'>; label: string }[] = [
-  { key: 'takeaway', label: 'Pickup' },
-  { key: 'dine_in', label: 'Dine in' },
-  { key: 'delivery', label: 'Delivery' },
-];
-
 const ALL_CHANNELS: HoursChannelKey[] = ['takeaway', 'dine_in', 'delivery', 'display'];
 
 /** Channels a quick schedule can be applied to (multi-select). */
@@ -178,10 +172,11 @@ export default function OnlineShop() {
     { open: '11:00', close: '14:00' },
     { open: '17:00', close: '23:00' },
   ]);
-  const [applyChannels, setApplyChannels] = useState<HoursChannelKey[]>([...ALL_CHANNELS]);
+  /** Mode currently being edited (schedules are independent per mode). */
+  const [editChannel, setEditChannel] = useState<HoursChannelKey>('takeaway');
+  /** Optional extras when applying the quick schedule (never overwrites unselected modes). */
+  const [alsoCopyTo, setAlsoCopyTo] = useState<HoursChannelKey[]>([]);
   const [markClosed, setMarkClosed] = useState(false);
-  const [showFineTune, setShowFineTune] = useState(false);
-  const [fineTuneChannel, setFineTuneChannel] = useState<HoursChannelKey>('takeaway');
   const [zones, setZones] = useState<Zone[]>([]);
 
   const [zoneName, setZoneName] = useState('');
@@ -312,19 +307,21 @@ export default function OnlineShop() {
     });
   };
 
-  const toggleApplyChannel = (key: HoursChannelKey) => {
-    setApplyChannels((prev) =>
+  const toggleAlsoCopyTo = (key: HoursChannelKey) => {
+    if (key === editChannel) return;
+    setAlsoCopyTo((prev) =>
       prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
     );
+  };
+
+  const selectEditChannel = (key: HoursChannelKey) => {
+    setEditChannel(key);
+    setAlsoCopyTo((prev) => prev.filter((k) => k !== key));
   };
 
   const applyQuickSchedule = () => {
     if (!selectedDays.length) {
       toast.error('Select at least one day');
-      return;
-    }
-    if (!applyChannels.length) {
-      toast.error('Select at least one mode (pickup, delivery, dine-in, or homepage)');
       return;
     }
     const slots = markClosed
@@ -334,7 +331,7 @@ export default function OnlineShop() {
       toast.error('Add at least one open–close time');
       return;
     }
-    const channels = [...applyChannels];
+    const channels = Array.from(new Set<HoursChannelKey>([editChannel, ...alsoCopyTo]));
     setHours((prev) => {
       const next: StoreHours = { ...prev };
       for (const ch of channels) {
@@ -350,12 +347,9 @@ export default function OnlineShop() {
       selectedDays.length === 7
         ? 'every day'
         : selectedDays.map((k) => DAYS.find((d) => d.key === k)?.label || k).join(', ');
-    const targetLabel =
-      channels.length === ALL_CHANNELS.length
-        ? 'all modes'
-        : channels
-            .map((k) => APPLY_CHANNELS.find((c) => c.key === k)?.label || k)
-            .join(', ');
+    const targetLabel = channels
+      .map((k) => APPLY_CHANNELS.find((c) => c.key === k)?.label || k)
+      .join(', ');
     toast.success(
       markClosed
         ? `Closed ${dayLabel} → ${targetLabel}`
@@ -363,11 +357,32 @@ export default function OnlineShop() {
     );
   };
 
-  const setFineTuneDaySlots = (day: string, slots: Slot[]) => {
+  const copyEditWeekTo = (targets: HoursChannelKey[]) => {
+    const source = hours[editChannel] || {};
+    const dest = targets.filter((t) => t !== editChannel);
+    if (!dest.length) {
+      toast.error('Choose at least one other mode to copy to');
+      return;
+    }
     setHours((prev) => {
-      const channel = { ...(prev[fineTuneChannel] || {}) };
+      const next: StoreHours = { ...prev };
+      for (const ch of dest) {
+        next[ch] = mkWeekFromChannel(source);
+      }
+      return next;
+    });
+    toast.success(
+      `Copied ${APPLY_CHANNELS.find((c) => c.key === editChannel)?.label || editChannel} week → ${dest
+        .map((k) => APPLY_CHANNELS.find((c) => c.key === k)?.label || k)
+        .join(', ')}`
+    );
+  };
+
+  const setEditDaySlots = (day: string, slots: Slot[]) => {
+    setHours((prev) => {
+      const channel = { ...(prev[editChannel] || {}) };
       channel[day] = slots;
-      return { ...prev, [fineTuneChannel]: channel };
+      return { ...prev, [editChannel]: channel };
     });
   };
 
@@ -496,7 +511,8 @@ export default function OnlineShop() {
   if (loading) return <div className="text-center py-12">Loading online shop…</div>;
   if (!settings) return <div className="card">Could not load settings.</div>;
 
-  const fineTuneHours = hours[fineTuneChannel] || {};
+  const editHours = hours[editChannel] || {};
+  const editChannelLabel = APPLY_CHANNELS.find((c) => c.key === editChannel)?.label || editChannel;
 
   return (
     <div className="space-y-6">
@@ -624,13 +640,45 @@ export default function OnlineShop() {
             <div>
               <h2 className="text-base font-semibold tracking-tight">Opening hours</h2>
               <p className="text-sm text-stone-500 mt-0.5">
-                Pick several days, set one schedule, choose where it applies — then save.
+                Each mode has its own schedule. Edit Pickup and Dine in separately if Monday (or any day) differs.
+              </p>
+            </div>
+
+            <div>
+              <span className="text-sm font-medium block mb-2">Editing schedule for</span>
+              <div className="flex flex-wrap gap-1.5 rounded-xl bg-white border border-stone-200 p-1">
+                {APPLY_CHANNELS.map((opt) => {
+                  const on = editChannel === opt.key;
+                  return (
+                    <button
+                      key={opt.key}
+                      type="button"
+                      onClick={() => selectEditChannel(opt.key)}
+                      className={`flex-1 min-w-[6.5rem] rounded-lg px-3 py-2.5 text-sm font-semibold transition ${
+                        on
+                          ? 'bg-stone-900 text-white shadow-sm'
+                          : 'text-stone-600 hover:bg-stone-100'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[11px] text-stone-500 mt-2 leading-snug">
+                Changes below only update <strong>{editChannelLabel}</strong>
+                {alsoCopyTo.length
+                  ? ` (and ${alsoCopyTo
+                      .map((k) => APPLY_CHANNELS.find((c) => c.key === k)?.label || k)
+                      .join(', ')} when you apply)`
+                  : ''}
+                . Other modes stay unchanged.
               </p>
             </div>
 
             <div>
               <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                <span className="text-sm font-medium">Days</span>
+                <span className="text-sm font-medium">Quick set — days</span>
                 <div className="flex flex-wrap gap-1.5 text-xs">
                   <button type="button" className="px-2 py-1 rounded border bg-white" onClick={() => selectPresetDays('all')}>
                     All week
@@ -741,53 +789,34 @@ export default function OnlineShop() {
             </div>
 
             <div>
-              <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                <span className="text-sm font-medium">Applies to</span>
-                <div className="flex flex-wrap gap-2 text-xs">
-                  <button
-                    type="button"
-                    className="font-medium text-teal-700 hover:underline"
-                    onClick={() => setApplyChannels([...ALL_CHANNELS])}
-                  >
-                    Select all
-                  </button>
-                  <button
-                    type="button"
-                    className="font-medium text-stone-500 hover:underline"
-                    onClick={() => setApplyChannels([])}
-                  >
-                    Clear
-                  </button>
-                </div>
-              </div>
+              <span className="text-sm font-medium block mb-2">Also apply to (optional)</span>
               <p className="text-[11px] text-stone-500 mb-2 leading-snug">
-                Choose one or more modes. Same times for several modes, or apply once per mode for different hours.
+                Leave empty to change only {editChannelLabel}. Check other modes only when they should get the same times.
               </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {APPLY_CHANNELS.map((opt) => {
-                  const on = applyChannels.includes(opt.key);
+              <div className="flex flex-wrap gap-2">
+                {APPLY_CHANNELS.filter((c) => c.key !== editChannel).map((opt) => {
+                  const on = alsoCopyTo.includes(opt.key);
                   return (
                     <button
                       key={opt.key}
                       type="button"
-                      onClick={() => toggleApplyChannel(opt.key)}
+                      onClick={() => toggleAlsoCopyTo(opt.key)}
                       aria-pressed={on}
-                      className={`text-left rounded-lg border px-3 py-2.5 transition flex gap-2.5 items-start ${
-                        on ? 'border-stone-900 bg-white shadow-sm' : 'border-stone-200 bg-white/70 hover:border-stone-400'
+                      className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm transition ${
+                        on
+                          ? 'border-stone-900 bg-white shadow-sm font-semibold'
+                          : 'border-stone-200 bg-white/70 text-stone-600 hover:border-stone-400'
                       }`}
                     >
                       <span
-                        className={`mt-0.5 h-4 w-4 shrink-0 rounded border flex items-center justify-center text-[10px] font-bold ${
-                          on ? 'bg-stone-900 border-stone-900 text-white' : 'border-stone-300 bg-white'
+                        className={`h-3.5 w-3.5 rounded border flex items-center justify-center text-[9px] font-bold ${
+                          on ? 'bg-stone-900 border-stone-900 text-white' : 'border-stone-300'
                         }`}
                         aria-hidden
                       >
                         {on ? '✓' : ''}
                       </span>
-                      <span className="min-w-0">
-                        <span className="block text-sm font-semibold">{opt.label}</span>
-                        <span className="block text-[11px] text-stone-500 mt-0.5 leading-snug">{opt.hint}</span>
-                      </span>
+                      {opt.label}
                     </button>
                   );
                 })}
@@ -796,117 +825,129 @@ export default function OnlineShop() {
 
             <div className="flex flex-wrap items-center gap-2">
               <button type="button" className="btn-secondary" onClick={applyQuickSchedule}>
-                Apply to selected days
+                Apply to {editChannelLabel}
+                {alsoCopyTo.length ? ` + ${alsoCopyTo.length}` : ''}
               </button>
               <span className="text-xs text-stone-500">
-                Preview updates below — click Save to publish.
+                Then switch mode tabs to set a different schedule. Save when done.
               </span>
             </div>
 
-            <div className="rounded-lg border border-stone-200 bg-white p-3 space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Current schedule</p>
-              {(
-                [
-                  { key: 'display' as const, label: 'Homepage banner' },
-                  ...ORDER_CHANNELS,
-                ] as { key: HoursChannelKey; label: string }[]
-              ).map((c) => (
-                <div key={c.key} className="text-sm flex flex-col sm:flex-row sm:gap-2">
-                  <span className="font-medium text-stone-800 sm:w-36 shrink-0">{c.label}</span>
-                  <span className="text-stone-600">{summarizeChannel(hours[c.key] || {})}</span>
+            <div className="rounded-lg border border-stone-200 bg-white p-3 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+                  {editChannelLabel} — day by day
+                </p>
+                <div className="flex flex-wrap gap-1.5 text-xs">
+                  <button
+                    type="button"
+                    className="px-2 py-1 rounded border bg-stone-50 hover:bg-stone-100"
+                    onClick={() =>
+                      copyEditWeekTo(
+                        APPLY_CHANNELS.map((c) => c.key).filter((k) => k !== editChannel)
+                      )
+                    }
+                  >
+                    Copy week to all other modes
+                  </button>
                 </div>
-              ))}
+              </div>
+              <div className="space-y-2">
+                {DAYS.map((d) => {
+                  const slots = editHours[d.key] || [];
+                  return (
+                    <div key={d.key} className="flex flex-wrap items-center gap-2 text-sm">
+                      <span className="w-10 font-medium">{d.label}</span>
+                      {slots.length === 0 ? (
+                        <span className="text-stone-400">Closed</span>
+                      ) : (
+                        slots.map((slot, idx) => (
+                          <span key={idx} className="inline-flex items-center gap-1">
+                            <input
+                              type="time"
+                              className="input w-auto py-1"
+                              value={slot.open}
+                              onChange={(e) => {
+                                const next = cloneSlots(slots);
+                                next[idx] = { ...next[idx], open: e.target.value };
+                                setEditDaySlots(d.key, next);
+                              }}
+                            />
+                            <span>–</span>
+                            <input
+                              type="time"
+                              className="input w-auto py-1"
+                              value={slot.close}
+                              onChange={(e) => {
+                                const next = cloneSlots(slots);
+                                next[idx] = { ...next[idx], close: e.target.value };
+                                setEditDaySlots(d.key, next);
+                              }}
+                            />
+                            {slots.length > 1 ? (
+                              <button
+                                type="button"
+                                className="text-stone-400 hover:text-red-600"
+                                aria-label="Remove range"
+                                onClick={() =>
+                                  setEditDaySlots(
+                                    d.key,
+                                    slots.filter((_, i) => i !== idx)
+                                  )
+                                }
+                              >
+                                ×
+                              </button>
+                            ) : null}
+                          </span>
+                        ))
+                      )}
+                      <button
+                        type="button"
+                        className="text-teal-700"
+                        onClick={() =>
+                          setEditDaySlots(d.key, [...slots, { open: '17:00', close: '23:00' }])
+                        }
+                      >
+                        +
+                      </button>
+                      <button
+                        type="button"
+                        className="text-red-600"
+                        onClick={() => setEditDaySlots(d.key, [])}
+                      >
+                        Closed
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
-            <div className="border-t border-stone-200 pt-3">
-              <button
-                type="button"
-                className="text-sm font-medium text-stone-700 underline-offset-2 hover:underline"
-                onClick={() => setShowFineTune((v) => !v)}
-              >
-                {showFineTune ? 'Hide fine-tune editor' : 'Fine-tune a single channel (optional)'}
-              </button>
-              {showFineTune && (
-                <div className="mt-3 space-y-3">
-                  <div className="flex flex-wrap gap-2">
-                    {(
-                      [
-                        { key: 'display' as const, label: 'Homepage' },
-                        ...ORDER_CHANNELS,
-                      ] as { key: HoursChannelKey; label: string }[]
-                    ).map((c) => (
-                      <button
-                        key={c.key}
-                        type="button"
-                        className={`px-3 py-1.5 text-sm border rounded-lg ${
-                          fineTuneChannel === c.key ? 'bg-stone-900 text-white border-stone-900' : 'bg-white'
-                        }`}
-                        onClick={() => setFineTuneChannel(c.key)}
-                      >
-                        {c.label}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="space-y-2">
-                    {DAYS.map((d) => {
-                      const slots = fineTuneHours[d.key] || [];
-                      return (
-                        <div key={d.key} className="flex flex-wrap items-center gap-2 text-sm">
-                          <span className="w-10 font-medium">{d.label}</span>
-                          {slots.length === 0 ? (
-                            <span className="text-stone-400">Closed</span>
-                          ) : (
-                            slots.map((slot, idx) => (
-                              <span key={idx} className="inline-flex items-center gap-1">
-                                <input
-                                  type="time"
-                                  className="input w-auto py-1"
-                                  value={slot.open}
-                                  onChange={(e) => {
-                                    const next = cloneSlots(slots);
-                                    next[idx] = { ...next[idx], open: e.target.value };
-                                    setFineTuneDaySlots(d.key, next);
-                                  }}
-                                />
-                                <span>–</span>
-                                <input
-                                  type="time"
-                                  className="input w-auto py-1"
-                                  value={slot.close}
-                                  onChange={(e) => {
-                                    const next = cloneSlots(slots);
-                                    next[idx] = { ...next[idx], close: e.target.value };
-                                    setFineTuneDaySlots(d.key, next);
-                                  }}
-                                />
-                              </span>
-                            ))
-                          )}
-                          <button
-                            type="button"
-                            className="text-teal-700"
-                            onClick={() =>
-                              setFineTuneDaySlots(d.key, [
-                                ...slots,
-                                { open: '17:00', close: '23:00' },
-                              ])
-                            }
-                          >
-                            +
-                          </button>
-                          <button
-                            type="button"
-                            className="text-red-600"
-                            onClick={() => setFineTuneDaySlots(d.key, [])}
-                          >
-                            Closed
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
+            <div className="rounded-lg border border-stone-200 bg-white p-3 space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+                All modes overview
+              </p>
+              {(
+                [
+                  { key: 'takeaway' as const, label: 'Pickup' },
+                  { key: 'dine_in' as const, label: 'Dine in' },
+                  { key: 'delivery' as const, label: 'Delivery' },
+                  { key: 'display' as const, label: 'Homepage banner' },
+                ] as { key: HoursChannelKey; label: string }[]
+              ).map((c) => (
+                <button
+                  key={c.key}
+                  type="button"
+                  onClick={() => selectEditChannel(c.key)}
+                  className={`w-full text-left text-sm flex flex-col sm:flex-row sm:gap-2 rounded-md px-2 py-1.5 transition ${
+                    editChannel === c.key ? 'bg-stone-100' : 'hover:bg-stone-50'
+                  }`}
+                >
+                  <span className="font-medium text-stone-800 sm:w-36 shrink-0">{c.label}</span>
+                  <span className="text-stone-600">{summarizeChannel(hours[c.key] || {})}</span>
+                </button>
+              ))}
             </div>
           </div>
 
