@@ -164,6 +164,14 @@ app.listen(PORT, () => {
     } catch (error) {
       console.error("[reservations] reminder job failed", error);
     }
+    try {
+      const result = await ReservationService.processDailySummaries();
+      if (result.sent > 0) {
+        console.log(`[reservations] daily summaries sent: ${result.sent}`);
+      }
+    } catch (error) {
+      console.error("[reservations] daily summary job failed", error);
+    }
   };
   setTimeout(() => void tick(), 45_000);
   setInterval(() => void tick(), 60 * 60 * 1000);

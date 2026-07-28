@@ -22,6 +22,8 @@ type ResSettings = {
   reminderEnabled: boolean;
   reminderHoursBefore: number;
   sendReminderEmail: boolean;
+  notifyAdminEmail: boolean;
+  dailySummaryEnabled: boolean;
   maxCoversPerSlot: number | null;
   policiesText: string | null;
   slotDiscounts: Array<{
@@ -398,6 +400,14 @@ export default function Reservations() {
             <label className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
+                checked={settings.notifyAdminEmail !== false}
+                onChange={(e) => setSettings({ ...settings, notifyAdminEmail: e.target.checked })}
+              />
+              Email restaurant (admin) on new / updated reservations
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
                 checked={settings.sendStatusEmails}
                 onChange={(e) => setSettings({ ...settings, sendStatusEmails: e.target.checked })}
               />
@@ -430,6 +440,16 @@ export default function Reservations() {
                 <span className="muted">hours before the booking</span>
               </label>
             ) : null}
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={settings.dailySummaryEnabled !== false}
+                onChange={(e) =>
+                  setSettings({ ...settings, dailySummaryEnabled: e.target.checked })
+                }
+              />
+              Daily summary email at 10:00 (lunch & dinner for today)
+            </label>
           </div>
 
           <div className="space-y-3 border-t border-[var(--border)] pt-4">

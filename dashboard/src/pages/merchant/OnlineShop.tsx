@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
 import ZoneMapEditor, {
@@ -8,6 +8,7 @@ import ZoneMapEditor, {
   type LngLatTuple,
 } from '@/components/ZoneMapEditor';
 import { useI18n } from '@/lib/i18n';
+import { compressImageIfNeeded } from '@/lib/compress-image';
 
 /** Reject empty / Null Island (0,0) so the map does not open in the ocean. */
 function parseStoreCoords(latRaw: unknown, lngRaw: unknown): LatLngTuple | null {
@@ -196,6 +197,10 @@ export default function OnlineShop() {
   const [savingZone, setSavingZone] = useState(false);
   const [keepExistingPolygon, setKeepExistingPolygon] = useState(false);
   const [locatingStore, setLocatingStore] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [uploadingBanner, setUploadingBanner] = useState(false);
+  const logoFileRef = useRef<HTMLInputElement>(null);
+  const bannerFileRef = useRef<HTMLInputElement>(null);
 
   const storeCoords = useMemo(
     () => parseStoreCoords(settings?.latitude, settings?.longitude),
@@ -291,6 +296,46 @@ export default function OnlineShop() {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const uploadShopImage = async (file: File | null, kind: 'logo' | 'banner') => {
+    if (!file) return;
+    const setBusy = kind === 'logo' ? setUploadingLogo : setUploadingBanner;
+    setBusy(true);
+    try {
+      const compressed = await compressImageIfNeeded(file, {
+        maxBytes: 350 * 1024,
+        targetBytes: 350 * 1024,
+        maxWidth: kind === 'banner' ? 1600 : 800,
+      });
+      const fd = new FormData();
+      fd.append('file', compressed);
+      const res = await api.post('/merchant/media', fd);
+      const url = res.data.url || '';
+      const patch =
+        kind === 'logo' ? { shopLogoUrl: url || null } : { shopBannerUrl: url || null };
+      setSettings((prev: any) => (prev ? { ...prev, ...patch } : prev));
+      await api.put('/merchant/settings', patch);
+      toast.success(kind === 'logo' ? 'Logo uploaded' : 'Banner uploaded');
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Upload failed');
+    } finally {
+      setBusy(false);
+      if (kind === 'logo' && logoFileRef.current) logoFileRef.current.value = '';
+      if (kind === 'banner' && bannerFileRef.current) bannerFileRef.current.value = '';
+    }
+  };
+
+  const clearShopImage = async (kind: 'logo' | 'banner') => {
+    const patch =
+      kind === 'logo' ? { shopLogoUrl: null } : { shopBannerUrl: null };
+    try {
+      setSettings((prev: any) => (prev ? { ...prev, ...patch } : prev));
+      await api.put('/merchant/settings', patch);
+      toast.success(kind === 'logo' ? 'Logo removed' : 'Banner removed');
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Could not remove image');
+    }
+  };
 
   const toggleDay = (day: DayKey) => {
     setSelectedDays((prev) =>
@@ -607,6 +652,101 @@ export default function OnlineShop() {
                 </span>
               </span>
             </label>
+          </div>
+
+          <div className="rounded-lg border border-stone-200 bg-white p-3 space-y-3">
+            <div>
+              <p className="text-sm font-medium">Shop branding</p>
+              <p className="text-xs text-stone-500 mt-0.5">
+                Logo appears in the header. Banner is the wide image at the top of the menu.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+                  Logo
+                </span>
+                {settings.shopLogoUrl ? (
+                  <img
+                    src={settings.shopLogoUrl}
+                    alt=""
+                    className="h-14 w-auto max-w-full object-contain rounded border border-stone-200 bg-stone-50 p-1"
+                  />
+                ) : (
+                  <div className="h-14 rounded border border-dashed border-stone-300 bg-stone-50 flex items-center justify-center text-xs text-stone-400">
+                    No logo
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  <input
+                    ref={logoFileRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    className="hidden"
+                    onChange={(e) => void uploadShopImage(e.target.files?.[0] || null, 'logo')}
+                  />
+                  <button
+                    type="button"
+                    className="btn-secondary text-sm"
+                    disabled={uploadingLogo}
+                    onClick={() => logoFileRef.current?.click()}
+                  >
+                    {uploadingLogo ? 'Uploading…' : 'Upload logo'}
+                  </button>
+                  {settings.shopLogoUrl ? (
+                    <button
+                      type="button"
+                      className="btn-secondary text-sm"
+                      onClick={() => void clearShopImage('logo')}
+                    >
+                      Remove
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+                  Menu banner
+                </span>
+                {settings.shopBannerUrl ? (
+                  <img
+                    src={settings.shopBannerUrl}
+                    alt=""
+                    className="h-20 w-full object-cover rounded border border-stone-200 bg-stone-50"
+                  />
+                ) : (
+                  <div className="h-20 rounded border border-dashed border-stone-300 bg-stone-50 flex items-center justify-center text-xs text-stone-400">
+                    No banner
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  <input
+                    ref={bannerFileRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    className="hidden"
+                    onChange={(e) => void uploadShopImage(e.target.files?.[0] || null, 'banner')}
+                  />
+                  <button
+                    type="button"
+                    className="btn-secondary text-sm"
+                    disabled={uploadingBanner}
+                    onClick={() => bannerFileRef.current?.click()}
+                  >
+                    {uploadingBanner ? 'Uploading…' : 'Upload banner'}
+                  </button>
+                  {settings.shopBannerUrl ? (
+                    <button
+                      type="button"
+                      className="btn-secondary text-sm"
+                      onClick={() => void clearShopImage('banner')}
+                    >
+                      Remove
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            </div>
           </div>
 
           <div className="rounded-lg border border-stone-200 bg-white p-3 space-y-2">
