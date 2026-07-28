@@ -24,6 +24,8 @@ const router = Router();
 type ShopExtraSelection = { id: string; name?: string; price?: number };
 type ShopComboSelectionInput = {
   slotId: string;
+  /** Optional — used as fallback when slotId no longer matches (renamed/re-saved slots) */
+  slotName?: string;
   productId: string;
   selectedExtras?: ShopExtraSelection[];
 };
@@ -166,21 +168,79 @@ async function resolveShopComboSelections(
   surcharge: number;
   error?: string;
 }> {
-  const slots = normalizeComboSlots(comboProduct.comboItems);
-  if (!slots.length) {
+  const rawSlots = normalizeComboSlots(comboProduct.comboItems);
+  if (!rawSlots.length) {
     return { selections: [], surcharge: 0 };
   }
 
-  const picks = Array.isArray(requested) ? requested : [];
-  const picksBySlot = new Map<string, ShopComboSelectionInput[]>();
-  for (const pick of picks) {
-    if (!pick?.slotId || !pick?.productId) continue;
-    const list = picksBySlot.get(pick.slotId) || [];
-    list.push(pick);
-    picksBySlot.set(pick.slotId, list);
+  // Drop options for inactive/missing products (same as public menu), then skip empty slots
+  const db = getDb();
+  const allOptionIds = [...new Set(rawSlots.flatMap((s) => s.options.map((o) => o.productId)))];
+  const activeChildren =
+    allOptionIds.length === 0
+      ? []
+      : await db.query.products.findMany({
+          where: and(
+            eq(schema.products.merchantId, merchantId),
+            inArray(schema.products.id, allOptionIds),
+            eq(schema.products.isActive, true)
+          ),
+        });
+  const activeIds = new Set(activeChildren.map((p) => p.id));
+  const slots = rawSlots
+    .map((s) => ({
+      ...s,
+      options: s.options.filter((o) => activeIds.has(o.productId)),
+    }))
+    .filter((s) => s.options.length > 0);
+  if (!slots.length) {
+    return { selections: [], surcharge: 0, error: "This combo is currently unavailable" };
   }
 
-  const db = getDb();
+  const picks = (Array.isArray(requested) ? requested : []).filter((p) => p?.productId);
+  const usedPickIndexes = new Set<number>();
+
+  const takePicksForSlot = (slot: (typeof slots)[number]): ShopComboSelectionInput[] => {
+    const byId: ShopComboSelectionInput[] = [];
+    picks.forEach((pick, idx) => {
+      if (usedPickIndexes.has(idx)) return;
+      if (pick.slotId && pick.slotId === slot.id) {
+        byId.push(pick);
+        usedPickIndexes.add(idx);
+      }
+    });
+    if (byId.length) return byId;
+
+    const byName: ShopComboSelectionInput[] = [];
+    const slotNameKey = slot.name.trim().toLowerCase();
+    picks.forEach((pick, idx) => {
+      if (usedPickIndexes.has(idx)) return;
+      const name = String(pick.slotName || "").trim().toLowerCase();
+      if (name && name === slotNameKey) {
+        byName.push(pick);
+        usedPickIndexes.add(idx);
+      }
+    });
+    if (byName.length) return byName;
+
+    // Last resort: productId unique to this slot among remaining picks
+    const optionIds = new Set(slot.options.map((o) => o.productId));
+    const unique: ShopComboSelectionInput[] = [];
+    picks.forEach((pick, idx) => {
+      if (usedPickIndexes.has(idx)) return;
+      if (!optionIds.has(pick.productId)) return;
+      const alsoInOther = slots.some(
+        (other) =>
+          other.id !== slot.id && other.options.some((o) => o.productId === pick.productId)
+      );
+      if (!alsoInOther) {
+        unique.push(pick);
+        usedPickIndexes.add(idx);
+      }
+    });
+    return unique;
+  };
+
   const selections: Array<{
     slotId: string;
     slotName: string;
@@ -190,9 +250,10 @@ async function resolveShopComboSelections(
     selectedExtras: Array<{ id: string; name: string; price: number }>;
   }> = [];
   let surcharge = 0;
+  const childById = new Map(activeChildren.map((p) => [p.id, p]));
 
   for (const slot of slots) {
-    const slotPicks = picksBySlot.get(slot.id) || [];
+    const slotPicks = takePicksForSlot(slot);
     if (slotPicks.length < slot.minPick) {
       return {
         selections: [],
@@ -218,17 +279,17 @@ async function resolveShopComboSelections(
           error: `Invalid choice for "${slot.name}"`,
         };
       }
-      const child = await db.query.products.findFirst({
-        where: and(eq(schema.products.id, pick.productId), eq(schema.products.merchantId, merchantId)),
-      });
-      if (!child || !child.isActive) {
+      const child = childById.get(pick.productId);
+      if (!child) {
         return {
           selections: [],
           surcharge: 0,
           error: `Product unavailable in "${slot.name}"`,
         };
       }
-      const extrasResolved = await resolveShopLineExtras(merchantId, child, pick.selectedExtras);
+      const extrasResolved = await resolveShopLineExtras(merchantId, child, pick.selectedExtras, {
+        fillDefaultsIfMissing: true,
+      });
       if (extrasResolved.error) {
         return { selections: [], surcharge: 0, error: extrasResolved.error };
       }
@@ -280,25 +341,34 @@ async function loadModifierGroupsByProduct(merchantId: string, productIds: strin
 async function resolveShopLineExtras(
   merchantId: string,
   product: typeof schema.products.$inferSelect,
-  requested: ShopExtraSelection[] | undefined
+  requested: ShopExtraSelection[] | undefined,
+  opts?: { fillDefaultsIfMissing?: boolean }
 ): Promise<{ extras: Array<{ id: string; name: string; price: number }>; error?: string }> {
   const groups = await ModifierService.getGroupsForProduct(merchantId, product.id);
   const optionById = new Map<
     string,
     { id: string; name: string; price: number; groupId: string; groupTitle: string }
   >();
+  const optionsByGroup = new Map<
+    string,
+    Array<{ id: string; name: string; price: number; isDefault: boolean }>
+  >();
 
   for (const g of groups) {
+    const list: Array<{ id: string; name: string; price: number; isDefault: boolean }> = [];
     for (const o of g.options) {
       if (o.saleStatus === "out_of_stock") continue;
+      const price = g.pricingType === "free" ? 0 : Number(o.price) || 0;
       optionById.set(o.id, {
         id: o.id,
         name: o.name,
-        price: g.pricingType === "free" ? 0 : Number(o.price) || 0,
+        price,
         groupId: g.id,
         groupTitle: g.title,
       });
+      list.push({ id: o.id, name: o.name, price, isDefault: !!o.isDefault });
     }
+    optionsByGroup.set(g.id, list);
   }
 
   // Legacy flat extras (no groups)
@@ -318,23 +388,43 @@ async function resolveShopLineExtras(
   const reqIds = (requested || []).map((r) => r.id).filter(Boolean);
   const extras: Array<{ id: string; name: string; price: number }> = [];
   const countsByGroup = new Map<string, number>();
+  const seen = new Set<string>();
 
   for (const id of reqIds) {
     const opt = optionById.get(id);
     if (!opt) {
+      // Ignore stale combo-flattened ids if they leaked into parent extras
+      if (String(id).startsWith("combo:")) continue;
       return { extras: [], error: `Invalid extra selected for ${product.name}` };
     }
+    if (seen.has(opt.id)) continue;
+    seen.add(opt.id);
     extras.push({ id: opt.id, name: opt.name, price: roundMoney2(opt.price) });
     countsByGroup.set(opt.groupId, (countsByGroup.get(opt.groupId) || 0) + 1);
   }
 
   for (const g of groups) {
-    const count = countsByGroup.get(g.id) || 0;
+    let count = countsByGroup.get(g.id) || 0;
     const min =
       g.selectionType === "required"
         ? Math.max(1, Number(g.minSelectable) || 1)
         : Math.max(0, Number(g.minSelectable) || 0);
     const max = Math.max(min, Number(g.maxSelectable) || 1);
+
+    if (count < min && opts?.fillDefaultsIfMissing) {
+      const pool = optionsByGroup.get(g.id) || [];
+      const defaults = pool.filter((o) => o.isDefault);
+      const fillFrom = defaults.length ? defaults : pool;
+      for (const o of fillFrom) {
+        if (count >= min) break;
+        if (seen.has(o.id)) continue;
+        seen.add(o.id);
+        extras.push({ id: o.id, name: o.name, price: roundMoney2(o.price) });
+        count += 1;
+      }
+      countsByGroup.set(g.id, count);
+    }
+
     if (count < min) {
       return {
         extras: [],
