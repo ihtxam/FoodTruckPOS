@@ -228,6 +228,11 @@ docker rm -f backend-caddy-1 backend-api-1 backend-receipts-1 backend-postgres-1
 echo "=== Docker build & start ==="
 docker compose --env-file .env.production up -d --build
 
+# Caddyfile is bind-mounted; force reload so host/site changes apply immediately
+echo "=== Reload Caddy ==="
+docker compose --env-file .env.production up -d --force-recreate caddy
+docker compose --env-file .env.production exec -T caddy caddy reload --config /etc/caddy/Caddyfile 2>/dev/null || true
+
 echo "=== Wait for services ==="
 sleep 20
 
