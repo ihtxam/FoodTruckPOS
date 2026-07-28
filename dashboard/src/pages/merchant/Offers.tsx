@@ -9,6 +9,7 @@ type OfferType =
   | 'fixed_off'
   | 'bogo'
   | 'pay_n_get_m'
+  | 'package_deal'
   | 'combo_deal';
 
 type Offer = {
@@ -32,6 +33,7 @@ type Offer = {
 };
 
 type Category = { id: string; name: string; isOffersCategory?: boolean };
+type ProductOpt = { id: string; name: string; price: string | number; categoryId?: string | null };
 
 const DAYS = [
   { key: 'mon', label: 'Mon' },
@@ -44,25 +46,29 @@ const DAYS = [
 ];
 
 const TYPE_LABELS: Record<string, string> = {
+  percent_order: '% off whole order',
   percent_category: '% off category',
-  percent_order: '% off order',
   fixed_off: 'Fixed CHF off',
-  bogo: 'Buy X get Y',
+  package_deal: 'Package (pick N + free, one price)',
+  bogo: 'Buy X get Y (same list)',
   pay_n_get_m: 'Pay N get M (e.g. 3+1)',
-  combo_deal: 'Combo deal',
+  combo_deal: 'Combo (legacy)',
 };
 
 const emptyForm = () => ({
   name: '',
   description: '',
-  offerType: 'percent_category' as OfferType,
+  offerType: 'percent_order' as OfferType,
   percentOff: '20',
   fixedOff: '5',
-  buyQty: '1',
+  buyQty: '2',
   getQty: '1',
   getDiscountPercent: '100',
   payQty: '3',
   receiveQty: '4',
+  packagePrice: '25',
+  buyProductIds: [] as string[],
+  getProductIds: [] as string[],
   minOrderAmount: '',
   channels: [] as string[],
   categoryIds: [] as string[],
@@ -81,6 +87,7 @@ export default function Offers() {
   const { t } = useI18n();
   const [offers, setOffers] = useState<Offer[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [products, setProducts] = useState<ProductOpt[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -88,12 +95,14 @@ export default function Offers() {
 
   const load = async () => {
     try {
-      const [o, c] = await Promise.all([
+      const [o, c, p] = await Promise.all([
         api.get('/merchant/offers'),
         api.get('/merchant/categories'),
+        api.get('/merchant/products?limit=500'),
       ]);
       setOffers(o.data.offers || []);
       setCategories(c.data.categories || []);
+      setProducts(p.data.products || []);
     } catch (e: any) {
       toast.error(e.response?.data?.error || 'Failed to load offers');
     } finally {
@@ -116,14 +125,17 @@ export default function Offers() {
     setForm({
       name: offer.name,
       description: offer.description || '',
-      offerType: (offer.offerType as OfferType) || 'percent_category',
+      offerType: (offer.offerType as OfferType) || 'percent_order',
       percentOff: String(r.percentOff ?? '20'),
       fixedOff: String(r.fixedOff ?? '5'),
-      buyQty: String(r.buyQty ?? '1'),
+      buyQty: String(r.buyQty ?? '2'),
       getQty: String(r.getQty ?? '1'),
       getDiscountPercent: String(r.getDiscountPercent ?? '100'),
       payQty: String(r.payQty ?? '3'),
       receiveQty: String(r.receiveQty ?? '4'),
+      packagePrice: String(r.packagePrice ?? '25'),
+      buyProductIds: Array.isArray(r.buyProductIds) ? (r.buyProductIds as string[]) : [],
+      getProductIds: Array.isArray(r.getProductIds) ? (r.getProductIds as string[]) : [],
       minOrderAmount: r.minOrderAmount != null ? String(r.minOrderAmount) : '',
       channels: offer.channels || [],
       categoryIds: offer.categoryIds || [],
@@ -155,13 +167,20 @@ export default function Offers() {
       rules.payQty = Number(form.payQty) || 3;
       rules.receiveQty = Number(form.receiveQty) || 4;
     }
+    if (form.offerType === 'package_deal') {
+      rules.buyQty = Number(form.buyQty) || 2;
+      rules.getQty = Number(form.getQty) || 1;
+      rules.packagePrice = Number(form.packagePrice) || 0;
+      rules.buyProductIds = form.buyProductIds;
+      rules.getProductIds = form.getProductIds;
+    }
     return {
       name: form.name.trim(),
       description: form.description.trim() || null,
       offerType: form.offerType,
       rules,
       channels: form.channels,
-      categoryIds: form.categoryIds,
+      categoryIds: form.offerType === 'package_deal' ? [] : form.categoryIds,
       productIds: [],
       scheduleMode: form.scheduleMode,
       daysOfWeek: form.daysOfWeek,
@@ -180,6 +199,20 @@ export default function Offers() {
     if (!form.name.trim()) {
       toast.error('Name is required');
       return;
+    }
+    if (form.offerType === 'package_deal') {
+      if (form.buyProductIds.length < Number(form.buyQty || 0)) {
+        toast.error(`Select at least ${form.buyQty} products in the paid list`);
+        return;
+      }
+      if (Number(form.getQty) > 0 && form.getProductIds.length < Number(form.getQty)) {
+        toast.error(`Select at least ${form.getQty} products in the free list`);
+        return;
+      }
+      if (!(Number(form.packagePrice) > 0)) {
+        toast.error('Set a package price greater than 0');
+        return;
+      }
     }
     setSaving(true);
     try {
@@ -239,6 +272,16 @@ export default function Offers() {
     }));
   };
 
+  const toggleProduct = (field: 'buyProductIds' | 'getProductIds', id: string) => {
+    setForm((f) => {
+      const list = f[field];
+      return {
+        ...f,
+        [field]: list.includes(id) ? list.filter((x) => x !== id) : [...list, id],
+      };
+    });
+  };
+
   if (loading) return <div className="text-center py-12">Loading offers…</div>;
 
   return (
@@ -248,8 +291,8 @@ export default function Offers() {
           <div>
             <h1 className="page-title mb-1">{t('offers')}</h1>
             <p className="page-sub">
-              Create promotions: % off categories, BOGO, 3+1 dine-in, weekend deals, off-peak hours.
-              Featured offers appear on the shop Offers shelf.
+              % off order/category, package deals (pick 2 + 1 free for one price), BOGO, 3+1.
+              For pickup-only, select the Pickup channel. Featured offers appear on the shop shelf.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -410,6 +453,41 @@ export default function Offers() {
                 </label>
               </>
             )}
+            {form.offerType === 'package_deal' && (
+              <>
+                <label className="text-sm block">
+                  <span className="muted block mb-1">Choose how many (paid)</span>
+                  <input
+                    className="input"
+                    type="number"
+                    min="1"
+                    value={form.buyQty}
+                    onChange={(e) => setForm({ ...form, buyQty: e.target.value })}
+                  />
+                </label>
+                <label className="text-sm block">
+                  <span className="muted block mb-1">How many free</span>
+                  <input
+                    className="input"
+                    type="number"
+                    min="0"
+                    value={form.getQty}
+                    onChange={(e) => setForm({ ...form, getQty: e.target.value })}
+                  />
+                </label>
+                <label className="text-sm block">
+                  <span className="muted block mb-1">Package price (CHF)</span>
+                  <input
+                    className="input"
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    value={form.packagePrice}
+                    onChange={(e) => setForm({ ...form, packagePrice: e.target.value })}
+                  />
+                </label>
+              </>
+            )}
             <label className="text-sm block">
               <span className="muted block mb-1">Min order CHF (optional)</span>
               <input
@@ -466,8 +544,64 @@ export default function Offers() {
             </div>
           )}
 
+          {form.offerType === 'package_deal' && (
+            <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50/50 p-3">
+              <p className="text-sm font-medium text-amber-950">
+                Pick {form.buyQty || 2} from paid list + {form.getQty || 1} free → CHF{' '}
+                {form.packagePrice || '0'} for the set
+              </p>
+              <div>
+                <p className="text-xs muted mb-1">
+                  Paid choices — select products customers pick from ({form.buyProductIds.length}{' '}
+                  selected)
+                </p>
+                <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto">
+                  {products.map((p) => (
+                    <button
+                      key={`buy-${p.id}`}
+                      type="button"
+                      className={`rounded-full px-2.5 py-1 text-[11px] border ${
+                        form.buyProductIds.includes(p.id)
+                          ? 'bg-stone-900 text-white border-stone-900'
+                          : 'bg-white border-[var(--border)]'
+                      }`}
+                      onClick={() => toggleProduct('buyProductIds', p.id)}
+                    >
+                      {p.name}
+                    </button>
+                  ))}
+                  {products.length === 0 ? (
+                    <span className="text-xs muted">No products — add some in Products first</span>
+                  ) : null}
+                </div>
+              </div>
+              <div>
+                <p className="text-xs muted mb-1">
+                  Free choices — select products for the free pick ({form.getProductIds.length}{' '}
+                  selected)
+                </p>
+                <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto">
+                  {products.map((p) => (
+                    <button
+                      key={`get-${p.id}`}
+                      type="button"
+                      className={`rounded-full px-2.5 py-1 text-[11px] border ${
+                        form.getProductIds.includes(p.id)
+                          ? 'bg-amber-700 text-white border-amber-700'
+                          : 'bg-white border-[var(--border)]'
+                      }`}
+                      onClick={() => toggleProduct('getProductIds', p.id)}
+                    >
+                      {p.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
           <div>
-            <p className="text-xs muted mb-1">Channels (empty = all)</p>
+            <p className="text-xs muted mb-1">Channels (empty = all) — for pickup-only, select Pickup</p>
             <div className="flex flex-wrap gap-2">
               {[
                 { id: 'takeaway', label: 'Pickup' },

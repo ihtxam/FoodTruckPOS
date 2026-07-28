@@ -153,6 +153,7 @@ export default function CheckoutPage() {
               : null,
           items: draft.items.map((i) => ({
             productId: i.id,
+            categoryId: i.categoryId || null,
             name: i.name,
             unitPrice: i.price,
             quantity: i.quantity,
@@ -166,7 +167,8 @@ export default function CheckoutPage() {
             (a: { name: string; badgeLabel?: string }) => a.badgeLabel || a.name
           )
         );
-      } catch {
+      } catch (err) {
+        console.warn('[shop] offers preview failed', err);
         if (!cancelled) {
           setOfferDiscount(0);
           setOfferLabels([]);
@@ -1014,6 +1016,12 @@ export default function CheckoutPage() {
                   onChange={(e) => patch({ notes: e.target.value })}
                 />
               </div>
+
+              {offerDiscount > 0 ? (
+                <p className="text-sm text-amber-800 bg-amber-50 border border-amber-100 px-3 py-2">
+                  {(offerLabels.join(', ') || 'Offer') + `: − CHF ${offerDiscount.toFixed(2)}`}
+                </p>
+              ) : null}
 
               <button
                 type="button"

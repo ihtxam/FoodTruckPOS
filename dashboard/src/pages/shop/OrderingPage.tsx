@@ -43,6 +43,7 @@ interface Product {
   price: number;
   description?: string;
   image?: string;
+  categoryId?: string | null;
   productType?: string;
   allowExtras?: boolean;
   extras?: Array<{ id: string; name: string; price: number }>;
@@ -329,6 +330,7 @@ export default function OrderingPage() {
                 lineId: newCartLineId(),
                 id: product.id,
                 name: product.name,
+                categoryId: 'categoryId' in product ? product.categoryId ?? null : null,
                 price: 0,
                 basePrice: 0,
                 quantity: 1,
@@ -368,6 +370,7 @@ export default function OrderingPage() {
               lineId: newCartLineId(),
               id: product.id,
               name: product.name,
+              categoryId: 'categoryId' in product ? product.categoryId ?? null : null,
               price,
               basePrice: product.price,
               quantity: 1,

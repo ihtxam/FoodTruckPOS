@@ -50,9 +50,13 @@ function zurichParts(at: Date) {
 
 function parseHm(hm: string | null | undefined): number | null {
   if (!hm) return null;
-  const m = String(hm).match(/^(\d{1,2}):(\d{2})$/);
+  // Accept HH:mm or HH:mm:ss (browsers' <input type="time"> may include seconds)
+  const m = String(hm).trim().match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
   if (!m) return null;
-  return Number(m[1]) * 60 + Number(m[2]);
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  if (!Number.isFinite(h) || !Number.isFinite(min) || h > 24 || min > 59) return null;
+  return (h === 24 ? 0 : h) * 60 + min;
 }
 
 function inTimeWindow(hm: string, start?: string | null, end?: string | null) {
@@ -84,6 +88,13 @@ function defaultBadge(type: string, rules: OfferRules): string {
     const pay = rules.payQty || 3;
     const recv = rules.receiveQty || pay + 1;
     return `${pay}+${recv - pay}`;
+  }
+  if (type === "package_deal") {
+    const buy = rules.buyQty || 2;
+    const get = rules.getQty || 1;
+    const price = Number(rules.packagePrice) || 0;
+    if (price > 0) return `${buy}+${get} · CHF ${price.toFixed(0)}`;
+    return `${buy}+${get}`;
   }
   return "Offer";
 }
@@ -364,7 +375,96 @@ export class OffersService {
       return roundMoney2(per * combos);
     }
 
+    if (type === "package_deal") {
+      return this.computePackageDealDiscount(rules, lines);
+    }
+
     return 0;
+  }
+
+  /**
+   * Choose buyQty from buyProductIds + getQty from getProductIds for packagePrice.
+   * Forms as many sets as possible; each set discounts (sum of unit prices − packagePrice).
+   */
+  static computePackageDealDiscount(rules: OfferRules, lines: CartLineForOffer[]): number {
+    const buyQty = Math.max(1, Math.floor(Number(rules.buyQty) || 2));
+    const getQty = Math.max(0, Math.floor(Number(rules.getQty) || 1));
+    const packagePrice = Math.max(0, Number(rules.packagePrice) || 0);
+    const buyIds = new Set(
+      ((rules.buyProductIds || []) as string[]).map(String).filter(Boolean)
+    );
+    const getIds = new Set(
+      ((rules.getProductIds || []) as string[]).map(String).filter(Boolean)
+    );
+    // Fallback: use offer productIds / category-eligible lines as the buy pool
+    const useAllEligible = buyIds.size === 0;
+
+    type Unit = { productId: string; price: number; key: string };
+    const units: Unit[] = [];
+    let idx = 0;
+    for (const l of lines) {
+      if (l.loyaltyReward) continue;
+      for (let i = 0; i < l.quantity; i++) {
+        units.push({
+          productId: l.productId,
+          price: l.unitPrice,
+          key: `${l.productId}:${idx++}`,
+        });
+      }
+    }
+
+    const available = new Set(units.map((u) => u.key));
+    let discount = 0;
+
+    const takeBest = (pool: Unit[], n: number): Unit[] => {
+      const candidates = pool
+        .filter((u) => available.has(u.key))
+        .sort((a, b) => b.price - a.price);
+      const picked = candidates.slice(0, n);
+      for (const u of picked) available.delete(u.key);
+      return picked;
+    };
+
+    while (true) {
+      const buyPool = units.filter(
+        (u) =>
+          available.has(u.key) && (useAllEligible || buyIds.has(u.productId))
+      );
+      if (buyPool.length < buyQty) break;
+
+      const bought = takeBest(buyPool, buyQty);
+      if (bought.length < buyQty) break;
+
+      let free: Unit[] = [];
+      if (getQty > 0) {
+        const freePool = units.filter(
+          (u) =>
+            available.has(u.key) &&
+            (getIds.size ? getIds.has(u.productId) : buyIds.has(u.productId) || useAllEligible)
+        );
+        if (freePool.length < getQty) {
+          // Put bought back and stop
+          for (const u of bought) available.add(u.key);
+          break;
+        }
+        free = takeBest(freePool, getQty);
+        if (free.length < getQty) {
+          for (const u of bought) available.add(u.key);
+          for (const u of free) available.add(u.key);
+          break;
+        }
+      }
+
+      const setSum = [...bought, ...free].reduce((s, u) => s + u.price, 0);
+      if (packagePrice > 0) {
+        discount += Math.max(0, setSum - packagePrice);
+      } else {
+        // No package price → free items are 100% off
+        discount += free.reduce((s, u) => s + u.price, 0);
+      }
+    }
+
+    return roundMoney2(discount);
   }
 
   /**

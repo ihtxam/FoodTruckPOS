@@ -100,6 +100,7 @@ function mapShopProduct(
     price: parseFloat(p.price.toString()),
     description: p.description,
     image: p.imageUrl,
+    categoryId: p.categoryId || null,
     productType: p.productType || "standard",
     allowExtras: !!p.allowExtras || modifierGroups.length > 0 || extras.length > 0,
     extras: extras.map((e) => ({
@@ -1192,16 +1193,41 @@ router.post("/:slug/offers/preview", async (req: Request, res: Response) => {
     const at = req.body?.scheduledFor ? new Date(req.body.scheduledFor) : new Date();
     const lines = Array.isArray(req.body?.items) ? req.body.items : [];
     const offers = await OffersService.list(merchant.id);
+
+    // Resolve missing categoryIds from catalog so % category offers preview correctly
+    const productIds = [
+      ...new Set(
+        lines
+          .map((l: any) => String(l.productId || ""))
+          .filter((id: string) => !!id)
+      ),
+    ];
+    const categoryByProduct = new Map<string, string | null>();
+    if (productIds.length) {
+      const db = getDb();
+      const products = await db.query.products.findMany({
+        where: and(
+          eq(schema.products.merchantId, merchant.id),
+          inArray(schema.products.id, productIds)
+        ),
+        columns: { id: true, categoryId: true },
+      });
+      for (const p of products) categoryByProduct.set(p.id, p.categoryId || null);
+    }
+
     const result = OffersService.evaluateCart(
       offers,
-      lines.map((l: any) => ({
-        productId: String(l.productId || ""),
-        categoryId: l.categoryId || null,
-        name: String(l.name || ""),
-        unitPrice: Number(l.unitPrice || l.price || 0),
-        quantity: Math.max(1, Math.floor(Number(l.quantity) || 1)),
-        loyaltyReward: !!l.loyaltyReward,
-      })),
+      lines.map((l: any) => {
+        const productId = String(l.productId || "");
+        return {
+          productId,
+          categoryId: l.categoryId || categoryByProduct.get(productId) || null,
+          name: String(l.name || ""),
+          unitPrice: Number(l.unitPrice || l.price || 0),
+          quantity: Math.max(1, Math.floor(Number(l.quantity) || 1)),
+          loyaltyReward: !!l.loyaltyReward,
+        };
+      }),
       Number.isNaN(at.getTime()) ? new Date() : at,
       channel
     );

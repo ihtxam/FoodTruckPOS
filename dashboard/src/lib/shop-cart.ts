@@ -24,6 +24,8 @@ export interface ShopCartItem {
   /** Product id */
   id: string;
   name: string;
+  /** Catalog category — needed for category-scoped offers at checkout */
+  categoryId?: string | null;
   /** Unit price including selected extras */
   price: number;
   /** Product base price without extras */
@@ -80,6 +82,7 @@ function normalizeCartItem(item: Partial<ShopCartItem> & { id: string; name: str
       `${item.id}-${loyaltyReward ? 'reward' : lineSignature(selectedExtras, comboSelections)}`,
     id: item.id,
     name: item.name,
+    categoryId: item.categoryId ?? null,
     price: loyaltyReward ? 0 : item.price,
     basePrice: loyaltyReward ? 0 : basePrice,
     quantity: item.quantity,
