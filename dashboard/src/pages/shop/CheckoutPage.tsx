@@ -672,6 +672,7 @@ export default function CheckoutPage() {
 
           {step === 'details' && (
             <section className="bg-white border border-stone-200 p-5 space-y-4">
+              {/* 1. Order type */}
               {showChannelPicker ? (
                 <div className="space-y-2">
                   <p className="text-sm font-semibold">{t('shopFulfillment')}</p>
@@ -700,188 +701,22 @@ export default function CheckoutPage() {
                     })}
                   </div>
                 </div>
-              ) : null}
-
-              <h1 className="text-2xl font-bold tracking-tight">
-                {draft.channel === 'delivery' ? t('shopDeliveryDetails') : t('shopPickupDetails')}
-              </h1>
-              <p className="text-sm text-stone-500">
-                {draft.channel === 'delivery'
-                  ? t('shopWhereDeliver')
-                  : `${t('shopCollectFrom')} ${merchant?.address || t('shopRestaurant')}${
-                      merchant?.city ? `, ${merchant.city}` : ''
-                    }`}
-              </p>
-
-              <div className="grid md:grid-cols-2 gap-3">
-                <input
-                  className="border border-stone-300 px-3 py-2 text-sm md:col-span-2"
-                  placeholder={t('shopFullNameRequired')}
-                  value={draft.customerName}
-                  onChange={(e) => patch({ customerName: e.target.value })}
-                  required
-                />
-                <input
-                  className="border border-stone-300 px-3 py-2 text-sm"
-                  placeholder={t('shopPhoneRequired')}
-                  value={draft.customerPhone}
-                  onChange={(e) => patch({ customerPhone: e.target.value })}
-                  required
-                />
-                <input
-                  className="border border-stone-300 px-3 py-2 text-sm"
-                  type="email"
-                  placeholder={
-                    wantCreateAccount ? `${t('shopEmail')} *` : t('shopEmailReceipt')
-                  }
-                  value={draft.customerEmail}
-                  onChange={(e) => {
-                    patch({ customerEmail: e.target.value });
-                    if (!showLogin) setLoginEmail(e.target.value);
-                  }}
-                />
-              </div>
-
-              {customer ? (
-                <p className="text-sm text-teal-800 border border-teal-100 bg-teal-50 px-3 py-2">
-                  {t('shopLoggedInAs')} {customer.name || customer.email}.{' '}
-                  <button
-                    type="button"
-                    className="underline font-medium"
-                    onClick={() => {
-                      clearCustomerToken(shopKey);
-                      setCustomer(null);
-                      patch({ authMode: 'guest' });
-                    }}
-                  >
-                    {t('shopLogOut')}
-                  </button>
-                </p>
               ) : (
-                <div className="grid md:grid-cols-2 gap-4 border border-stone-100 bg-stone-50/60 p-4">
-                  <div className="space-y-3">
-                    <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
-                      <input
-                        type="checkbox"
-                        className="rounded border-stone-300"
-                        checked={wantCreateAccount}
-                        onChange={(e) => {
-                          setWantCreateAccount(e.target.checked);
-                          if (e.target.checked) setShowLogin(false);
-                          if (!e.target.checked) setPassword('');
-                        }}
-                      />
-                      {t('shopCreateAccount')}
-                    </label>
-                    {wantCreateAccount && (
-                      <input
-                        className="w-full border border-stone-300 px-3 py-2 text-sm bg-white"
-                        type="password"
-                        placeholder={t('shopPasswordMin6')}
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        autoComplete="new-password"
-                      />
-                    )}
-                  </div>
-
-                  <div className="space-y-3 md:border-l md:border-stone-200 md:pl-4">
-                    {!showLogin ? (
-                      <div className="space-y-1">
-                        <p className="text-sm text-stone-500">{t('shopHaveAccount')}</p>
-                        <button
-                          type="button"
-                          className="text-sm font-semibold underline underline-offset-2"
-                          onClick={() => {
-                            setShowLogin(true);
-                            setWantCreateAccount(false);
-                            setPassword('');
-                            if (draft.customerEmail) setLoginEmail(draft.customerEmail);
-                          }}
-                        >
-                          {t('shopLogIn')}
-                        </button>
-                      </div>
-                    ) : (
-                      <form onSubmit={onLogin} className="space-y-3">
-                        <div className="flex items-center justify-between gap-2">
-                          <h2 className="font-semibold text-sm">{t('shopLogIn')}</h2>
-                          <button
-                            type="button"
-                            className="text-xs text-stone-500 underline"
-                            onClick={() => setShowLogin(false)}
-                          >
-                            {t('cancel')}
-                          </button>
-                        </div>
-                        <input
-                          className="w-full border border-stone-300 px-3 py-2 text-sm bg-white"
-                          type="email"
-                          placeholder={t('shopEmail')}
-                          value={loginEmail}
-                          onChange={(e) => setLoginEmail(e.target.value)}
-                          required
-                          autoComplete="email"
-                        />
-                        <input
-                          className="w-full border border-stone-300 px-3 py-2 text-sm bg-white"
-                          type="password"
-                          placeholder={t('shopPassword')}
-                          value={loginPassword}
-                          onChange={(e) => setLoginPassword(e.target.value)}
-                          required
-                          autoComplete="current-password"
-                        />
-                        <button
-                          type="submit"
-                          className="w-full bg-stone-900 text-white py-2.5 text-sm font-semibold"
-                        >
-                          {t('shopLogIn')}
-                        </button>
-                      </form>
-                    )}
-                  </div>
+                <div className="rounded-xl border border-stone-200 bg-stone-50 px-3 py-3">
+                  <p className="text-sm font-semibold">{channelLabel}</p>
+                  <p className="text-[11px] text-stone-500 mt-0.5">
+                    {merchant?.channels?.[draft.channel]?.etaMinutes || 30}–
+                    {(merchant?.channels?.[draft.channel]?.etaMinutes || 30) + 10} {t('shopMins')}
+                    {merchant?.channels?.[draft.channel] && !merchant.channels[draft.channel].open
+                      ? ` · ${t('shopClosed')}`
+                      : ''}
+                  </p>
                 </div>
               )}
 
-              {draft.channel === 'delivery' && (
-                <div className="space-y-3 border-t border-stone-100 pt-4">
-                  <input
-                    className="w-full border border-stone-300 px-3 py-2 text-sm"
-                    placeholder={t('shopStreetAddressRequired')}
-                    value={draft.address}
-                    onChange={(e) => patch({ address: e.target.value })}
-                  />
-                  <ZipCityFields
-                    shopKey={shopKey}
-                    zipCode={draft.zipCode}
-                    city={draft.city}
-                    onZipChange={(zipCode) => patch({ zipCode })}
-                    onCityChange={(city) => patch({ city })}
-                    zipClassName="border border-stone-300 px-3 py-2 text-sm w-full"
-                    cityClassName="border border-stone-300 px-3 py-2 text-sm w-full"
-                  />
-                  <button
-                    type="button"
-                    className="border border-stone-900 px-4 py-2 text-sm font-semibold"
-                    onClick={checkDelivery}
-                    disabled={checkingZone}
-                  >
-                    {checkingZone ? t('shopChecking') : t('shopVerifyDeliveryZone')}
-                  </button>
-                  {deliveryInfo?.deliverable && (
-                    <p className="text-sm text-teal-800">
-                      {deliveryInfo.zone.name}: {t('shopFee')} CHF {Number(deliveryInfo.zone.deliveryFee).toFixed(2)}
-                      {deliveryInfo.zone.minOrderAmount > 0
-                        ? ` · ${t('shopMin')} CHF ${Number(deliveryInfo.zone.minOrderAmount).toFixed(2)}`
-                        : ''}
-                    </p>
-                  )}
-                </div>
-              )}
-
+              {/* 2. When / schedule */}
               <div className="border-t border-stone-100 pt-4 space-y-3">
-                <label className="block text-sm font-medium">{t('shopWhen')}</label>
+                <label className="block text-sm font-semibold">{t('shopWhen')}</label>
                 {!channelOpen && (
                   <p className="text-sm text-amber-700 bg-amber-50 border border-amber-100 px-3 py-2">
                     {t('shopStoreClosedNow')}
@@ -902,90 +737,270 @@ export default function CheckoutPage() {
                   )
                 ) : (
                   <>
-                <div className="flex flex-wrap gap-2">
-                  {channelOpen && (
-                    <button
-                      type="button"
-                      className={`px-3 py-2 text-sm border ${
-                        whenMode === 'asap' ? 'bg-stone-900 text-white' : 'bg-white'
-                      }`}
-                      onClick={() => {
-                        setWhenMode('asap');
-                        patch({ scheduledFor: '' });
-                      }}
-                    >
-                      {t('shopAsap')}
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    className={`px-3 py-2 text-sm border ${
-                      whenMode === 'later' ? 'bg-stone-900 text-white' : 'bg-white'
-                    }`}
-                    onClick={() => setWhenMode('later')}
-                  >
-                    {t('shopScheduleLater')}
-                  </button>
+                    <div className="flex flex-wrap gap-2">
+                      {channelOpen && (
+                        <button
+                          type="button"
+                          className={`px-3 py-2 text-sm border ${
+                            whenMode === 'asap' ? 'bg-stone-900 text-white' : 'bg-white'
+                          }`}
+                          onClick={() => {
+                            setWhenMode('asap');
+                            patch({ scheduledFor: '' });
+                          }}
+                        >
+                          {t('shopAsap')}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className={`px-3 py-2 text-sm border ${
+                          whenMode === 'later' ? 'bg-stone-900 text-white' : 'bg-white'
+                        }`}
+                        onClick={() => setWhenMode('later')}
+                      >
+                        {t('shopScheduleLater')}
+                      </button>
+                    </div>
+
+                    {whenMode === 'later' && (
+                      <div className="space-y-3 rounded-lg border border-stone-200 bg-stone-50 p-3">
+                        {scheduleDays.length === 0 ? (
+                          <p className="text-sm text-red-600">{t('shopNoOpenHours')}</p>
+                        ) : (
+                          <>
+                            <div className="grid grid-cols-3 gap-2">
+                              {scheduleDays.map((day) => (
+                                <button
+                                  key={day.offset}
+                                  type="button"
+                                  className={`min-w-0 px-1.5 py-2 text-center border rounded-md ${
+                                    activeScheduleDay?.offset === day.offset
+                                      ? 'bg-stone-900 text-white border-stone-900'
+                                      : 'bg-white border-stone-300'
+                                  }`}
+                                  onClick={() => {
+                                    setScheduleDayOffset(day.offset);
+                                    patch({ scheduledFor: day.slots[0]?.value || '' });
+                                  }}
+                                >
+                                  <span className="font-semibold block text-xs sm:text-sm leading-tight">
+                                    {scheduleDayTitle(day.offset)}
+                                  </span>
+                                  <span className="text-[10px] sm:text-[11px] opacity-80 block truncate">
+                                    {day.weekday} {day.dateLabel}
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                            <div>
+                              <p className="text-xs text-stone-500 mb-2">{t('shopTimeSlotsHint')}</p>
+                              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-48 overflow-y-auto">
+                                {(activeScheduleDay?.slots || []).map((slot) => (
+                                  <button
+                                    key={slot.value}
+                                    type="button"
+                                    className={`px-2 py-2 text-sm border rounded-md font-medium ${
+                                      draft.scheduledFor === slot.value
+                                        ? 'bg-teal-700 text-white border-teal-700'
+                                        : 'bg-white border-stone-300 hover:border-stone-900'
+                                    }`}
+                                    onClick={() => patch({ scheduledFor: slot.value })}
+                                  >
+                                    {slot.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {/* 3. Customer / order details */}
+              <div className="border-t border-stone-100 pt-4 space-y-4">
+                <div>
+                  <h1 className="text-2xl font-bold tracking-tight">
+                    {draft.channel === 'delivery' ? t('shopDeliveryDetails') : t('shopPickupDetails')}
+                  </h1>
+                  <p className="text-sm text-stone-500 mt-1">
+                    {draft.channel === 'delivery'
+                      ? t('shopWhereDeliver')
+                      : `${t('shopCollectFrom')} ${merchant?.address || t('shopRestaurant')}${
+                          merchant?.city ? `, ${merchant.city}` : ''
+                        }`}
+                  </p>
                 </div>
 
-                {whenMode === 'later' && (
-                  <div className="space-y-3 rounded-lg border border-stone-200 bg-stone-50 p-3">
-                    {scheduleDays.length === 0 ? (
-                      <p className="text-sm text-red-600">
-                        {t('shopNoOpenHours')}
-                      </p>
-                    ) : (
-                      <>
-                        <div className="grid grid-cols-3 gap-2">
-                          {scheduleDays.map((day) => (
+                <div className="grid md:grid-cols-2 gap-3">
+                  <input
+                    className="border border-stone-300 px-3 py-2 text-sm md:col-span-2"
+                    placeholder={t('shopFullNameRequired')}
+                    value={draft.customerName}
+                    onChange={(e) => patch({ customerName: e.target.value })}
+                    required
+                  />
+                  <input
+                    className="border border-stone-300 px-3 py-2 text-sm"
+                    placeholder={t('shopPhoneRequired')}
+                    value={draft.customerPhone}
+                    onChange={(e) => patch({ customerPhone: e.target.value })}
+                    required
+                  />
+                  <input
+                    className="border border-stone-300 px-3 py-2 text-sm"
+                    type="email"
+                    placeholder={
+                      wantCreateAccount ? `${t('shopEmail')} *` : t('shopEmailReceipt')
+                    }
+                    value={draft.customerEmail}
+                    onChange={(e) => {
+                      patch({ customerEmail: e.target.value });
+                      if (!showLogin) setLoginEmail(e.target.value);
+                    }}
+                  />
+                </div>
+
+                {customer ? (
+                  <p className="text-sm text-teal-800 border border-teal-100 bg-teal-50 px-3 py-2">
+                    {t('shopLoggedInAs')} {customer.name || customer.email}.{' '}
+                    <button
+                      type="button"
+                      className="underline font-medium"
+                      onClick={() => {
+                        clearCustomerToken(shopKey);
+                        setCustomer(null);
+                        patch({ authMode: 'guest' });
+                      }}
+                    >
+                      {t('shopLogOut')}
+                    </button>
+                  </p>
+                ) : (
+                  <div className="grid md:grid-cols-2 gap-4 border border-stone-100 bg-stone-50/60 p-4">
+                    <div className="space-y-3">
+                      <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+                        <input
+                          type="checkbox"
+                          className="rounded border-stone-300"
+                          checked={wantCreateAccount}
+                          onChange={(e) => {
+                            setWantCreateAccount(e.target.checked);
+                            if (e.target.checked) setShowLogin(false);
+                            if (!e.target.checked) setPassword('');
+                          }}
+                        />
+                        {t('shopCreateAccount')}
+                      </label>
+                      {wantCreateAccount && (
+                        <input
+                          className="w-full border border-stone-300 px-3 py-2 text-sm bg-white"
+                          type="password"
+                          placeholder={t('shopPasswordMin6')}
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          autoComplete="new-password"
+                        />
+                      )}
+                    </div>
+
+                    <div className="space-y-3 md:border-l md:border-stone-200 md:pl-4">
+                      {!showLogin ? (
+                        <div className="space-y-1">
+                          <p className="text-sm text-stone-500">{t('shopHaveAccount')}</p>
+                          <button
+                            type="button"
+                            className="text-sm font-semibold underline underline-offset-2"
+                            onClick={() => {
+                              setShowLogin(true);
+                              setWantCreateAccount(false);
+                              setPassword('');
+                              if (draft.customerEmail) setLoginEmail(draft.customerEmail);
+                            }}
+                          >
+                            {t('shopLogIn')}
+                          </button>
+                        </div>
+                      ) : (
+                        <form onSubmit={onLogin} className="space-y-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <h2 className="font-semibold text-sm">{t('shopLogIn')}</h2>
                             <button
-                              key={day.offset}
                               type="button"
-                              className={`min-w-0 px-1.5 py-2 text-center border rounded-md ${
-                                activeScheduleDay?.offset === day.offset
-                                  ? 'bg-stone-900 text-white border-stone-900'
-                                  : 'bg-white border-stone-300'
-                              }`}
-                              onClick={() => {
-                                setScheduleDayOffset(day.offset);
-                                patch({ scheduledFor: day.slots[0]?.value || '' });
-                              }}
+                              className="text-xs text-stone-500 underline"
+                              onClick={() => setShowLogin(false)}
                             >
-                              <span className="font-semibold block text-xs sm:text-sm leading-tight">
-                                {scheduleDayTitle(day.offset)}
-                              </span>
-                              <span className="text-[10px] sm:text-[11px] opacity-80 block truncate">
-                                {day.weekday} {day.dateLabel}
-                              </span>
+                              {t('cancel')}
                             </button>
-                          ))}
-                        </div>
-                        <div>
-                          <p className="text-xs text-stone-500 mb-2">
-                            {t('shopTimeSlotsHint')}
-                          </p>
-                          <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-48 overflow-y-auto">
-                            {(activeScheduleDay?.slots || []).map((slot) => (
-                              <button
-                                key={slot.value}
-                                type="button"
-                                className={`px-2 py-2 text-sm border rounded-md font-medium ${
-                                  draft.scheduledFor === slot.value
-                                    ? 'bg-teal-700 text-white border-teal-700'
-                                    : 'bg-white border-stone-300 hover:border-stone-900'
-                                }`}
-                                onClick={() => patch({ scheduledFor: slot.value })}
-                              >
-                                {slot.label}
-                              </button>
-                            ))}
                           </div>
-                        </div>
-                      </>
-                    )}
+                          <input
+                            className="w-full border border-stone-300 px-3 py-2 text-sm bg-white"
+                            type="email"
+                            placeholder={t('shopEmail')}
+                            value={loginEmail}
+                            onChange={(e) => setLoginEmail(e.target.value)}
+                            required
+                            autoComplete="email"
+                          />
+                          <input
+                            className="w-full border border-stone-300 px-3 py-2 text-sm bg-white"
+                            type="password"
+                            placeholder={t('shopPassword')}
+                            value={loginPassword}
+                            onChange={(e) => setLoginPassword(e.target.value)}
+                            required
+                            autoComplete="current-password"
+                          />
+                          <button
+                            type="submit"
+                            className="w-full bg-stone-900 text-white py-2.5 text-sm font-semibold"
+                          >
+                            {t('shopLogIn')}
+                          </button>
+                        </form>
+                      )}
+                    </div>
                   </div>
                 )}
-                  </>
+
+                {draft.channel === 'delivery' && (
+                  <div className="space-y-3 border-t border-stone-100 pt-4">
+                    <input
+                      className="w-full border border-stone-300 px-3 py-2 text-sm"
+                      placeholder={t('shopStreetAddressRequired')}
+                      value={draft.address}
+                      onChange={(e) => patch({ address: e.target.value })}
+                    />
+                    <ZipCityFields
+                      shopKey={shopKey}
+                      zipCode={draft.zipCode}
+                      city={draft.city}
+                      onZipChange={(zipCode) => patch({ zipCode })}
+                      onCityChange={(city) => patch({ city })}
+                      zipClassName="border border-stone-300 px-3 py-2 text-sm w-full"
+                      cityClassName="border border-stone-300 px-3 py-2 text-sm w-full"
+                    />
+                    <button
+                      type="button"
+                      className="border border-stone-900 px-4 py-2 text-sm font-semibold"
+                      onClick={checkDelivery}
+                      disabled={checkingZone}
+                    >
+                      {checkingZone ? t('shopChecking') : t('shopVerifyDeliveryZone')}
+                    </button>
+                    {deliveryInfo?.deliverable && (
+                      <p className="text-sm text-teal-800">
+                        {deliveryInfo.zone.name}: {t('shopFee')} CHF{' '}
+                        {Number(deliveryInfo.zone.deliveryFee).toFixed(2)}
+                        {deliveryInfo.zone.minOrderAmount > 0
+                          ? ` · ${t('shopMin')} CHF ${Number(deliveryInfo.zone.minOrderAmount).toFixed(2)}`
+                          : ''}
+                      </p>
+                    )}
+                  </div>
                 )}
 
                 <textarea
