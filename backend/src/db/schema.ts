@@ -78,6 +78,11 @@ export const merchants = pgTable(
     pickupEnabled: boolean("pickup_enabled").default(true).notNull(),
     dineInEnabled: boolean("dine_in_enabled").default(true).notNull(),
     deliveryEnabled: boolean("delivery_enabled").default(true).notNull(),
+    /**
+     * Where customers choose pickup / delivery / dine-in:
+     * checkout | popup_start | menu
+     */
+    channelSelectMode: varchar("channel_select_mode", { length: 20 }).default("checkout").notNull(),
     // Per-channel weekly hours (+ optional display for homepage banner):
     // { takeaway: { mon: [{ open, close }] }, delivery, dine_in, display }
     storeHours: json("store_hours").$type<Record<string, Record<string, Array<{ open: string; close: string }>>>>().default({}),

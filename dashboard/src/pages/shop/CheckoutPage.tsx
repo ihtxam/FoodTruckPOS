@@ -133,6 +133,35 @@ export default function CheckoutPage() {
     document.documentElement.lang = locale;
   }, [locale]);
 
+  /** Keep item prices in sync when switching takeaway ↔ delivery (menu markup). */
+  useEffect(() => {
+    if (!merchant) return;
+    const markupRaw = Number(merchant.deliveryMenuMarkup ?? 0);
+    const markup = Number.isFinite(markupRaw) && markupRaw > 0 ? markupRaw : 0;
+    setDraft((prev) => {
+      let changed = false;
+      const addMarkup = prev.channel === 'delivery' ? markup : 0;
+      const items = prev.items.map((item) => {
+        if (item.loyaltyReward) return item;
+        const extrasTotal = roundMoney2(
+          (item.selectedExtras || []).reduce((s, e) => s + e.price, 0) +
+            (item.comboSelections || []).reduce(
+              (s, c) => s + c.extraPrice + (c.selectedExtras || []).reduce((x, e) => x + e.price, 0),
+              0
+            )
+        );
+        const nextPrice = roundMoney2(item.basePrice + addMarkup + extrasTotal);
+        if (nextPrice !== item.price) {
+          changed = true;
+          return { ...item, price: nextPrice };
+        }
+        return item;
+      });
+      if (!changed) return prev;
+      return { ...prev, items };
+    });
+  }, [draft.channel, merchant]);
+
   const taxRate = useMemo(() => {
     if (!merchant) return 0;
     if (draft.channel === 'dine_in') return Number(merchant.taxDineInRate ?? merchant.vatRate ?? 0);
@@ -496,6 +525,30 @@ export default function CheckoutPage() {
   const channelLabel =
     draft.channel === 'delivery' ? t('shopDelivery') : draft.channel === 'dine_in' ? t('shopDineIn') : t('shopPickup');
 
+  const channelOptions = useMemo(() => {
+    const channels = merchant?.channels || {};
+    const all: { id: ShopChannel; label: string }[] = [
+      { id: 'takeaway', label: t('shopPickup') },
+      { id: 'delivery', label: t('shopDelivery') },
+      { id: 'dine_in', label: t('shopDineIn') },
+    ];
+    return all.filter((c) => channels[c.id]?.enabled);
+  }, [merchant, t]);
+
+  const showChannelPicker =
+    channelOptions.length > 1 &&
+    (String(merchant?.channelSelectMode || 'checkout') === 'checkout' ||
+      String(merchant?.channelSelectMode || '') === 'popup_start' ||
+      String(merchant?.channelSelectMode || '') === 'menu');
+
+  const patchChannel = (channel: ShopChannel) => {
+    setDraft((d) => ({ ...d, channel }));
+    setDeliveryInfo(null);
+    setError(null);
+    setWhenMode('asap');
+    setScheduleDayOffset(0);
+  };
+
   return (
     <div className="min-h-dvh bg-[#f6f5f2] text-stone-900">
       <ShopVacationPopup vacation={merchant?.vacation} shopKey={shopKey} />
@@ -549,6 +602,36 @@ export default function CheckoutPage() {
 
           {step === 'details' && (
             <section className="bg-white border border-stone-200 p-5 space-y-4">
+              {showChannelPicker ? (
+                <div className="space-y-2">
+                  <p className="text-sm font-semibold">{t('shopFulfillment')}</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    {channelOptions.map((c) => {
+                      const meta = merchant?.channels?.[c.id];
+                      const on = draft.channel === c.id;
+                      return (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => patchChannel(c.id)}
+                          className={`rounded-xl border px-3 py-3 text-left transition ${
+                            on
+                              ? 'border-stone-900 bg-stone-900 text-white'
+                              : 'border-stone-200 bg-stone-50 text-stone-800 hover:border-stone-400'
+                          }`}
+                        >
+                          <span className="block text-sm font-semibold">{c.label}</span>
+                          <span className={`block text-[11px] mt-0.5 ${on ? 'text-white/70' : 'text-stone-500'}`}>
+                            {meta?.etaMinutes || 30}–{(meta?.etaMinutes || 30) + 10} {t('shopMins')}
+                            {meta && !meta.open ? ` · ${t('shopClosed')}` : ''}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+
               <h1 className="text-2xl font-bold tracking-tight">
                 {draft.channel === 'delivery' ? t('shopDeliveryDetails') : t('shopPickupDetails')}
               </h1>

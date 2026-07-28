@@ -34,6 +34,15 @@ function slugFromName(name: string): string {
 }
 
 export type FulfillmentChannel = "takeaway" | "dine_in" | "delivery";
+export type ChannelSelectMode = "checkout" | "popup_start" | "menu";
+
+function normalizeChannelSelectMode(raw?: string | null): ChannelSelectMode {
+  const v = String(raw || "")
+    .trim()
+    .toLowerCase();
+  if (v === "popup_start" || v === "menu" || v === "checkout") return v;
+  return "checkout";
+}
 
 export class MerchantSettingsService {
   static async getMerchantSettings(merchantId: string) {
@@ -78,6 +87,7 @@ export class MerchantSettingsService {
       pickupEnabled: merchant.pickupEnabled,
       dineInEnabled: merchant.dineInEnabled,
       deliveryEnabled: merchant.deliveryEnabled,
+      channelSelectMode: normalizeChannelSelectMode(merchant.channelSelectMode),
       floorPlanEnabled: merchant.floorPlanEnabled,
       paxOrderingEnabled: merchant.paxOrderingEnabled,
       storeHours: merchant.storeHours || {},
@@ -131,6 +141,7 @@ export class MerchantSettingsService {
       pickupEnabled?: boolean;
       dineInEnabled?: boolean;
       deliveryEnabled?: boolean;
+      channelSelectMode?: ChannelSelectMode | string;
       floorPlanEnabled?: boolean;
       paxOrderingEnabled?: boolean;
       storeHours?: Record<string, unknown>;
@@ -180,6 +191,9 @@ export class MerchantSettingsService {
     if (updates.pickupEnabled !== undefined) patch.pickupEnabled = !!updates.pickupEnabled;
     if (updates.dineInEnabled !== undefined) patch.dineInEnabled = !!updates.dineInEnabled;
     if (updates.deliveryEnabled !== undefined) patch.deliveryEnabled = !!updates.deliveryEnabled;
+    if (updates.channelSelectMode !== undefined) {
+      patch.channelSelectMode = normalizeChannelSelectMode(updates.channelSelectMode);
+    }
     if (updates.floorPlanEnabled !== undefined) patch.floorPlanEnabled = !!updates.floorPlanEnabled;
     if (updates.paxOrderingEnabled !== undefined) patch.paxOrderingEnabled = !!updates.paxOrderingEnabled;
     if (updates.storeHours !== undefined) patch.storeHours = updates.storeHours;

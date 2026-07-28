@@ -35,6 +35,12 @@ const DAYS = [
 type DayKey = (typeof DAYS)[number]['key'];
 type HoursChannelKey = 'takeaway' | 'dine_in' | 'delivery' | 'display';
 
+const ORDER_CHANNELS: { key: Exclude<HoursChannelKey, 'display'>; label: string }[] = [
+  { key: 'takeaway', label: 'Pickup' },
+  { key: 'dine_in', label: 'Dine in' },
+  { key: 'delivery', label: 'Delivery' },
+];
+
 const ALL_CHANNELS: HoursChannelKey[] = ['takeaway', 'dine_in', 'delivery', 'display'];
 
 /** Channels a quick schedule can be applied to (multi-select). */
@@ -395,6 +401,7 @@ export default function OnlineShop() {
         pickupEnabled: settings.pickupEnabled,
         dineInEnabled: settings.dineInEnabled,
         deliveryEnabled: settings.deliveryEnabled,
+        channelSelectMode: settings.channelSelectMode || 'checkout',
         storeHours: hours,
         latitude: settings.latitude,
         longitude: settings.longitude,
@@ -564,6 +571,22 @@ export default function OnlineShop() {
               />
               Delivery
             </label>
+          </div>
+
+          <div className="rounded-lg border border-stone-200 bg-white p-3 space-y-2">
+            <label className="block text-sm font-medium">Ask pickup / delivery / dine-in</label>
+            <p className="text-xs text-stone-500 leading-snug">
+              Cleaner shops ask at checkout. Use a start popup if guests should choose before browsing.
+            </p>
+            <select
+              className="input max-w-md"
+              value={settings.channelSelectMode || 'checkout'}
+              onChange={(e) => setSettings({ ...settings, channelSelectMode: e.target.value })}
+            >
+              <option value="checkout">At checkout (recommended)</option>
+              <option value="popup_start">Popup when opening the menu</option>
+              <option value="menu">Buttons on the menu page</option>
+            </select>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">

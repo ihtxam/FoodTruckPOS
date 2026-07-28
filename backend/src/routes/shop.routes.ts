@@ -556,6 +556,12 @@ router.get("/:slug", async (req: Request, res: Response) => {
         /** Homepage banner hours (display channel or takeaway fallback) */
         displayHours,
         channels,
+        channelSelectMode: (() => {
+          const v = String(merchant.channelSelectMode || "")
+            .trim()
+            .toLowerCase();
+          return v === "popup_start" || v === "menu" || v === "checkout" ? v : "checkout";
+        })(),
         payment: {
           cash: true,
           card: true,
