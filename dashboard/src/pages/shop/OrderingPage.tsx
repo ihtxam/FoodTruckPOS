@@ -27,6 +27,7 @@ import ShopComboWizard, {
   type ComboSlot,
   type ShopComboProduct,
 } from '@/components/shop/ShopComboWizard';
+import { CalendarDays, ShoppingBag, User } from 'lucide-react';
 import { isLocale, useI18n } from '@/lib/i18n';
 import ShopLangSwitcher from '@/components/shop/ShopLangSwitcher';
 
@@ -568,52 +569,54 @@ export default function OrderingPage() {
   return (
     <div className="min-h-screen bg-[#f6f5f2] text-stone-900">
       <header className="sticky top-0 z-30 bg-white border-b border-stone-200">
-        <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3 min-w-0">
+        <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between gap-2">
+          <Link
+            to={shopBasePath(shopKey) || '/'}
+            className="flex items-center gap-2.5 min-w-0 shrink"
+            aria-label={merchant?.name || t('shopBackToMenu')}
+          >
             {merchant?.shopLogoUrl ? (
-              <img src={merchant.shopLogoUrl} alt="" className="h-10 w-auto object-contain" />
+              <img src={merchant.shopLogoUrl} alt="" className="h-9 w-auto max-w-[7rem] object-contain" />
             ) : (
-              <div className="h-10 w-10 bg-stone-900 text-white flex items-center justify-center font-bold text-sm">
+              <div className="h-9 w-9 bg-stone-900 text-white flex items-center justify-center font-bold text-xs shrink-0">
                 {(merchant?.name || 'M').slice(0, 2).toUpperCase()}
               </div>
             )}
-            <span className="font-bold tracking-tight truncate">{merchant?.name}</span>
-          </div>
-          <div className="flex items-center gap-2 sm:gap-4">
+            <span className="hidden sm:inline font-bold tracking-tight truncate">{merchant?.name}</span>
+          </Link>
+          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
             <ShopLangSwitcher />
-            <nav className="hidden sm:flex items-center gap-4 text-sm font-medium">
-              <span className="text-stone-900 border-b-2 border-stone-900 pb-0.5">{t('shopOrder')}</span>
-              {showReservations && (
-                <Link to={reservationsPath} className="text-stone-600 hover:text-stone-900">
-                  {t('shopReservations')}
-                </Link>
-              )}
-              <Link to={accountPath} className="text-stone-600 hover:text-stone-900">
-                {t('shopAccount')}
-              </Link>
-            </nav>
-            <div className="sm:hidden flex items-center gap-3">
-              {showReservations && (
-                <Link
-                  to={reservationsPath}
-                  className="text-sm font-semibold text-stone-800 underline underline-offset-2"
-                >
-                  {t('shopReservations')}
-                </Link>
-              )}
+            {showReservations && (
               <Link
-                to={accountPath}
-                className="text-sm font-semibold text-stone-800 underline underline-offset-2"
+                to={reservationsPath}
+                className="inline-flex h-9 w-9 items-center justify-center text-stone-700 hover:bg-stone-100"
+                aria-label={t('shopReservations')}
+                title={t('shopReservations')}
               >
-                {t('shopAccount')}
+                <CalendarDays className="h-5 w-5" strokeWidth={1.75} />
               </Link>
-            </div>
+            )}
+            <Link
+              to={accountPath}
+              className="inline-flex h-9 w-9 items-center justify-center text-stone-700 hover:bg-stone-100"
+              aria-label={t('shopAccount')}
+              title={t('shopAccount')}
+            >
+              <User className="h-5 w-5" strokeWidth={1.75} />
+            </Link>
             <button
               type="button"
-              className="lg:hidden bg-stone-900 text-white px-4 py-2 text-sm font-semibold"
+              className="relative inline-flex h-9 w-9 items-center justify-center text-stone-700 hover:bg-stone-100 lg:hidden"
               onClick={() => setMobileBasket(true)}
+              aria-label={`${t('shopBasketCount')} (${itemCount})`}
+              title={`${t('shopBasketCount')} (${itemCount})`}
             >
-              {t('shopBasketCount')} ({itemCount})
+              <ShoppingBag className="h-5 w-5" strokeWidth={1.75} />
+              {itemCount > 0 ? (
+                <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center bg-stone-900 px-1 text-[10px] font-bold text-white">
+                  {itemCount > 99 ? '99+' : itemCount}
+                </span>
+              ) : null}
             </button>
           </div>
         </div>

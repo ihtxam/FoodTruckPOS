@@ -1,3 +1,4 @@
+import { ShoppingBag } from 'lucide-react';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import axios from 'axios';
@@ -146,14 +147,23 @@ export default function ReservationsPage() {
   return (
     <div className="min-h-screen bg-[#f6f5f2] text-stone-900">
       <header className="sticky top-0 z-30 bg-white border-b border-stone-200">
-        <div className="max-w-3xl mx-auto px-4 h-16 flex items-center justify-between gap-3">
-          <Link to={base || '/'} className="font-bold tracking-tight truncate">
+        <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between gap-2">
+          <Link
+            to={base || '/'}
+            className="font-bold tracking-tight truncate min-w-0"
+            aria-label={config?.shopName || 'Home'}
+          >
             {config?.shopName || 'Reservations'}
           </Link>
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="flex items-center gap-1 shrink-0">
             <ShopLangSwitcher />
-            <Link to={`${base}/menu`} className="text-sm font-semibold underline underline-offset-2">
-              {t('shopOrder')}
+            <Link
+              to={`${base}/menu`}
+              className="inline-flex h-9 w-9 items-center justify-center text-stone-700 hover:bg-stone-100"
+              aria-label={t('shopOrder')}
+              title={t('shopOrder')}
+            >
+              <ShoppingBag className="h-5 w-5" strokeWidth={1.75} />
             </Link>
           </div>
         </div>
