@@ -7,7 +7,7 @@ Server IP: **116.202.26.15**
 | `api.chaslay.com` | POS license, menu sync, order API, `/v1/receipts` |
 | `pay.chaslay.com` | Digital receipt pages (`/receipts/{id}`) |
 | `shop.chaslay.com/{clientName}` | Customer online shop per merchant |
-| `admin.chaslay.com` | Merchant back office + superadmin |
+| `app.chaslay.com` | Merchant back office + superadmin |
 
 ---
 
@@ -18,7 +18,7 @@ Point these **A records** to `116.202.26.15`:
 - `api.chaslay.com`
 - `pay.chaslay.com`
 - `shop.chaslay.com`
-- `admin.chaslay.com`
+- `app.chaslay.com`
 
 ---
 
@@ -119,9 +119,9 @@ docker compose exec api npm run seed
 | `LICENSE_SECRET` | Min 32 chars |
 | `SUPERADMIN_PASSWORD` | Set once in `/root/chaslay-secrets/backend.env`; stored in Postgres and survives redeploys |
 
-`Caddyfile` is already set for `api.chaslay.com`, `shop.chaslay.com`, `admin.chaslay.com`.
+`Caddyfile` is already set for `api.chaslay.com`, `shop.chaslay.com`, `app.chaslay.com`.
 
-**Superadmin panel:** https://admin.chaslay.com (password saved in database after first login)
+**Superadmin panel:** https://app.chaslay.com (password saved in database after first login)
 
 **Reset superadmin password anytime:**
 
@@ -136,7 +136,7 @@ After changing `.env`, restart: `docker compose up -d --build`
 
 ## Merchant portal (shop owners)
 
-Merchants log in at **https://admin.chaslay.com** with email + password.
+Merchants log in at **https://app.chaslay.com** with email + password.
 
 **Create a merchant login** (superadmin ? Manage tenant ? Merchant portal login), or:
 
@@ -229,7 +229,7 @@ Orders appear in POS **Ongoing Orders** when the tablet is online and `SYNC_API_
 ## Optional later
 
 - Stripe for online payment
-- Full admin UI at `admin.chaslay.com`
+- Full admin UI at `app.chaslay.com`
 - POS menu push to server
 - Waiter / kiosk apps
 

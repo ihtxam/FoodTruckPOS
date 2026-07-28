@@ -34,7 +34,7 @@ api.chaslay.com {
 	}
 }
 
-admin.chaslay.com {
+app.chaslay.com {
 	encode gzip zstd
 
 	handle /api/* {
@@ -48,6 +48,11 @@ admin.chaslay.com {
 	handle {
 		reverse_proxy dashboard:80
 	}
+}
+
+# Legacy panel hostname → app
+admin.chaslay.com {
+	redir https://app.chaslay.com{uri} permanent
 }
 
 shop.chaslay.com {

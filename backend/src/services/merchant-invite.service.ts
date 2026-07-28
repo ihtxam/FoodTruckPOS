@@ -15,7 +15,7 @@ function publicAppBase() {
     process.env.PUBLIC_APP_URL ||
     process.env.MERCHANT_DASHBOARD_URL ||
     process.env.SUPERADMIN_URL ||
-    "https://admin.chaslay.com"
+    "https://app.chaslay.com"
   ).replace(/\/$/, "");
 }
 
