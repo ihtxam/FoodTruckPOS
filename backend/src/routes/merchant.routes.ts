@@ -1082,7 +1082,7 @@ router.post("/geocode", async (req: Request, res: Response) => {
  * POST /api/merchant/media
  * multipart field "file" — image upload (JPEG/PNG/WebP/GIF)
  */
-router.post("/media", (req: Request, res: Response, next) => {
+router.post("/media", (req: Request, res: Response, next: NextFunction) => {
   imageUpload.single("file")(req, res, (err: unknown) => {
     if (err) {
       const message =
