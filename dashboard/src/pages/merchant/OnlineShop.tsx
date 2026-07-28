@@ -9,6 +9,19 @@ import ZoneMapEditor, {
 } from '@/components/ZoneMapEditor';
 import { useI18n } from '@/lib/i18n';
 
+/** Reject empty / Null Island (0,0) so the map does not open in the ocean. */
+function parseStoreCoords(latRaw: unknown, lngRaw: unknown): LatLngTuple | null {
+  if (latRaw == null || lngRaw == null || latRaw === '' || lngRaw === '') return null;
+  const lat = Number(latRaw);
+  const lng = Number(lngRaw);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (Math.abs(lat) < 1e-5 && Math.abs(lng) < 1e-5) return null;
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+  return [lat, lng];
+}
+
+const DEFAULT_MAP_CENTER: LatLngTuple = [46.8182, 8.2275]; // Switzerland overview
+
 const DAYS = [
   { key: 'mon', label: 'Mon' },
   { key: 'tue', label: 'Tue' },
@@ -218,13 +231,14 @@ export default function OnlineShop() {
   const [editingZoneId, setEditingZoneId] = useState<string | null>(null);
   const [savingZone, setSavingZone] = useState(false);
   const [keepExistingPolygon, setKeepExistingPolygon] = useState(false);
+  const [locatingStore, setLocatingStore] = useState(false);
 
-  const mapCenter = useMemo<LatLngTuple>(() => {
-    const lat = Number(settings?.latitude);
-    const lng = Number(settings?.longitude);
-    if (Number.isFinite(lat) && Number.isFinite(lng)) return [lat, lng];
-    return [46.99, 6.93];
-  }, [settings]);
+  const storeCoords = useMemo(
+    () => parseStoreCoords(settings?.latitude, settings?.longitude),
+    [settings?.latitude, settings?.longitude]
+  );
+
+  const mapCenter = useMemo<LatLngTuple>(() => storeCoords || DEFAULT_MAP_CENTER, [storeCoords]);
 
   const otherZones = useMemo(
     () => zones.filter((z) => z.id !== editingZoneId),
@@ -241,15 +255,77 @@ export default function OnlineShop() {
       setSettings(settingsData);
       setHours(mergeHours(settingsData.storeHours));
       setZones(z.data.zones || []);
+      return settingsData;
     } catch (error: any) {
       toast.error(error.response?.data?.error || 'Failed to load shop settings');
+      return null;
     } finally {
       setLoading(false);
     }
   };
 
+  const locateStoreFromAddress = async (opts?: { silent?: boolean; settingsOverride?: any }) => {
+    const src = opts?.settingsOverride || settings;
+    if (!src) return null;
+    setLocatingStore(true);
+    try {
+      const query = [src.address, src.city, src.country || 'Switzerland']
+        .map((p: unknown) => String(p || '').trim())
+        .filter(Boolean)
+        .join(', ');
+      if (!query) {
+        if (!opts?.silent) toast.error('Set your business address in Settings first');
+        return null;
+      }
+      const res = await api.post('/merchant/geocode', { query });
+      if (!res.data.found) {
+        if (!opts?.silent) toast.error('Could not find that address on the map');
+        return null;
+      }
+      const lat = Number(res.data.lat);
+      const lng = Number(res.data.lng);
+      const coords = parseStoreCoords(lat, lng);
+      if (!coords) {
+        if (!opts?.silent) toast.error('Invalid coordinates for address');
+        return null;
+      }
+      setSettings((prev: any) =>
+        prev ? { ...prev, latitude: String(coords[0]), longitude: String(coords[1]) } : prev
+      );
+      // Persist so the next visit opens on the store
+      try {
+        await api.put('/merchant/settings', {
+          latitude: coords[0],
+          longitude: coords[1],
+        });
+      } catch {
+        /* keep UI coords even if save fails */
+      }
+      if (!opts?.silent) toast.success('Map centered on store address');
+      return coords;
+    } catch (error: any) {
+      if (!opts?.silent) {
+        toast.error(error.response?.data?.error || 'Could not locate store address');
+      }
+      return null;
+    } finally {
+      setLocatingStore(false);
+    }
+  };
+
   useEffect(() => {
-    load();
+    void (async () => {
+      const settingsData = await load();
+      if (!settingsData) return;
+      if (parseStoreCoords(settingsData.latitude, settingsData.longitude)) return;
+      const hasAddress = Boolean(
+        String(settingsData.address || '').trim() || String(settingsData.city || '').trim()
+      );
+      if (hasAddress) {
+        await locateStoreFromAddress({ silent: true, settingsOverride: settingsData });
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const toggleDay = (day: DayKey) => {
@@ -551,6 +627,19 @@ export default function OnlineShop() {
                 placeholder="6.93"
               />
             </div>
+            <div className="md:col-span-2 flex flex-wrap items-end gap-2">
+              <button
+                type="button"
+                className="btn-secondary"
+                disabled={locatingStore}
+                onClick={() => void locateStoreFromAddress()}
+              >
+                {locatingStore ? 'Locating…' : 'Locate from business address'}
+              </button>
+              <p className="text-xs text-stone-500">
+                Uses the address from Settings → Business. The delivery map opens on this pin.
+              </p>
+            </div>
           </div>
 
           <div className="rounded-xl border border-stone-200 bg-stone-50/80 p-4 space-y-4">
@@ -823,6 +912,7 @@ export default function OnlineShop() {
             <h2 className="text-xl font-bold">Delivery zones</h2>
             <p className="text-gray-600 text-sm">
               Draw or edit zones on the map. Set minimum order and delivery fee per zone.
+              Menu markup for delivery items is set above (takeaway price + CHF).
             </p>
           </div>
           {editingZoneId && (
@@ -834,11 +924,8 @@ export default function OnlineShop() {
 
         <ZoneMapEditor
           center={mapCenter}
-          storeMarker={
-            Number.isFinite(Number(settings.latitude)) && Number.isFinite(Number(settings.longitude))
-              ? [Number(settings.latitude), Number(settings.longitude)]
-              : null
-          }
+          zoom={storeCoords ? 15 : 8}
+          storeMarker={storeCoords}
           existingZones={otherZones}
           draftRing={draftRing}
           onDraftChange={(ring) => {
