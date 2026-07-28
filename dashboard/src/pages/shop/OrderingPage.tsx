@@ -445,10 +445,7 @@ export default function OrderingPage() {
   const reservationsPath = `${shopBasePath(shopKey)}/reservations`;
   const vacationActive = !!merchant?.vacation?.active;
   const ordersPaused = merchant?.acceptingOrders === false;
-  const showReservations =
-    !!merchant?.reservationsEnabled &&
-    !vacationActive &&
-    merchant?.acceptingReservations !== false;
+  const showReservations = !!merchant?.reservationsEnabled;
 
   const Basket = (
     <aside className="bg-white border border-stone-200 flex flex-col h-full">
@@ -671,7 +668,7 @@ export default function OrderingPage() {
         </div>
       </header>
 
-      {ordersPaused && !vacationActive ? (
+      {ordersPaused ? (
         <div className="max-w-7xl mx-auto px-4 pt-4">
           <ShopNotAcceptingBanner kind="orders" phone={merchant?.phone} />
         </div>

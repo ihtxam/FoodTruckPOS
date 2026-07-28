@@ -9,11 +9,21 @@ const api: AxiosInstance = axios.create({
   },
 });
 
-// Add token to requests
+// Add token to requests; never force JSON Content-Type on FormData (breaks multer).
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
+  }
+  if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+    const headers = config.headers as any;
+    if (headers && typeof headers.delete === 'function') {
+      headers.delete('Content-Type');
+      headers.delete('content-type');
+    } else if (headers) {
+      delete headers['Content-Type'];
+      delete headers['content-type'];
+    }
   }
   return config;
 });
@@ -23,11 +33,14 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      sessionStorage.removeItem('sa_return_token');
-      sessionStorage.removeItem('sa_return_user');
-      window.location.href = '/login';
+      const path = window.location.pathname || '';
+      if (!path.startsWith('/set-password') && !path.startsWith('/login')) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        sessionStorage.removeItem('sa_return_token');
+        sessionStorage.removeItem('sa_return_user');
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }

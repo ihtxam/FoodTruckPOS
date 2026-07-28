@@ -10,7 +10,6 @@ import { CalendarDays, ShoppingBag } from 'lucide-react';
 import { cmsPuckConfig, emptyPuckData, withReservationsHomeCtas } from '@/lib/cms/puck-config';
 import { CmsShopProvider } from '@/lib/cms/CmsShopContext';
 import ShopVacationPopup from '@/components/shop/ShopVacationPopup';
-import ShopNotAcceptingBanner from '@/components/shop/ShopNotAcceptingBanner';
 
 function asPuckData(blocks: unknown): Data {
   if (blocks && typeof blocks === 'object' && !Array.isArray(blocks) && Array.isArray((blocks as Data).content)) {
@@ -96,19 +95,7 @@ export default function ShopHomePage() {
   }, [seoTitle]);
 
   const themeCss = useMemo(() => themeToCss(theme), [theme]);
-  const vacationActive = Boolean(merchant?.vacation?.active);
-  const ordersPaused = merchant?.acceptingOrders === false;
-  const reservationsPaused = merchant?.acceptingReservations === false;
-  const showReservationsNav =
-    Boolean(merchant?.reservationsEnabled) && !vacationActive && !reservationsPaused;
-  const pauseBannerKind =
-    !vacationActive && ordersPaused && reservationsPaused && merchant?.reservationsEnabled
-      ? ('both' as const)
-      : !vacationActive && ordersPaused
-        ? ('orders' as const)
-        : !vacationActive && reservationsPaused && merchant?.reservationsEnabled
-          ? ('reservations' as const)
-          : null;
+  const showReservationsNav = Boolean(merchant?.reservationsEnabled);
   const renderData = useMemo(
     () => withReservationsHomeCtas(data, showReservationsNav),
     [data, showReservationsNav],
@@ -193,11 +180,6 @@ export default function ShopHomePage() {
         </header>
 
         <main>
-          {pauseBannerKind ? (
-            <div className="max-w-5xl mx-auto px-4 pt-4">
-              <ShopNotAcceptingBanner kind={pauseBannerKind} phone={merchant.phone} />
-            </div>
-          ) : null}
           {hasContent ? (
             <Render config={cmsPuckConfig} data={renderData} />
           ) : (

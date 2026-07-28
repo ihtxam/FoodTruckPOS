@@ -275,7 +275,9 @@ export default function ReservationsPage() {
                   return t('shopVacationReservationsBlocked');
                 })()}
               </div>
-            ) : config?.acceptingReservations === false ? (
+            ) : null}
+
+            {config?.acceptingReservations === false ? (
               <ShopNotAcceptingBanner kind="reservations" phone={config?.phone} />
             ) : null}
 
@@ -507,21 +509,10 @@ export default function ReservationsPage() {
 
             <button
               type="submit"
-              disabled={
-                submitting ||
-                !time ||
-                !!config?.vacation?.active ||
-                config?.acceptingReservations === false
-              }
+              disabled={submitting || !time}
               className="w-full bg-stone-900 text-white py-3 font-semibold disabled:opacity-40"
             >
-              {config?.acceptingReservations === false
-                ? t('shopNotAcceptingReservations')
-                : config?.vacation?.active
-                  ? t('shopVacationTitle')
-                  : submitting
-                    ? t('saving')
-                    : t('shopReservationsBook')}
+              {submitting ? t('saving') : t('shopReservationsBook')}
             </button>
           </form>
         )}

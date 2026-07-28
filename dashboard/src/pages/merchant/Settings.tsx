@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import api from '@/lib/api';
 import { useI18n, type Locale } from '@/lib/i18n';
+import { compressImageIfNeeded } from '@/lib/compress-image';
 
 interface SettingsData {
   name: string;
@@ -506,11 +507,14 @@ export default function Settings() {
                         e.target.value = '';
                         if (!file) return;
                         try {
-                          const form = new FormData();
-                          form.append('file', file);
-                          const res = await api.post('/merchant/media', form, {
-                            headers: { 'Content-Type': 'multipart/form-data' },
+                          const compressed = await compressImageIfNeeded(file, {
+                            maxBytes: 500 * 1024,
+                            targetBytes: 350 * 1024,
+                            maxWidth: 1600,
                           });
+                          const form = new FormData();
+                          form.append('file', compressed);
+                          const res = await api.post('/merchant/media', form);
                           const url = res.data?.url;
                           if (!url) throw new Error('No URL returned');
                           setSettings({
