@@ -733,6 +733,17 @@ export default function Settings() {
             <div className="space-y-8">
               <form onSubmit={saveAdyen} className="space-y-5">
                 <Section title={t('adyenCredentials')} description={t('adyenSettingsHint')}>
+                  <p className="text-sm text-[var(--text-muted)]">
+                    {t('swisspayoutNoAccount')}{' '}
+                    <a
+                      href="https://swisspayout.com"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-medium text-[var(--text)] underline underline-offset-2"
+                    >
+                      {t('swisspayoutCreateAccount')}
+                    </a>
+                  </p>
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <Field label={t('merchantAccount')}>
                       <input
