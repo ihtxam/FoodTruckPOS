@@ -116,15 +116,14 @@ export default function AcceptingMenu() {
             bothOff ? 'bg-amber-600' : bothOn ? 'bg-emerald-500' : 'bg-amber-500'
           }`}
         />
-        <span className="hidden sm:inline">{statusLabel}</span>
-        <span className="sm:hidden">{bothOff ? '!' : bothOn ? '●' : '◐'}</span>
+        <span>{statusLabel}</span>
         <ChevronDown className="h-3.5 w-3.5 opacity-70" />
       </button>
 
       {open ? (
         <div
           role="menu"
-          className="absolute right-0 top-full z-50 mt-1 w-64 rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] p-3 shadow-lg"
+          className="absolute right-0 top-full z-50 mt-1 w-[min(18rem,calc(100vw-1.5rem))] rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] p-3 shadow-lg"
         >
           <p className="text-xs font-semibold mb-2">{t('acceptingMenuTitle')}</p>
           <p className="text-[11px] muted mb-3">{t('acceptingMenuHint')}</p>

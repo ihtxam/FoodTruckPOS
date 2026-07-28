@@ -78,7 +78,7 @@ export default function Header({
 
           {onLanguageChange && (
             <select
-              className="input py-1 text-xs w-auto min-w-0"
+              className="input py-1 text-xs w-auto min-w-0 hidden sm:block"
               value={language || 'en'}
               onChange={(e) => onLanguageChange(e.target.value as Locale)}
               aria-label="Language"
@@ -92,7 +92,7 @@ export default function Header({
           <button
             type="button"
             onClick={toggleTheme}
-            className="p-1.5 rounded-md hover:bg-[var(--bg-muted)]"
+            className="p-1.5 rounded-md hover:bg-[var(--bg-muted)] hidden sm:inline-flex"
             aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
             title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
           >

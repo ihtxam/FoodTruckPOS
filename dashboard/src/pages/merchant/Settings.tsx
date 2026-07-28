@@ -27,6 +27,9 @@ interface SettingsData {
   subdomain?: string | null;
   customDomain?: string | null;
   shopEnabled?: boolean;
+  acceptingOrders?: boolean;
+  acceptingReservations?: boolean;
+  reservationsEnabled?: boolean;
   shopCustomDomainUrl?: string | null;
   floorPlanEnabled?: boolean;
   paxOrderingEnabled?: boolean;
@@ -256,6 +259,8 @@ export default function Settings() {
         subdomain: settings.subdomain || undefined,
         customDomain: settings.customDomain?.trim() || null,
         shopEnabled: !!settings.shopEnabled,
+        acceptingOrders: settings.acceptingOrders !== false,
+        acceptingReservations: settings.acceptingReservations !== false,
         floorPlanEnabled: !!settings.floorPlanEnabled,
         paxOrderingEnabled: !!settings.paxOrderingEnabled,
         panelLanguage: settings.panelLanguage || locale,
@@ -802,6 +807,48 @@ export default function Settings() {
                     <span className="text-xs muted">{t('enableOnlineShopHint')}</span>
                   </span>
                 </label>
+
+                <div className="rounded-md border border-[var(--border)] p-3 space-y-2">
+                  <p className="text-sm font-medium">{t('acceptingMenuTitle')}</p>
+                  <p className="text-xs muted">{t('acceptingMenuHint')}</p>
+                  <label className="flex items-start gap-2.5 text-sm py-1">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={settings.acceptingOrders !== false}
+                      onChange={(e) =>
+                        setSettings({ ...settings, acceptingOrders: e.target.checked })
+                      }
+                    />
+                    <span>
+                      <span className="font-medium block">{t('acceptingOrders')}</span>
+                      <span className="text-[11px] muted">{t('acceptingOrdersHint')}</span>
+                    </span>
+                  </label>
+                  <label
+                    className={`flex items-start gap-2.5 text-sm py-1 ${
+                      !settings.reservationsEnabled ? 'opacity-50' : ''
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={settings.acceptingReservations !== false}
+                      disabled={!settings.reservationsEnabled}
+                      onChange={(e) =>
+                        setSettings({ ...settings, acceptingReservations: e.target.checked })
+                      }
+                    />
+                    <span>
+                      <span className="font-medium block">{t('acceptingReservations')}</span>
+                      <span className="text-[11px] muted">
+                        {settings.reservationsEnabled
+                          ? t('acceptingReservationsHint')
+                          : t('acceptingReservationsDisabled')}
+                      </span>
+                    </span>
+                  </label>
+                </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <Field
                     label={t('shopSlug')}
