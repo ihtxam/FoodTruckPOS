@@ -1218,7 +1218,8 @@ export type OfferType =
   | "fixed_off"
   | "bogo"
   | "pay_n_get_m"
-  | "combo_deal";
+  | "combo_deal"
+  | "package_deal";
 
 export type OfferRules = {
   percentOff?: number;
@@ -1229,9 +1230,17 @@ export type OfferRules = {
   payQty?: number;
   receiveQty?: number;
   minOrderAmount?: number;
+  /** @deprecated use package_deal buy/get lists */
   comboProductIds?: string[];
   comboPercentOff?: number;
   comboFixedOff?: number;
+  /**
+   * Package deal: choose `buyQty` from `buyProductIds`, get `getQty` from
+   * `getProductIds` free (or included), for a single `packagePrice`.
+   */
+  buyProductIds?: string[];
+  getProductIds?: string[];
+  packagePrice?: number;
 };
 
 export const offers = pgTable(
