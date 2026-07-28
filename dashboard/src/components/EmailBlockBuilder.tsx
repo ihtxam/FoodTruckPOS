@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { SortableList, SortableRow, DragHandle } from '@/components/SortableList';
+import { DragHandle, SortableContainer, SortableRow } from '@/components/SortableList';
 
 export type EmailBlockType = 'heading' | 'text' | 'button' | 'image' | 'divider' | 'spacer';
 
@@ -201,13 +201,18 @@ export default function EmailBlockBuilder({ valueHtml, onChangeHtml }: Props) {
             ))}
           </div>
 
-          <SortableList
-            items={blocks}
-            getId={(b) => b.id}
-            onReorder={setBlocks}
+          <SortableContainer
+            as="div"
             className="space-y-2"
-            renderItem={(block) => (
-              <SortableRow key={block.id} id={block.id} className="rounded-md border border-[var(--border)] bg-[var(--bg-elevated)]">
+            items={blocks}
+            onReorder={setBlocks}
+          >
+            {blocks.map((block) => (
+              <SortableRow
+                key={block.id}
+                id={block.id}
+                className="rounded-md border border-[var(--border)] bg-[var(--bg-elevated)]"
+              >
                 {({ attributes, listeners }) => (
                   <div className="flex gap-2 p-2.5">
                     <DragHandle attributes={attributes} listeners={listeners} className="mt-1" />
@@ -286,8 +291,8 @@ export default function EmailBlockBuilder({ valueHtml, onChangeHtml }: Props) {
                   </div>
                 )}
               </SortableRow>
-            )}
-          />
+            ))}
+          </SortableContainer>
 
           <div className="rounded-md border border-[var(--border)] bg-white p-4">
             <p className="text-[11px] uppercase tracking-wide muted font-semibold mb-3">Preview</p>
