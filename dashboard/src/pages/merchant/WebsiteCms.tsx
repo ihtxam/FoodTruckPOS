@@ -303,22 +303,23 @@ export default function WebsiteCms() {
 
       <form onSubmit={saveSite} className="rounded-md border border-[var(--border)] bg-[var(--bg)] p-4 space-y-3">
         <h2 className="text-sm font-semibold">{t('cmsCustomDomain')}</h2>
-        <p className="text-xs muted">{t('cmsCustomDomainHint')}</p>
-        <div className="rounded-md border border-[var(--border)] bg-[var(--bg-muted)] px-3 py-2 text-xs space-y-1 max-w-md">
-          <p className="font-semibold">{t('cmsDnsRecordTitle')}</p>
-          <p>
-            <span className="font-medium">Type:</span> CNAME
-          </p>
-          <p>
-            <span className="font-medium">Host / Name:</span> www{' '}
-            <span className="muted">({t('cmsDnsHostExample')})</span>
-          </p>
-          <p>
-            <span className="font-medium">Target / Value / Points to:</span>{' '}
-            <code className="font-mono">shop.chaslay.com</code>
-          </p>
-          <p className="muted pt-1">{t('cmsDnsThenEnter')}</p>
-        </div>
+        <table className="w-full max-w-md text-xs border border-[var(--border)]">
+          <tbody>
+            <tr className="border-b border-[var(--border)]">
+              <th className="bg-[var(--bg-muted)] px-2 py-1.5 text-left font-medium w-24">Type</th>
+              <td className="px-2 py-1.5 font-mono">CNAME</td>
+            </tr>
+            <tr className="border-b border-[var(--border)]">
+              <th className="bg-[var(--bg-muted)] px-2 py-1.5 text-left font-medium">Host</th>
+              <td className="px-2 py-1.5 font-mono">www</td>
+            </tr>
+            <tr>
+              <th className="bg-[var(--bg-muted)] px-2 py-1.5 text-left font-medium">Points to</th>
+              <td className="px-2 py-1.5 font-mono">shop.chaslay.com</td>
+            </tr>
+          </tbody>
+        </table>
+        <p className="text-xs muted">{t('cmsDnsThenEnter')}</p>
         <input
           className="input max-w-md"
           value={customDomain}

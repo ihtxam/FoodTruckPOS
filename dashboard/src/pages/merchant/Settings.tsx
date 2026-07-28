@@ -461,43 +461,36 @@ export default function Settings() {
                       placeholder="my-cafe"
                     />
                   </Field>
-                  <Field
-                    label={t('subdomain')}
-                    hint={settings.shopSubdomainUrl || t('shopSubdomainHint')}
-                  >
-                    <input
-                      className="input"
-                      value={settings.subdomain || ''}
-                      onChange={(e) => setSettings({ ...settings, subdomain: e.target.value })}
-                      placeholder="mycafe"
-                    />
-                  </Field>
-                  <Field
-                    label={t('cmsCustomDomain')}
-                    hint={settings.shopCustomDomainUrl || undefined}
-                  >
+                  <Field label={t('cmsCustomDomain')} hint={settings.shopCustomDomainUrl || undefined}>
                     <input
                       className="input"
                       value={settings.customDomain || ''}
                       onChange={(e) => setSettings({ ...settings, customDomain: e.target.value })}
                       placeholder="www.mycafe.ch"
                     />
-                    <p className="text-xs muted mt-2 whitespace-pre-line">{t('cmsCustomDomainHint')}</p>
-                    <div className="mt-2 rounded-md border border-[var(--border)] bg-[var(--bg-muted)] px-3 py-2 text-xs space-y-1">
-                      <p className="font-semibold">{t('cmsDnsRecordTitle')}</p>
-                      <p>
-                        <span className="font-medium">Type:</span> CNAME
-                      </p>
-                      <p>
-                        <span className="font-medium">Host / Name:</span> www{' '}
-                        <span className="muted">({t('cmsDnsHostExample')})</span>
-                      </p>
-                      <p>
-                        <span className="font-medium">Target / Value / Points to:</span>{' '}
-                        <code className="font-mono">shop.chaslay.com</code>
-                      </p>
-                      <p className="muted pt-1">{t('cmsDnsThenEnter')}</p>
-                    </div>
+                    <table className="mt-2 w-full max-w-md text-xs border border-[var(--border)]">
+                      <tbody>
+                        <tr className="border-b border-[var(--border)]">
+                          <th className="bg-[var(--bg-muted)] px-2 py-1.5 text-left font-medium w-24">
+                            Type
+                          </th>
+                          <td className="px-2 py-1.5 font-mono">CNAME</td>
+                        </tr>
+                        <tr className="border-b border-[var(--border)]">
+                          <th className="bg-[var(--bg-muted)] px-2 py-1.5 text-left font-medium">
+                            Host
+                          </th>
+                          <td className="px-2 py-1.5 font-mono">www</td>
+                        </tr>
+                        <tr>
+                          <th className="bg-[var(--bg-muted)] px-2 py-1.5 text-left font-medium">
+                            Points to
+                          </th>
+                          <td className="px-2 py-1.5 font-mono">shop.chaslay.com</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                    <p className="text-xs muted mt-1.5">{t('cmsDnsThenEnter')}</p>
                   </Field>
                 </div>
               </Section>
