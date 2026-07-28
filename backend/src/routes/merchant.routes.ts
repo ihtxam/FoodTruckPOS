@@ -11,6 +11,7 @@ import { CatalogImportService } from "@/services/catalog-import.service";
 import { ModifierService } from "@/services/modifier.service";
 import { normalizeComboSlots } from "@/lib/combo";
 import { roundMoney2 } from "@/lib/money";
+import { geocodeQuery } from "@/lib/geocode";
 import { getDb, schema } from "@/db";
 
 const router = Router();
@@ -1024,6 +1025,44 @@ router.put("/settings", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Error updating settings:", error);
     res.status(400).json({ error: error instanceof Error ? error.message : "Failed to update settings" });
+  }
+});
+
+/**
+ * POST /api/merchant/geocode
+ * Body: { query?: string } — defaults to merchant address + city + country
+ */
+router.post("/geocode", async (req: Request, res: Response) => {
+  try {
+    const merchantId = req.merchantId;
+    if (!merchantId) return res.status(400).json({ error: "Merchant ID is required" });
+
+    let query = String(req.body?.query || "").trim();
+    if (!query) {
+      const settings = await MerchantSettingsService.getMerchantSettings(merchantId);
+      query = [settings.address, settings.city, settings.country || "Switzerland"]
+        .map((p) => String(p || "").trim())
+        .filter(Boolean)
+        .join(", ");
+    }
+    if (!query) {
+      return res.status(400).json({ error: "No address to geocode. Set business address first." });
+    }
+
+    const result = await geocodeQuery(query);
+    if (!result.found) {
+      return res.json({ success: true, found: false, query });
+    }
+    res.json({
+      success: true,
+      found: true,
+      query,
+      lat: result.lat,
+      lng: result.lng,
+      displayName: result.displayName,
+    });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Geocode failed" });
   }
 });
 

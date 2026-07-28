@@ -24,6 +24,7 @@ interface ExistingZone {
 
 interface Props {
   center: LatLngTuple;
+  zoom?: number;
   storeMarker?: LatLngTuple | null;
   existingZones?: ExistingZone[];
   draftRing: LatLngTuple[];
@@ -47,11 +48,11 @@ function ClickCapture({
   return null;
 }
 
-function Recenter({ center }: { center: LatLngTuple }) {
+function Recenter({ center, zoom = 14 }: { center: LatLngTuple; zoom?: number }) {
   const map = useMap();
   useEffect(() => {
-    map.setView(center, map.getZoom());
-  }, [center, map]);
+    map.setView(center, zoom);
+  }, [center[0], center[1], zoom, map]);
   return null;
 }
 
@@ -65,6 +66,7 @@ export function leafletToLngLat(ring: LatLngTuple[]): LngLatTuple[] {
 
 export default function ZoneMapEditor({
   center,
+  zoom = 14,
   storeMarker,
   existingZones = [],
   draftRing,
@@ -111,7 +113,7 @@ export default function ZoneMapEditor({
       <div className="overflow-hidden border border-stone-300 rounded-lg" style={{ height }}>
         <MapContainer
           center={center}
-          zoom={13}
+          zoom={zoom}
           style={{ height: '100%', width: '100%' }}
           scrollWheelZoom
         >
@@ -119,7 +121,7 @@ export default function ZoneMapEditor({
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
-          <Recenter center={center} />
+          <Recenter center={center} zoom={zoom} />
           <ClickCapture
             enabled={drawing}
             onAdd={(lat, lng) => onDraftChange([...draftRing, [lat, lng]])}

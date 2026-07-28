@@ -18,6 +18,7 @@ import { ModifierService } from "@/services/modifier.service";
 import { CmsService } from "@/services/cms.service";
 import { normalizeComboSlots } from "@/lib/combo";
 import { isVacationActive, isDateInVacationPeriods, vacationPublicPayload, VACATION_BLOCK_MESSAGE } from "@/lib/vacation";
+import { geocodeQuery } from "@/lib/geocode";
 import { v4 as uuidv4 } from "uuid";
 
 const router = Router();
@@ -865,26 +866,16 @@ router.post("/:slug/geocode", async (req: Request, res: Response) => {
     const query = String(req.body.query || "").trim();
     if (!query) return res.status(400).json({ error: "query required" });
 
-    const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`;
-    const response = await fetch(url, {
-      headers: {
-        Accept: "application/json",
-        "User-Agent": "ManuPOS-Shop/1.0 (https://manupos.webprintmedia.swiss)",
-      },
-    });
-    if (!response.ok) {
-      return res.status(502).json({ error: "Geocoding unavailable" });
-    }
-    const data = (await response.json()) as Array<{ lat: string; lon: string; display_name?: string }>;
-    if (!data?.[0]) {
+    const result = await geocodeQuery(query);
+    if (!result.found) {
       return res.json({ success: true, found: false });
     }
     res.json({
       success: true,
       found: true,
-      lat: Number(data[0].lat),
-      lng: Number(data[0].lon),
-      displayName: data[0].display_name,
+      lat: result.lat,
+      lng: result.lng,
+      displayName: result.displayName,
     });
   } catch (error) {
     res.status(400).json({ error: error instanceof Error ? error.message : "Geocode failed" });
