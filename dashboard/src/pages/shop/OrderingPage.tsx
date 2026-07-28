@@ -64,6 +64,7 @@ interface Category {
   id: string;
   name: string;
   image?: string | null;
+  isOffersCategory?: boolean;
   items: Product[];
 }
 
@@ -82,6 +83,9 @@ export default function OrderingPage() {
 
   const [merchant, setMerchant] = useState<any>(null);
   const [menu, setMenu] = useState<Category[]>([]);
+  const [shopOffers, setShopOffers] = useState<
+    Array<{ id: string; name: string; description?: string | null; badgeLabel?: string | null }>
+  >([]);
   const [draft, setDraft] = useState<ShopCheckoutDraft>(emptyDraft());
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [loading, setLoading] = useState(true);
@@ -130,6 +134,7 @@ export default function OrderingPage() {
         const data = shopRes.data.data;
         setMerchant(data);
         setMenu(menuRes.data.data || []);
+        setShopOffers(menuRes.data.offers || []);
         setSelectedCategory('all');
         const cats = menuRes.data.data || [];
         setExpandedCategoryId(cats[0]?.id || null);
@@ -939,6 +944,30 @@ export default function OrderingPage() {
 
       <div className="max-w-7xl mx-auto px-4 py-6 grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-6 items-start">
         <div>
+          {shopOffers.length > 0 ? (
+            <div className="mb-5 space-y-2">
+              <h2 className="text-sm font-bold uppercase tracking-wide text-amber-800">Offers</h2>
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {shopOffers.map((o) => (
+                  <div
+                    key={o.id}
+                    className="min-w-[200px] max-w-[260px] shrink-0 rounded-xl border border-amber-200 bg-amber-50 p-3"
+                  >
+                    {o.badgeLabel ? (
+                      <span className="inline-block rounded-full bg-amber-700 px-2 py-0.5 text-[10px] font-bold uppercase text-white">
+                        {o.badgeLabel}
+                      </span>
+                    ) : null}
+                    <p className="mt-1.5 font-semibold text-stone-900 text-sm">{o.name}</p>
+                    {o.description ? (
+                      <p className="mt-0.5 text-xs text-stone-600 line-clamp-3">{o.description}</p>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
           {loyaltyEnabled && unlockedRewards.length > 0 && (
             <div className="mb-5 space-y-2">
               <h2 className="text-sm font-bold uppercase tracking-wide text-stone-500">

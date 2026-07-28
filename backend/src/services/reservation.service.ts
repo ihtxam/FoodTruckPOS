@@ -15,10 +15,11 @@ import { FloorPlanService } from "@/services/floor-plan.service";
 const DAY_KEYS: DayKey[] = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 
 export const DEFAULT_RESERVATION_SETTINGS: Required<
-  Omit<ReservationSettings, "maxCoversPerSlot" | "policiesText">
+  Omit<ReservationSettings, "maxCoversPerSlot" | "policiesText" | "slotDiscounts">
 > & {
   maxCoversPerSlot: number | null;
   policiesText: string | null;
+  slotDiscounts: NonNullable<ReservationSettings["slotDiscounts"]>;
 } = {
   dineInHoursMode: "same_as_takeaway",
   slotIntervalMinutes: 30,
@@ -31,8 +32,12 @@ export const DEFAULT_RESERVATION_SETTINGS: Required<
   autoAccept: false,
   sendConfirmationEmail: true,
   sendStatusEmails: true,
+  reminderEnabled: true,
+  reminderHoursBefore: 24,
+  sendReminderEmail: true,
   maxCoversPerSlot: null,
   policiesText: null,
+  slotDiscounts: [],
 };
 
 const ACTIVE_STATUSES: ReservationStatus[] = ["pending", "confirmed", "seated"];
@@ -66,6 +71,23 @@ export function normalizeReservationSettings(
         ? null
         : clampInt(s.maxCoversPerSlot, 1, 500, 40),
     policiesText: s.policiesText?.trim() || null,
+    reminderEnabled: s.reminderEnabled !== false,
+    reminderHoursBefore: clampInt(s.reminderHoursBefore, 1, 168, 24),
+    sendReminderEmail: s.sendReminderEmail !== false,
+    slotDiscounts: Array.isArray(s.slotDiscounts)
+      ? s.slotDiscounts
+          .filter((d) => d && Number(d.percentOff) > 0)
+          .map((d) => ({
+            id: String(d.id || randomUUID()),
+            name: String(d.name || `${d.percentOff}% off`).slice(0, 80),
+            percentOff: Math.min(90, Math.max(1, Math.floor(Number(d.percentOff) || 0))),
+            scheduleMode: d.scheduleMode === "whole_week" ? "whole_week" : "specific_days",
+            daysOfWeek: Array.isArray(d.daysOfWeek) ? d.daysOfWeek.map(String) : [],
+            timeStart: d.timeStart || null,
+            timeEnd: d.timeEnd || null,
+            enabled: d.enabled !== false,
+          }))
+      : [],
   };
 }
 
@@ -304,7 +326,7 @@ export class ReservationService {
     const day = dayKeyForYmd(dateYmd);
     const daySlots: HoursSlot[] = cfg.hours[day] || [];
     if (!daySlots.length) {
-      return { date: dateYmd, partySize: size, slots: [] as Array<{ time: string; available: boolean; remainingCovers: number }> };
+      return { date: dateYmd, partySize: size, slots: [] as Array<{ time: string; available: boolean; remainingCovers: number; discountPercent?: number; discountLabel?: string | null }> };
     }
 
     const tableCap = await this.totalTableCapacity(merchantId);
@@ -330,7 +352,35 @@ export class ReservationService {
     const dayEnd = zurichLocalToDate(addDaysYmd(dateYmd, 1), "00:00");
     const overlapping = await this.listOverlapping(merchantId, dayStart, dayEnd);
 
-    const slots: Array<{ time: string; available: boolean; remainingCovers: number }> = [];
+    const slots: Array<{
+      time: string;
+      available: boolean;
+      remainingCovers: number;
+      discountPercent?: number;
+      discountLabel?: string | null;
+    }> = [];
+
+    const dayKey = day;
+    const matchDiscount = (hm: string) => {
+      let best: { percentOff: number; name: string } | null = null;
+      for (const d of settings.slotDiscounts || []) {
+        if (d.enabled === false) continue;
+        const wholeWeek = d.scheduleMode === "whole_week";
+        const days = d.daysOfWeek || [];
+        if (!wholeWeek && days.length && !days.includes(dayKey)) continue;
+        const s = d.timeStart ? parseHm(d.timeStart) : null;
+        const e = d.timeEnd ? parseHm(d.timeEnd) : null;
+        const cur = parseHm(hm);
+        if (s != null && e != null) {
+          if (!(cur >= s && cur < e)) continue;
+        } else if (s != null && !(cur >= s)) continue;
+        else if (e != null && !(cur < e)) continue;
+        if (!best || d.percentOff > best.percentOff) {
+          best = { percentOff: d.percentOff, name: d.name };
+        }
+      }
+      return best;
+    };
 
     for (const range of daySlots) {
       let cursor = parseHm(range.open);
@@ -358,10 +408,13 @@ export class ReservationService {
           })
           .reduce((s, r) => s + (Number(r.partySize) || 0), 0);
         const remaining = Math.max(0, maxCovers - used);
+        const disc = matchDiscount(hm);
         slots.push({
           time: hm,
           available: remaining >= size,
           remainingCovers: remaining,
+          discountPercent: disc?.percentOff || undefined,
+          discountLabel: disc ? `${disc.percentOff}% off` : null,
         });
         cursor += interval;
       }
@@ -669,12 +722,18 @@ export class ReservationService {
   }
 
   static async sendLifecycleEmail(
-    merchant: { name?: string | null; address?: string | null; city?: string | null; phone?: string | null },
+    merchant: {
+      id?: string;
+      name?: string | null;
+      address?: string | null;
+      city?: string | null;
+      phone?: string | null;
+    },
     reservation: typeof schema.reservations.$inferSelect,
-    kind: "received" | "confirmed" | "rejected" | "cancelled" | "seated"
+    kind: "received" | "confirmed" | "rejected" | "cancelled" | "seated" | "reminder"
   ) {
     if (!reservation.guestEmail) return;
-    if (!(await EmailService.isConfigured())) return;
+    if (!(await EmailService.isConfigured(merchant.id))) return;
 
     const when = new Date(reservation.reservedAt).toLocaleString("en-CH", {
       timeZone: MERCHANT_TZ,
@@ -689,6 +748,7 @@ export class ReservationService {
       rejected: `Reservation not available — ${shop}`,
       cancelled: `Reservation cancelled — ${shop}`,
       seated: `Welcome — ${shop}`,
+      reminder: `Reminder: your reservation at ${shop}`,
     };
     const bodies: Record<typeof kind, string> = {
       received: `We received your reservation request and will confirm shortly.`,
@@ -696,6 +756,7 @@ export class ReservationService {
       rejected: `Unfortunately we cannot accommodate this reservation. Please try another time.`,
       cancelled: `Your reservation has been cancelled.`,
       seated: `Welcome! Your table is ready.`,
+      reminder: `This is a friendly reminder about your upcoming reservation.`,
     };
 
     const html = `
@@ -720,14 +781,63 @@ export class ReservationService {
         subject: subjects[kind],
         html,
         text: `${subjects[kind]}\n${bodies[kind]}\nCode: ${reservation.code}\nWhen: ${when}\nGuests: ${reservation.partySize}`,
+        merchantId: merchant.id,
       });
       const db = getDb();
-      await db
-        .update(schema.reservations)
-        .set({ confirmationSentAt: new Date(), updatedAt: new Date() })
-        .where(eq(schema.reservations.id, reservation.id));
+      if (kind === "reminder") {
+        await db
+          .update(schema.reservations)
+          .set({ reminderSentAt: new Date(), updatedAt: new Date() })
+          .where(eq(schema.reservations.id, reservation.id));
+      } else {
+        await db
+          .update(schema.reservations)
+          .set({ confirmationSentAt: new Date(), updatedAt: new Date() })
+          .where(eq(schema.reservations.id, reservation.id));
+      }
     } catch (err) {
       console.error("[reservations] email failed", err);
     }
+  }
+
+  /** Hourly: email guests before their reservation (pending/confirmed). */
+  static async processReminders() {
+    const db = getDb();
+    const merchants = await db.query.merchants.findMany({
+      where: eq(schema.merchants.reservationsEnabled, true),
+      columns: {
+        id: true,
+        name: true,
+        address: true,
+        city: true,
+        phone: true,
+        reservationSettings: true,
+        emailSmtpSettings: true,
+      },
+    });
+    let sent = 0;
+    const now = Date.now();
+    for (const merchant of merchants) {
+      const settings = resolveSettings(merchant.reservationSettings);
+      if (!settings.reminderEnabled || !settings.sendReminderEmail) continue;
+      const hours = settings.reminderHoursBefore;
+      const windowStart = new Date(now + (hours - 0.75) * 3600_000);
+      const windowEnd = new Date(now + (hours + 0.75) * 3600_000);
+      const rows = await db.query.reservations.findMany({
+        where: and(
+          eq(schema.reservations.merchantId, merchant.id),
+          inArray(schema.reservations.status, ["pending", "confirmed"]),
+          gte(schema.reservations.reservedAt, windowStart),
+          lte(schema.reservations.reservedAt, windowEnd)
+        ),
+      });
+      for (const r of rows) {
+        if (r.reminderSentAt) continue;
+        if (!r.guestEmail) continue;
+        await this.sendLifecycleEmail(merchant, r, "reminder");
+        sent += 1;
+      }
+    }
+    return { sent };
   }
 }

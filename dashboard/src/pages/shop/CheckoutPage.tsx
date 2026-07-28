@@ -57,6 +57,8 @@ export default function CheckoutPage() {
   const [redeemRate, setRedeemRate] = useState(100);
   /** Explicit "Pay with points" option on the payment step */
   const [payWithPoints, setPayWithPoints] = useState(false);
+  const [offerDiscount, setOfferDiscount] = useState(0);
+  const [offerLabels, setOfferLabels] = useState<string[]>([]);
 
   useEffect(() => {
     if (!shopKey) return;
@@ -132,6 +134,49 @@ export default function CheckoutPage() {
   useEffect(() => {
     document.documentElement.lang = locale;
   }, [locale]);
+
+  /** Preview promotional offers for the cart */
+  useEffect(() => {
+    if (!shopKey || !draft.items.length) {
+      setOfferDiscount(0);
+      setOfferLabels([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await axios.post(`/api/shop/${shopKey}/offers/preview`, {
+          channel: draft.channel,
+          scheduledFor:
+            whenMode === 'later' && draft.scheduledFor
+              ? localDateTimeToIso(draft.scheduledFor)
+              : null,
+          items: draft.items.map((i) => ({
+            productId: i.id,
+            name: i.name,
+            unitPrice: i.price,
+            quantity: i.quantity,
+            loyaltyReward: !!i.loyaltyReward,
+          })),
+        });
+        if (cancelled) return;
+        setOfferDiscount(Number(res.data.discount) || 0);
+        setOfferLabels(
+          (res.data.applied || []).map(
+            (a: { name: string; badgeLabel?: string }) => a.badgeLabel || a.name
+          )
+        );
+      } catch {
+        if (!cancelled) {
+          setOfferDiscount(0);
+          setOfferLabels([]);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [shopKey, draft.items, draft.channel, draft.scheduledFor, whenMode]);
 
   /** Keep item prices in sync when switching takeaway ↔ delivery (menu markup). */
   useEffect(() => {
@@ -258,7 +303,9 @@ export default function CheckoutPage() {
   const rate = Math.max(1, Math.floor(redeemRate || 100));
   const balanceAfterRewards = Math.max(0, loyaltyBalance - rewardPointsInCart);
   // Points can cover food + delivery + tax (not tip / card fee)
-  const redeemableBase = roundMoney2(subtotal + deliveryFee + tax);
+  const redeemableBase = roundMoney2(
+    Math.max(0, subtotal - offerDiscount) + deliveryFee + tax
+  );
   const maxCashPoints = Math.min(
     Math.floor(Math.max(0, redeemableBase)) * rate,
     Math.floor(balanceAfterRewards / rate) * rate
@@ -1375,6 +1422,12 @@ export default function CheckoutPage() {
               <span className="text-stone-500">{t('shopSubtotal')}</span>
               <span>CHF {subtotal.toFixed(2)}</span>
             </div>
+            {offerDiscount > 0 && (
+              <div className="flex justify-between text-amber-800">
+                <span>{offerLabels.join(', ') || 'Offer'}</span>
+                <span>− CHF {offerDiscount.toFixed(2)}</span>
+              </div>
+            )}
             {pointsDiscount > 0 && (
               <div className="flex justify-between text-teal-800">
                 <span>{t('shopPointsDiscount')}</span>

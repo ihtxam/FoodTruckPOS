@@ -8,7 +8,13 @@ import ShopLangSwitcher from '@/components/shop/ShopLangSwitcher';
 import ShopVacationPopup from '@/components/shop/ShopVacationPopup';
 import ShopNotAcceptingBanner from '@/components/shop/ShopNotAcceptingBanner';
 
-type Slot = { time: string; available: boolean; remainingCovers: number };
+type Slot = {
+  time: string;
+  available: boolean;
+  remainingCovers: number;
+  discountPercent?: number;
+  discountLabel?: string | null;
+};
 
 /** Calendar date YYYY-MM-DD in Europe/Zurich (matches reservation backend). */
 function ymdZurich(d: Date = new Date()) {
@@ -448,7 +454,7 @@ export default function ReservationsPage() {
                           aria-checked={selected}
                           disabled={!s.available}
                           onClick={() => setTime(s.time)}
-                          className={`min-h-11 text-sm font-semibold border tabular-nums transition-colors ${
+                          className={`min-h-11 px-1 text-sm font-semibold border tabular-nums transition-colors flex flex-col items-center justify-center leading-tight ${
                             selected
                               ? 'border-stone-900 bg-stone-900 text-white'
                               : s.available
@@ -456,7 +462,16 @@ export default function ReservationsPage() {
                                 : 'border-stone-200 bg-stone-100 text-stone-400 cursor-not-allowed line-through'
                           }`}
                         >
-                          {s.time}
+                          <span>{s.time}</span>
+                          {s.discountLabel ? (
+                            <span
+                              className={`text-[10px] font-bold ${
+                                selected ? 'text-amber-200' : 'text-amber-700'
+                              }`}
+                            >
+                              {s.discountLabel}
+                            </span>
+                          ) : null}
                         </button>
                       );
                     })}
