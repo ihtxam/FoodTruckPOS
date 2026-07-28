@@ -462,13 +462,8 @@ export default function Settings() {
                     />
                   </Field>
                   <Field label={t('cmsCustomDomain')} hint={settings.shopCustomDomainUrl || undefined}>
-                    <input
-                      className="input"
-                      value={settings.customDomain || ''}
-                      onChange={(e) => setSettings({ ...settings, customDomain: e.target.value })}
-                      placeholder="www.mycafe.ch"
-                    />
-                    <table className="mt-2 w-full max-w-md text-xs border border-[var(--border)]">
+                    <p className="text-xs muted mb-1.5">{t('cmsDnsGoCreate')}</p>
+                    <table className="w-full max-w-md text-xs border border-[var(--border)]">
                       <tbody>
                         <tr className="border-b border-[var(--border)]">
                           <th className="bg-[var(--bg-muted)] px-2 py-1.5 text-left font-medium w-24">
@@ -490,7 +485,13 @@ export default function Settings() {
                         </tr>
                       </tbody>
                     </table>
-                    <p className="text-xs muted mt-1.5">{t('cmsDnsThenEnter')}</p>
+                    <p className="text-xs muted mt-1.5 mb-1.5">{t('cmsDnsThenEnter')}</p>
+                    <input
+                      className="input"
+                      value={settings.customDomain || ''}
+                      onChange={(e) => setSettings({ ...settings, customDomain: e.target.value })}
+                      placeholder="www.mycafe.ch"
+                    />
                   </Field>
                 </div>
               </Section>

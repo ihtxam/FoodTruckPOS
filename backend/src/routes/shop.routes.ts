@@ -549,6 +549,7 @@ router.get("/:slug", async (req: Request, res: Response) => {
         taxDineInRate: merchant.taxDineInRate,
         taxDeliveryRate: merchant.taxDeliveryRate,
         vatRate: merchant.vatRate,
+        deliveryMenuMarkup: merchant.deliveryMenuMarkup ?? "0",
         storeHours: hours,
         /** Homepage banner hours (display channel or takeaway fallback) */
         displayHours,
@@ -1336,8 +1337,10 @@ router.post("/:slug/orders", async (req: Request, res: Response) => {
       }
 
       const extrasTotal = roundMoney2(resolved.extras.reduce((s, e) => s + e.price, 0));
+      const deliveryMarkup =
+        channel === "delivery" ? Math.max(0, Number(merchant.deliveryMenuMarkup || 0) || 0) : 0;
       const unitPrice = roundMoney2(
-        parseFloat(product.price.toString()) + extrasTotal + comboSurcharge
+        parseFloat(product.price.toString()) + deliveryMarkup + extrasTotal + comboSurcharge
       );
       const totalPrice = roundMoney2(unitPrice * qty);
       const lineTax = product.isTaxable ? roundMoney2((totalPrice * taxRate) / 100) : 0;

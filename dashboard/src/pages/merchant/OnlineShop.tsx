@@ -331,6 +331,7 @@ export default function OnlineShop() {
         longitude: settings.longitude,
         pickupEtaMinutes: Number(settings.pickupEtaMinutes || 25),
         deliveryEtaMinutes: Number(settings.deliveryEtaMinutes || 45),
+        deliveryMenuMarkup: Number(settings.deliveryMenuMarkup || 0),
         shopLogoUrl: settings.shopLogoUrl,
         shopBannerUrl: settings.shopBannerUrl,
         slug: settings.slug,
@@ -513,6 +514,24 @@ export default function OnlineShop() {
                 value={settings.deliveryEtaMinutes ?? 45}
                 onChange={(e) => setSettings({ ...settings, deliveryEtaMinutes: e.target.value })}
               />
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium mb-1">
+                Delivery menu markup (CHF)
+              </label>
+              <input
+                className="input"
+                type="number"
+                step="0.01"
+                min="0"
+                value={settings.deliveryMenuMarkup ?? 0}
+                onChange={(e) => setSettings({ ...settings, deliveryMenuMarkup: e.target.value })}
+                placeholder="0"
+              />
+              <p className="text-xs text-stone-500 mt-1">
+                Added to every item for delivery (e.g. 2.00 → delivery prices = takeaway + 2.00). Zone
+                delivery fee is separate.
+              </p>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">Store latitude</label>

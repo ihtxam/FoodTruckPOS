@@ -189,12 +189,45 @@ export default function OrderingPage() {
 
   const channel = draft.channel;
   const cart = draft.items;
+  const deliveryMenuMarkup = useMemo(() => {
+    const n = Number(merchant?.deliveryMenuMarkup ?? 0);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  }, [merchant]);
+  const catalogUnitPrice = (productPrice: number) =>
+    roundMoney2(productPrice + (channel === 'delivery' ? deliveryMenuMarkup : 0));
   const taxRate = useMemo(() => {
     if (!merchant) return 0;
     if (channel === 'dine_in') return Number(merchant.taxDineInRate ?? merchant.vatRate ?? 0);
     if (channel === 'delivery') return Number(merchant.taxDeliveryRate ?? merchant.vatRate ?? 0);
     return Number(merchant.taxTakeawayRate ?? merchant.vatRate ?? 0);
   }, [merchant, channel]);
+
+  /** Keep cart line prices in sync when switching takeaway ↔ delivery (markup). */
+  useEffect(() => {
+    if (!merchant) return;
+    setDraft((prev) => {
+      let changed = false;
+      const markup = prev.channel === 'delivery' ? deliveryMenuMarkup : 0;
+      const items = prev.items.map((item) => {
+        if (item.loyaltyReward) return item;
+        const extrasTotal = roundMoney2(
+          (item.selectedExtras || []).reduce((s, e) => s + e.price, 0) +
+            (item.comboSelections || []).reduce(
+              (s, c) => s + c.extraPrice + c.selectedExtras.reduce((x, e) => x + e.price, 0),
+              0
+            )
+        );
+        const nextPrice = roundMoney2(item.basePrice + markup + extrasTotal);
+        if (nextPrice !== item.price) {
+          changed = true;
+          return { ...item, price: nextPrice };
+        }
+        return item;
+      });
+      if (!changed) return prev;
+      return { ...prev, items };
+    });
+  }, [channel, deliveryMenuMarkup, merchant]);
 
   const cartTotal = roundMoney2(cart.reduce((sum, item) => sum + item.price * item.quantity, 0));
   const deliveryFee = roundMoney2(
@@ -256,15 +289,13 @@ export default function OrderingPage() {
       return;
     }
 
-    const price = roundMoney2(
-      unitPrice ??
-        product.price +
-          extras.reduce((s, e) => s + e.price, 0) +
-          comboSelections.reduce(
-            (s, c) => s + c.extraPrice + c.selectedExtras.reduce((x, e) => x + e.price, 0),
-            0
-          )
+    const extrasTotal = extras.reduce((s, e) => s + e.price, 0);
+    const comboTotal = comboSelections.reduce(
+      (s, c) => s + c.extraPrice + c.selectedExtras.reduce((x, e) => x + e.price, 0),
+      0
     );
+    // Always recompute from catalog base so delivery markup is applied (modal unitPrice is takeaway-based).
+    const price = roundMoney2(catalogUnitPrice(product.price) + extrasTotal + comboTotal);
     const sig = lineSignature(extras, comboSelections);
     setDraft((prev) => {
       const existing = prev.items.find(
@@ -788,7 +819,7 @@ export default function OrderingPage() {
                       <p className="text-sm text-stone-500 mt-1 line-clamp-2">{product.description}</p>
                     )}
                     <div className="mt-2 flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold">CHF {product.price.toFixed(2)}</span>
+                      <span className="font-semibold">CHF {catalogUnitPrice(product.price).toFixed(2)}</span>
                       {productHasComboSlots(product) ? (
                         <span className="text-xs font-medium text-teal-800">Build combo</span>
                       ) : productHasModifiers(product) ? (
@@ -850,10 +881,10 @@ export default function OrderingPage() {
 
       {pendingProduct && (
         <ShopProductModifiersModal
-          product={pendingProduct}
+          product={{ ...pendingProduct, price: catalogUnitPrice(pendingProduct.price) }}
           onClose={() => setPendingProduct(null)}
-          onConfirm={(extras, unitPrice) => {
-            addConfiguredItem(pendingProduct, extras, unitPrice);
+          onConfirm={(extras) => {
+            addConfiguredItem(pendingProduct, extras);
             setPendingProduct(null);
           }}
         />
@@ -861,10 +892,10 @@ export default function OrderingPage() {
 
       {pendingCombo && (
         <ShopComboWizard
-          product={pendingCombo}
+          product={{ ...pendingCombo, price: catalogUnitPrice(pendingCombo.price) }}
           onClose={() => setPendingCombo(null)}
-          onConfirm={({ comboSelections, selectedExtras, unitPrice }) => {
-            addConfiguredItem(pendingCombo, selectedExtras, unitPrice, comboSelections);
+          onConfirm={({ comboSelections, selectedExtras }) => {
+            addConfiguredItem(pendingCombo, selectedExtras, undefined, comboSelections);
             setPendingCombo(null);
           }}
         />

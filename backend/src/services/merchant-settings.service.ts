@@ -81,6 +81,7 @@ export class MerchantSettingsService {
       longitude: merchant.longitude,
       pickupEtaMinutes: merchant.pickupEtaMinutes,
       deliveryEtaMinutes: merchant.deliveryEtaMinutes,
+      deliveryMenuMarkup: merchant.deliveryMenuMarkup ?? "0",
       shopPathUrl: merchant.slug ? `https://${shopHost}/${merchant.slug}` : null,
       shopSubdomainUrl: merchant.subdomain ? `https://${merchant.subdomain}.${apex}` : null,
       shopCustomDomainUrl: merchant.customDomain ? `https://${merchant.customDomain}` : null,
@@ -126,6 +127,7 @@ export class MerchantSettingsService {
       longitude?: number | string | null;
       pickupEtaMinutes?: number;
       deliveryEtaMinutes?: number;
+      deliveryMenuMarkup?: number;
       adyenMerchantAccount?: string;
       adyenApiKey?: string;
       adyenClientId?: string;
@@ -165,6 +167,11 @@ export class MerchantSettingsService {
     }
     if (updates.pickupEtaMinutes !== undefined) patch.pickupEtaMinutes = updates.pickupEtaMinutes;
     if (updates.deliveryEtaMinutes !== undefined) patch.deliveryEtaMinutes = updates.deliveryEtaMinutes;
+    if (updates.deliveryMenuMarkup !== undefined) {
+      const n = Number(updates.deliveryMenuMarkup);
+      if (!Number.isFinite(n) || n < 0) throw new Error("deliveryMenuMarkup must be >= 0");
+      patch.deliveryMenuMarkup = n.toFixed(2);
+    }
     if (updates.adyenMerchantAccount !== undefined) patch.adyenMerchantAccount = updates.adyenMerchantAccount;
     if (updates.adyenClientId !== undefined) patch.adyenClientId = updates.adyenClientId;
     if (updates.onlineCardFeeFixed !== undefined) {
