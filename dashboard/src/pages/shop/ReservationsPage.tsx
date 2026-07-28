@@ -38,10 +38,22 @@ export default function ReservationsPage() {
     null
   );
   const [partyExpanded, setPartyExpanded] = useState(false);
+  const [timesExpanded, setTimesExpanded] = useState(false);
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
 
   useEffect(() => {
-    if (partySize > 3) setPartyExpanded(true);
+    if (partySize > 4) setPartyExpanded(true);
   }, [partySize]);
+
+  useEffect(() => {
+    setTimesExpanded(false);
+  }, [date, partySize]);
+
+  useEffect(() => {
+    if (!time || timesExpanded) return;
+    const idx = slots.findIndex((s) => s.time === time);
+    if (idx >= 6) setTimesExpanded(true);
+  }, [time, slots, timesExpanded]);
 
   useEffect(() => {
     if (!shopKey) return;
@@ -246,7 +258,7 @@ export default function ReservationsPage() {
                 role="radiogroup"
                 aria-label={t('shopReservationsParty')}
               >
-                {(partyExpanded ? partyOptions : partyOptions.slice(0, 3)).map((n) => {
+                {(partyExpanded ? partyOptions : partyOptions.slice(0, 4)).map((n) => {
                   const selected = partySize === n;
                   return (
                     <button
@@ -265,31 +277,31 @@ export default function ReservationsPage() {
                     </button>
                   );
                 })}
-                {!partyExpanded && partyOptions.length > 3 ? (
-                  <button
-                    type="button"
-                    onClick={() => setPartyExpanded(true)}
-                    className="min-h-11 text-xs font-semibold border border-stone-300 bg-white text-stone-700 hover:border-stone-900 px-1"
-                  >
-                    {t('shopReservationsShowMore')}
-                  </button>
-                ) : null}
-                {partyExpanded && partyOptions.length > 3 ? (
-                  <button
-                    type="button"
-                    onClick={() => setPartyExpanded(false)}
-                    className="min-h-11 text-xs font-semibold border border-stone-300 bg-white text-stone-700 hover:border-stone-900 px-1 col-span-4 sm:col-span-1"
-                  >
-                    {t('shopReservationsShowLess')}
-                  </button>
-                ) : null}
               </div>
+              {!partyExpanded && partyOptions.length > 4 ? (
+                <button
+                  type="button"
+                  onClick={() => setPartyExpanded(true)}
+                  className="w-full min-h-10 text-sm font-semibold border border-stone-300 bg-white text-stone-700 hover:border-stone-900"
+                >
+                  {t('shopReservationsShowMore')}
+                </button>
+              ) : null}
+              {partyExpanded && partyOptions.length > 4 ? (
+                <button
+                  type="button"
+                  onClick={() => setPartyExpanded(false)}
+                  className="w-full min-h-10 text-sm font-semibold border border-stone-300 bg-white text-stone-700 hover:border-stone-900"
+                >
+                  {t('shopReservationsShowLess')}
+                </button>
+              ) : null}
             </fieldset>
 
             <fieldset className="space-y-2">
               <legend className="text-sm font-medium">{t('shopReservationsDate')}</legend>
               <div
-                className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 snap-x snap-mandatory"
+                className="flex gap-1.5 overflow-x-auto overscroll-x-contain snap-x snap-mandatory [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                 role="radiogroup"
                 aria-label={t('shopReservationsDate')}
               >
@@ -302,34 +314,44 @@ export default function ReservationsPage() {
                       role="radio"
                       aria-checked={selected}
                       onClick={() => setDate(d.value)}
-                      className={`snap-start shrink-0 w-14 min-h-[3.5rem] px-1 py-1.5 border text-center transition-colors ${
+                      className={`snap-start shrink-0 w-12 py-1.5 border text-center transition-colors ${
                         selected
                           ? 'border-stone-900 bg-stone-900 text-white'
                           : 'border-stone-300 bg-white text-stone-800 hover:border-stone-900'
                       }`}
                     >
-                      <span className="block text-[10px] font-medium uppercase tracking-wide opacity-80 leading-tight">
+                      <span className="block text-[9px] font-medium uppercase tracking-wide opacity-80 leading-none">
                         {d.isToday ? t('shopReservationsToday') : d.weekday}
                       </span>
-                      <span className="mt-0.5 block text-base font-bold leading-none">{d.dayNum}</span>
-                      <span className="mt-0.5 block text-[10px] opacity-80 leading-tight">{d.month}</span>
+                      <span className="mt-1 block text-sm font-bold leading-none">{d.dayNum}</span>
+                      <span className="mt-0.5 block text-[9px] opacity-80 leading-none">{d.month}</span>
                     </button>
                   );
                 })}
               </div>
-              <label className="block text-xs text-stone-500 pt-1">
-                <span className="sr-only">{t('shopReservationsDate')}</span>
-                <input
-                  type="date"
-                  className="border border-stone-300 px-3 py-2 w-full text-sm text-stone-800"
-                  min={ymdLocal(new Date())}
-                  max={maxDate}
-                  value={date}
-                  onChange={(e) => {
-                    if (e.target.value) setDate(e.target.value);
-                  }}
-                />
-              </label>
+              {!datePickerOpen ? (
+                <button
+                  type="button"
+                  onClick={() => setDatePickerOpen(true)}
+                  className="text-xs font-semibold text-stone-600 underline underline-offset-2"
+                >
+                  {t('shopReservationsOtherDate')}
+                </button>
+              ) : (
+                <label className="block text-xs text-stone-500">
+                  <span className="sr-only">{t('shopReservationsDate')}</span>
+                  <input
+                    type="date"
+                    className="border border-stone-300 px-3 py-2 w-full max-w-[11rem] text-sm text-stone-800"
+                    min={ymdLocal(new Date())}
+                    max={maxDate}
+                    value={date}
+                    onChange={(e) => {
+                      if (e.target.value) setDate(e.target.value);
+                    }}
+                  />
+                </label>
+              )}
             </fieldset>
 
             <fieldset className="space-y-2">
@@ -341,34 +363,54 @@ export default function ReservationsPage() {
                   {t('shopReservationsNoSlots')}
                 </p>
               ) : (
-                <div
-                  className="grid grid-cols-3 gap-2 sm:grid-cols-4"
-                  role="radiogroup"
-                  aria-label={t('shopReservationsTime')}
-                >
-                  {slots.map((s) => {
-                    const selected = time === s.time;
-                    return (
-                      <button
-                        key={s.time}
-                        type="button"
-                        role="radio"
-                        aria-checked={selected}
-                        disabled={!s.available}
-                        onClick={() => setTime(s.time)}
-                        className={`min-h-12 text-sm font-semibold border tabular-nums transition-colors ${
-                          selected
-                            ? 'border-stone-900 bg-stone-900 text-white'
-                            : s.available
-                              ? 'border-stone-300 bg-white text-stone-800 hover:border-stone-900'
-                              : 'border-stone-200 bg-stone-100 text-stone-400 cursor-not-allowed line-through'
-                        }`}
-                      >
-                        {s.time}
-                      </button>
-                    );
-                  })}
-                </div>
+                <>
+                  <div
+                    className="grid grid-cols-3 gap-2"
+                    role="radiogroup"
+                    aria-label={t('shopReservationsTime')}
+                  >
+                    {(timesExpanded ? slots : slots.slice(0, 6)).map((s) => {
+                      const selected = time === s.time;
+                      return (
+                        <button
+                          key={s.time}
+                          type="button"
+                          role="radio"
+                          aria-checked={selected}
+                          disabled={!s.available}
+                          onClick={() => setTime(s.time)}
+                          className={`min-h-11 text-sm font-semibold border tabular-nums transition-colors ${
+                            selected
+                              ? 'border-stone-900 bg-stone-900 text-white'
+                              : s.available
+                                ? 'border-stone-300 bg-white text-stone-800 hover:border-stone-900'
+                                : 'border-stone-200 bg-stone-100 text-stone-400 cursor-not-allowed line-through'
+                          }`}
+                        >
+                          {s.time}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {!timesExpanded && slots.length > 6 ? (
+                    <button
+                      type="button"
+                      onClick={() => setTimesExpanded(true)}
+                      className="w-full min-h-10 text-sm font-semibold border border-stone-300 bg-white text-stone-700 hover:border-stone-900"
+                    >
+                      {t('shopReservationsShowMore')}
+                    </button>
+                  ) : null}
+                  {timesExpanded && slots.length > 6 ? (
+                    <button
+                      type="button"
+                      onClick={() => setTimesExpanded(false)}
+                      className="w-full min-h-10 text-sm font-semibold border border-stone-300 bg-white text-stone-700 hover:border-stone-900"
+                    >
+                      {t('shopReservationsShowLess')}
+                    </button>
+                  ) : null}
+                </>
               )}
               <p className="text-xs text-stone-500">
                 {t('shopReservationsSlotHint')
