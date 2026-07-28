@@ -99,6 +99,8 @@ export const merchants = pgTable(
     /** Earn lots expire after this many days (default 30) */
     loyaltyPointsExpiryDays: integer("loyalty_points_expiry_days").default(30).notNull(),
     panelLanguage: varchar("panel_language", { length: 10 }).default("en").notNull(), // en | fr | de
+    /** Default language for online shop + CMS homepage (null = fall back to panelLanguage) */
+    shopLanguage: varchar("shop_language", { length: 10 }), // en | fr | de
     /** Chaslay/FoodTruck Android POS sync key (X-Api-Key header) */
     syncApiKey: varchar("sync_api_key", { length: 64 }),
     // Restaurant floor / PAX
@@ -739,22 +741,40 @@ export type ReservationStatus =
   | "no_show";
 
 /** Programmable holiday / vacation closure for the online shop */
+export type LocalizedText = {
+  en?: string | null;
+  fr?: string | null;
+  de?: string | null;
+};
+
 export type VacationPeriod = {
   id: string;
   /** Inclusive start date YYYY-MM-DD (Europe/Zurich calendar) */
   startDate: string;
+  /** Start time HH:mm (Europe/Zurich), default 00:00 */
+  startTime?: string | null;
   /** Inclusive end date YYYY-MM-DD */
   endDate: string;
-  title?: string | null;
+  /** End time HH:mm (Europe/Zurich), default 23:59 */
+  endTime?: string | null;
+  /** Period label shown on popup — multilingual */
+  title?: LocalizedText | string | null;
 };
 
 export type VacationSettings = {
-  /** Force vacation on immediately (ignore / in addition to periods) */
+  /**
+   * Master switch. When false, scheduled periods do not activate vacation mode.
+   * Legacy `manualActive` is treated as enabled when `enabled` is absent.
+   */
+  enabled?: boolean;
+  /** @deprecated Prefer `enabled` — kept for older saved settings */
   manualActive?: boolean;
   /** Popup image shown on homepage & shop while on vacation */
   popupImageUrl?: string | null;
-  /** Optional visitor-facing message */
-  message?: string | null;
+  /** Editable popup title — multilingual */
+  popupTitle?: LocalizedText | string | null;
+  /** Optional visitor-facing message — multilingual */
+  message?: LocalizedText | string | null;
   periods?: VacationPeriod[];
 };
 

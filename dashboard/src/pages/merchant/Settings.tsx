@@ -33,15 +33,25 @@ interface SettingsData {
   shopPathUrl?: string | null;
   shopSubdomainUrl?: string | null;
   panelLanguage?: string | null;
+  shopLanguage?: string | null;
   subscriptionPlan?: string | null;
   status?: string | null;
   onlineCardFeeFixed?: string | null;
   onlineCardFeePercent?: string | null;
   vacationSettings?: {
+    enabled?: boolean;
     manualActive?: boolean;
     popupImageUrl?: string | null;
-    message?: string | null;
-    periods?: Array<{ id: string; startDate: string; endDate: string; title?: string | null }>;
+    popupTitle?: { en?: string | null; fr?: string | null; de?: string | null } | string | null;
+    message?: { en?: string | null; fr?: string | null; de?: string | null } | string | null;
+    periods?: Array<{
+      id: string;
+      startDate: string;
+      startTime?: string | null;
+      endDate: string;
+      endTime?: string | null;
+      title?: { en?: string | null; fr?: string | null; de?: string | null } | string | null;
+    }>;
   } | null;
 }
 
@@ -97,6 +107,52 @@ function Section({
       </div>
       {children}
     </section>
+  );
+}
+
+type LocalizedMap = { en?: string | null; fr?: string | null; de?: string | null };
+
+function asLocalized(raw: LocalizedMap | string | null | undefined): LocalizedMap {
+  if (raw == null) return { en: '', fr: '', de: '' };
+  if (typeof raw === 'string') return { en: raw, fr: raw, de: raw };
+  return {
+    en: raw.en || '',
+    fr: raw.fr || '',
+    de: raw.de || '',
+  };
+}
+
+function LocalizedFields({
+  label,
+  value,
+  onChange,
+  multiline,
+  placeholder,
+}: {
+  label: string;
+  value: LocalizedMap | string | null | undefined;
+  onChange: (next: LocalizedMap) => void;
+  multiline?: boolean;
+  placeholder?: string;
+}) {
+  const loc = asLocalized(value);
+  const setLang = (lang: keyof LocalizedMap, v: string) => onChange({ ...loc, [lang]: v });
+  const InputTag = multiline ? 'textarea' : 'input';
+  return (
+    <div className="space-y-2">
+      <span className="block text-sm font-medium text-[var(--text)]">{label}</span>
+      {(['en', 'fr', 'de'] as const).map((lang) => (
+        <label key={lang} className="block space-y-1">
+          <span className="text-[11px] muted uppercase tracking-wide">{lang}</span>
+          <InputTag
+            className={`input ${multiline ? 'min-h-[3.5rem]' : ''}`}
+            value={loc[lang] || ''}
+            onChange={(e) => setLang(lang, e.target.value)}
+            placeholder={placeholder}
+          />
+        </label>
+      ))}
+    </div>
   );
 }
 
@@ -203,8 +259,9 @@ export default function Settings() {
         paxOrderingEnabled: !!settings.paxOrderingEnabled,
         panelLanguage: settings.panelLanguage || locale,
         vacationSettings: settings.vacationSettings || {
-          manualActive: false,
+          enabled: false,
           popupImageUrl: null,
+          popupTitle: null,
           message: null,
           periods: [],
         },
@@ -395,22 +452,52 @@ export default function Settings() {
                   <input
                     type="checkbox"
                     className="mt-0.5"
-                    checked={!!settings.vacationSettings?.manualActive}
+                    checked={!!settings.vacationSettings?.enabled}
                     onChange={(e) =>
                       setSettings({
                         ...settings,
                         vacationSettings: {
                           ...(settings.vacationSettings || { periods: [] }),
-                          manualActive: e.target.checked,
+                          enabled: e.target.checked,
                         },
                       })
                     }
                   />
                   <span>
-                    <span className="font-medium block">{t('vacationManualActive')}</span>
-                    <span className="text-xs muted">{t('vacationManualHint')}</span>
+                    <span className="font-medium block">{t('vacationEnabled')}</span>
+                    <span className="text-xs muted">{t('vacationEnabledHint')}</span>
                   </span>
                 </label>
+
+                <LocalizedFields
+                  label={t('vacationPopupTitle')}
+                  value={settings.vacationSettings?.popupTitle}
+                  placeholder={t('vacationPopupTitlePlaceholder')}
+                  onChange={(popupTitle) =>
+                    setSettings({
+                      ...settings,
+                      vacationSettings: {
+                        ...(settings.vacationSettings || { periods: [] }),
+                        popupTitle,
+                      },
+                    })
+                  }
+                />
+                <LocalizedFields
+                  label={t('vacationMessage')}
+                  value={settings.vacationSettings?.message}
+                  multiline
+                  placeholder={t('vacationMessagePlaceholder')}
+                  onChange={(message) =>
+                    setSettings({
+                      ...settings,
+                      vacationSettings: {
+                        ...(settings.vacationSettings || { periods: [] }),
+                        message,
+                      },
+                    })
+                  }
+                />
                 <Field label={t('vacationPopupImage')} hint={t('vacationPopupImageHint')}>
                   <input
                     className="input"
@@ -425,22 +512,6 @@ export default function Settings() {
                       })
                     }
                     placeholder="https://…"
-                  />
-                </Field>
-                <Field label={t('vacationMessage')}>
-                  <textarea
-                    className="input min-h-[4.5rem]"
-                    value={settings.vacationSettings?.message || ''}
-                    onChange={(e) =>
-                      setSettings({
-                        ...settings,
-                        vacationSettings: {
-                          ...(settings.vacationSettings || { periods: [] }),
-                          message: e.target.value,
-                        },
-                      })
-                    }
-                    placeholder={t('vacationMessagePlaceholder')}
                   />
                 </Field>
                 <div className="space-y-2">
@@ -461,7 +532,14 @@ export default function Settings() {
                             ...(settings.vacationSettings || {}),
                             periods: [
                               ...(settings.vacationSettings?.periods || []),
-                              { id, startDate: today, endDate: today, title: '' },
+                              {
+                                id,
+                                startDate: today,
+                                startTime: '00:00',
+                                endDate: today,
+                                endTime: '23:59',
+                                title: { en: '', fr: '', de: '' },
+                              },
                             ],
                           },
                         });
@@ -470,6 +548,7 @@ export default function Settings() {
                       {t('vacationAddPeriod')}
                     </button>
                   </div>
+                  <p className="text-xs muted">{t('vacationPeriodsHint')}</p>
                   {(settings.vacationSettings?.periods || []).length === 0 ? (
                     <p className="text-xs muted">{t('vacationEmptyPeriods')}</p>
                   ) : (
@@ -496,6 +575,21 @@ export default function Settings() {
                                 required
                               />
                             </Field>
+                            <Field label={t('vacationStartTime')}>
+                              <input
+                                className="input"
+                                type="time"
+                                value={period.startTime || '00:00'}
+                                onChange={(e) => {
+                                  const periods = [...(settings.vacationSettings?.periods || [])];
+                                  periods[idx] = { ...period, startTime: e.target.value };
+                                  setSettings({
+                                    ...settings,
+                                    vacationSettings: { ...settings.vacationSettings, periods },
+                                  });
+                                }}
+                              />
+                            </Field>
                             <Field label={t('vacationEnd')}>
                               <input
                                 className="input"
@@ -513,21 +607,35 @@ export default function Settings() {
                                 required
                               />
                             </Field>
+                            <Field label={t('vacationEndTime')}>
+                              <input
+                                className="input"
+                                type="time"
+                                value={period.endTime || '23:59'}
+                                onChange={(e) => {
+                                  const periods = [...(settings.vacationSettings?.periods || [])];
+                                  periods[idx] = { ...period, endTime: e.target.value };
+                                  setSettings({
+                                    ...settings,
+                                    vacationSettings: { ...settings.vacationSettings, periods },
+                                  });
+                                }}
+                              />
+                            </Field>
                           </div>
-                          <Field label={t('vacationPeriodTitle')}>
-                            <input
-                              className="input"
-                              value={period.title || ''}
-                              onChange={(e) => {
-                                const periods = [...(settings.vacationSettings?.periods || [])];
-                                periods[idx] = { ...period, title: e.target.value };
-                                setSettings({
-                                  ...settings,
-                                  vacationSettings: { ...settings.vacationSettings, periods },
-                                });
-                              }}
-                            />
-                          </Field>
+                          <LocalizedFields
+                            label={t('vacationPeriodTitle')}
+                            value={period.title}
+                            placeholder={t('vacationPeriodTitlePlaceholder')}
+                            onChange={(title) => {
+                              const periods = [...(settings.vacationSettings?.periods || [])];
+                              periods[idx] = { ...period, title };
+                              setSettings({
+                                ...settings,
+                                vacationSettings: { ...settings.vacationSettings, periods },
+                              });
+                            }}
+                          />
                           <button
                             type="button"
                             className="text-xs text-red-700 underline"
@@ -893,7 +1001,7 @@ export default function Settings() {
           {tab === 'language' && (
             <div className="space-y-5">
               <Section title={t('language')} description={t('languageSettingsHint')}>
-                <Field label={t('panelLanguage')}>
+                <Field label={t('panelLanguage')} hint={t('panelLanguageHint')}>
                   <select
                     className="input"
                     value={settings.panelLanguage || locale}
@@ -903,6 +1011,26 @@ export default function Settings() {
                       setLocale(lang);
                       try {
                         await api.put('/merchant/settings', { panelLanguage: lang });
+                        toast.success(t('languageSaved'));
+                      } catch (error: any) {
+                        toast.error(error.response?.data?.error || t('failedSaveLanguage'));
+                      }
+                    }}
+                  >
+                    <option value="en">English</option>
+                    <option value="fr">Français</option>
+                    <option value="de">Deutsch</option>
+                  </select>
+                </Field>
+                <Field label={t('shopLanguage')} hint={t('shopLanguageHint')}>
+                  <select
+                    className="input"
+                    value={settings.shopLanguage || settings.panelLanguage || 'en'}
+                    onChange={async (e) => {
+                      const lang = e.target.value as Locale;
+                      setSettings({ ...settings, shopLanguage: lang });
+                      try {
+                        await api.put('/merchant/settings', { shopLanguage: lang });
                         toast.success(t('languageSaved'));
                       } catch (error: any) {
                         toast.error(error.response?.data?.error || t('failedSaveLanguage'));

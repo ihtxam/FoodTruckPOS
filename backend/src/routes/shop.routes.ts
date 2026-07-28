@@ -566,7 +566,7 @@ router.get("/:slug", async (req: Request, res: Response) => {
         reservationsEnabled: !!merchant.reservationsEnabled,
         vacation: vacationPublicPayload(merchant.vacationSettings),
         /** Merchant panel language — used as shop default when customer has no preference */
-        language: merchant.panelLanguage || "en",
+        language: merchant.shopLanguage || merchant.panelLanguage || "en",
       },
     });
   } catch (error) {
@@ -613,6 +613,7 @@ router.get("/:slug/pages/home", async (req: Request, res: Response) => {
           phone: merchant.phone,
           reservationsEnabled: !!merchant.reservationsEnabled,
           vacation: vacationPublicPayload(merchant.vacationSettings),
+          language: merchant.shopLanguage || merchant.panelLanguage || "en",
         },
       },
     });

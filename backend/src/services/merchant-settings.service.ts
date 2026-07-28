@@ -95,6 +95,7 @@ export class MerchantSettingsService {
       onlineCardFeeFixed: merchant.onlineCardFeeFixed ?? "0",
       onlineCardFeePercent: merchant.onlineCardFeePercent ?? "0",
       panelLanguage: merchant.panelLanguage || "en",
+      shopLanguage: merchant.shopLanguage || merchant.panelLanguage || "en",
       status: merchant.status,
       subscriptionPlan: merchant.subscriptionPlan,
     };
@@ -139,6 +140,7 @@ export class MerchantSettingsService {
       onlineCardFeeFixed?: number;
       onlineCardFeePercent?: number;
       panelLanguage?: string;
+      shopLanguage?: string;
     }
   ) {
     const db = getDb();
@@ -202,6 +204,13 @@ export class MerchantSettingsService {
         throw new Error("panelLanguage must be en, fr, or de");
       }
       patch.panelLanguage = lang;
+    }
+    if (updates.shopLanguage !== undefined) {
+      const lang = updates.shopLanguage.toLowerCase();
+      if (!["en", "fr", "de"].includes(lang)) {
+        throw new Error("shopLanguage must be en, fr, or de");
+      }
+      patch.shopLanguage = lang;
     }
     // Only overwrite API key when a non-empty new value is provided (not the masked placeholder)
     if (updates.adyenApiKey && !updates.adyenApiKey.includes("••••")) {
