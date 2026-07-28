@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from "express";
 import multer from "multer";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { verifyToken, requireMerchant, setMerchantContext } from "@/middleware/auth.middleware";
 import { ProductService } from "@/services/product.service";
 import { CategoryService } from "@/services/category.service";
@@ -1082,7 +1082,7 @@ router.post("/geocode", async (req: Request, res: Response) => {
  * POST /api/merchant/media
  * multipart field "file" — image upload (JPEG/PNG/WebP/GIF)
  */
-router.post("/media", (req: Request, res: Response, next: NextFunction) => {
+router.post("/media", (req: Request, res: Response, next) => {
   imageUpload.single("file")(req, res, (err: unknown) => {
     if (err) {
       const message =
@@ -1116,6 +1116,109 @@ router.post("/media", (req: Request, res: Response, next: NextFunction) => {
     });
   } catch (error) {
     res.status(400).json({ error: error instanceof Error ? error.message : "Upload failed" });
+  }
+});
+
+/**
+ * POST /api/merchant/demo-menu-photos
+ * Attach compressed demo images to products/categories missing photos.
+ */
+router.post("/demo-menu-photos", async (req: Request, res: Response) => {
+  try {
+    const merchantId = req.merchantId;
+    if (!merchantId) return res.status(400).json({ error: "Merchant ID is required" });
+
+    const fs = await import("fs");
+    const path = await import("path");
+    const demoDir = path.join(process.cwd(), "assets", "demo-menu");
+    if (!fs.existsSync(demoDir)) {
+      return res.status(404).json({ error: "Demo photos not packaged on server" });
+    }
+
+    const demoFiles = fs
+      .readdirSync(demoDir)
+      .filter((f) => /^demo-\d+\.jpg$/i.test(f))
+      .sort();
+    const catFiles = fs
+      .readdirSync(demoDir)
+      .filter((f) => /^cat-.+\.jpg$/i.test(f))
+      .sort();
+    if (!demoFiles.length) {
+      return res.status(404).json({ error: "No demo product photos found" });
+    }
+
+    const db = getDb();
+    const products = await db.query.products.findMany({
+      where: eq(schema.products.merchantId, merchantId),
+      orderBy: [asc(schema.products.sortOrder)],
+    });
+    const categories = await db.query.categories.findMany({
+      where: eq(schema.categories.merchantId, merchantId),
+      orderBy: [asc(schema.categories.sortOrder)],
+    });
+
+    let productsUpdated = 0;
+    let categoriesUpdated = 0;
+    let i = 0;
+    for (const p of products) {
+      if (p.imageUrl) continue;
+      const file = demoFiles[i % demoFiles.length];
+      i += 1;
+      const buf = fs.readFileSync(path.join(demoDir, file));
+      const saved = await saveMerchantImage({
+        merchantId,
+        buffer: buf,
+        mimeType: "image/jpeg",
+        originalName: file,
+      });
+      await db
+        .update(schema.products)
+        .set({ imageUrl: saved.url, updatedAt: new Date() })
+        .where(and(eq(schema.products.id, p.id), eq(schema.products.merchantId, merchantId)));
+      productsUpdated += 1;
+    }
+
+    let ci = 0;
+    for (const c of categories) {
+      if ((c as { imageUrl?: string | null }).imageUrl) continue;
+      const file = catFiles[ci % Math.max(catFiles.length, 1)] || demoFiles[ci % demoFiles.length];
+      ci += 1;
+      if (!file) continue;
+      const buf = fs.readFileSync(path.join(demoDir, file));
+      const saved = await saveMerchantImage({
+        merchantId,
+        buffer: buf,
+        mimeType: "image/jpeg",
+        originalName: file,
+      });
+      await db
+        .update(schema.categories)
+        .set({ imageUrl: saved.url, updatedAt: new Date() })
+        .where(and(eq(schema.categories.id, c.id), eq(schema.categories.merchantId, merchantId)));
+      categoriesUpdated += 1;
+    }
+
+    // Optional store banner if missing
+    const merchant = await db.query.merchants.findFirst({ where: eq(schema.merchants.id, merchantId) });
+    if (merchant && !merchant.shopBannerUrl && demoFiles[1]) {
+      const buf = fs.readFileSync(path.join(demoDir, demoFiles[1]));
+      const saved = await saveMerchantImage({
+        merchantId,
+        buffer: buf,
+        mimeType: "image/jpeg",
+        originalName: demoFiles[1],
+      });
+      await db
+        .update(schema.merchants)
+        .set({ shopBannerUrl: saved.url, updatedAt: new Date() })
+        .where(eq(schema.merchants.id, merchantId));
+    }
+
+    res.json({ success: true, productsUpdated, categoriesUpdated });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to apply demo photos",
+    });
   }
 });
 

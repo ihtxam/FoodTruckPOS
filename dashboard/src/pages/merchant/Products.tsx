@@ -101,6 +101,7 @@ type FormState = {
   sku: string;
   categoryId: string;
   buttonColor: string;
+  imageUrl: string;
   isOpenPrice: boolean;
   soldByWeight: boolean;
   isCombo: boolean;
@@ -127,6 +128,7 @@ const emptyForm = (): FormState => ({
   sku: '',
   categoryId: '',
   buttonColor: '#0f172a',
+  imageUrl: '',
   isOpenPrice: false,
   soldByWeight: false,
   isCombo: false,
@@ -209,6 +211,31 @@ export default function Products() {
   const [allModifierGroups, setAllModifierGroups] = useState<ModifierGroupSummary[]>([]);
   const [modifierPickerOpen, setModifierPickerOpen] = useState(false);
   const [reordering, setReordering] = useState(false);
+  const [imageUploading, setImageUploading] = useState(false);
+  const imageFileRef = useRef<HTMLInputElement>(null);
+
+  const onUploadProductImage = async (file: File | null) => {
+    if (!file) return;
+    setImageUploading(true);
+    try {
+      const { compressImageIfNeeded } = await import('@/lib/compress-image');
+      const compressed = await compressImageIfNeeded(file, {
+        maxBytes: 350 * 1024,
+        targetBytes: 350 * 1024,
+        maxWidth: 1200,
+      });
+      const fd = new FormData();
+      fd.append('file', compressed);
+      const res = await api.post('/merchant/media', fd);
+      setForm((prev) => ({ ...prev, imageUrl: res.data.url || '' }));
+      toast.success('Image uploaded');
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Upload failed');
+    } finally {
+      setImageUploading(false);
+      if (imageFileRef.current) imageFileRef.current.value = '';
+    }
+  };
 
   const load = async () => {
     try {
@@ -325,6 +352,7 @@ export default function Products() {
         sku: full.sku || '',
         categoryId: full.categoryId || '',
         buttonColor: full.buttonColor || '#0f172a',
+        imageUrl: full.imageUrl || '',
         isOpenPrice: !!full.isOpenPrice,
         soldByWeight: !!full.soldByWeight,
         isCombo: full.productType === 'combo' || comboSlots.length > 0,
@@ -346,6 +374,7 @@ export default function Products() {
         sku: product.sku || '',
         categoryId: product.categoryId || '',
         buttonColor: product.buttonColor || '#0f172a',
+        imageUrl: product.imageUrl || '',
         isOpenPrice: !!product.isOpenPrice,
         soldByWeight: !!product.soldByWeight,
         isCombo: product.productType === 'combo' || comboSlots.length > 0,
@@ -413,6 +442,7 @@ export default function Products() {
       sku: form.sku.trim() || undefined,
       categoryId: form.categoryId || undefined,
       buttonColor: form.buttonColor || undefined,
+      imageUrl: form.imageUrl.trim() || null,
       isOpenPrice: form.isCombo ? false : form.isOpenPrice,
       soldByWeight: form.isCombo ? false : form.soldByWeight,
       productType,
@@ -903,6 +933,49 @@ export default function Products() {
                   value={form.description}
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
                 />
+              </Field>
+
+              <Field label="Product photo">
+                <div className="flex flex-wrap items-center gap-3">
+                  {form.imageUrl ? (
+                    <img
+                      src={form.imageUrl}
+                      alt=""
+                      className="h-16 w-16 rounded-md object-cover border border-[var(--border)]"
+                    />
+                  ) : (
+                    <div className="flex h-16 w-16 items-center justify-center rounded-md border border-dashed border-[var(--border)] text-xs muted">
+                      —
+                    </div>
+                  )}
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className="btn-secondary text-sm"
+                      disabled={imageUploading}
+                      onClick={() => imageFileRef.current?.click()}
+                    >
+                      {imageUploading ? 'Uploading…' : form.imageUrl ? 'Replace photo' : 'Upload photo'}
+                    </button>
+                    {form.imageUrl ? (
+                      <button
+                        type="button"
+                        className="btn-secondary text-sm"
+                        onClick={() => setForm({ ...form, imageUrl: '' })}
+                      >
+                        Remove
+                      </button>
+                    ) : null}
+                  </div>
+                  <input
+                    ref={imageFileRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => void onUploadProductImage(e.target.files?.[0] || null)}
+                  />
+                </div>
+                <p className="mt-1 text-xs muted">Compressed to ≤350 KB for the online shop.</p>
               </Field>
 
               <Field label="Free with points (optional)">

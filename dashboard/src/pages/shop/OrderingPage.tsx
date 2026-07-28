@@ -27,13 +27,15 @@ import ShopComboWizard, {
   type ComboSlot,
   type ShopComboProduct,
 } from '@/components/shop/ShopComboWizard';
-import { CalendarDays, ChevronDown, LayoutGrid, Plus, Rows3, ShoppingBag, User } from 'lucide-react';
+import { CalendarDays, ChevronDown, Info, LayoutGrid, Plus, Rows3, ShoppingBag, User } from 'lucide-react';
 import { isLocale, useI18n } from '@/lib/i18n';
 import ShopLangSwitcher from '@/components/shop/ShopLangSwitcher';
 import ZipCityFields from '@/components/shop/ZipCityFields';
 import ShopVacationPopup from '@/components/shop/ShopVacationPopup';
 import ShopNotAcceptingBanner from '@/components/shop/ShopNotAcceptingBanner';
 import ShopChannelPrompt from '@/components/shop/ShopChannelPrompt';
+import ShopInfoSheet from '@/components/shop/ShopInfoSheet';
+import { findNextOpen, type StoreHours } from '@/lib/shop-hours';
 
 interface Product {
   id: string;
@@ -61,6 +63,7 @@ type LoyaltyReward = {
 interface Category {
   id: string;
   name: string;
+  image?: string | null;
   items: Product[];
 }
 
@@ -101,6 +104,10 @@ export default function OrderingPage() {
     }
   });
   const [channelPromptOpen, setChannelPromptOpen] = useState(false);
+  const [infoOpen, setInfoOpen] = useState(false);
+  const [deliveryZones, setDeliveryZones] = useState<any[]>([]);
+  /** null = all collapsed; string = that category expanded */
+  const [expandedCategoryId, setExpandedCategoryId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!shopKey) {
@@ -124,6 +131,16 @@ export default function OrderingPage() {
         setMerchant(data);
         setMenu(menuRes.data.data || []);
         setSelectedCategory('all');
+        const cats = menuRes.data.data || [];
+        setExpandedCategoryId(cats[0]?.id || null);
+
+        try {
+          const z = await axios.get(`/api/shop/${shopKey}/delivery-zones`);
+          const raw = z.data?.data ?? z.data?.zones ?? z.data;
+          setDeliveryZones(Array.isArray(raw) ? raw : []);
+        } catch {
+          setDeliveryZones([]);
+        }
 
         const loyaltyData = loyaltyRes.data || {};
         setLoyaltyRewards(loyaltyData.rewards || []);
@@ -236,16 +253,24 @@ export default function OrderingPage() {
       const items = prev.items.map((item) => {
         if (item.loyaltyReward) return item;
         const extrasTotal = roundMoney2(
-          (item.selectedExtras || []).reduce((s, e) => s + e.price, 0) +
+          (item.selectedExtras || []).reduce((s, e) => s + Number(e.price || 0), 0) +
             (item.comboSelections || []).reduce(
-              (s, c) => s + c.extraPrice + c.selectedExtras.reduce((x, e) => x + e.price, 0),
+              (s, c) =>
+                s +
+                Number(c.extraPrice || 0) +
+                (c.selectedExtras || []).reduce((x, e) => x + Number(e.price || 0), 0),
               0
             )
         );
-        const nextPrice = roundMoney2(item.basePrice + markup + extrasTotal);
-        if (nextPrice !== item.price) {
+        const base =
+          typeof item.basePrice === 'number' && Number.isFinite(item.basePrice)
+            ? item.basePrice
+            : roundMoney2(Number(item.price || 0) - extrasTotal);
+        const nextPrice = roundMoney2(base + markup + extrasTotal);
+        if (!Number.isFinite(nextPrice)) return item;
+        if (nextPrice !== item.price || item.basePrice !== base) {
           changed = true;
-          return { ...item, price: nextPrice };
+          return { ...item, basePrice: base, price: nextPrice };
         }
         return item;
       });
@@ -265,11 +290,11 @@ export default function OrderingPage() {
   const channelMeta = channels[channel];
   const itemCount = cart.reduce((s, i) => s + i.quantity, 0);
 
-  const mapsUrl =
+  const directionsUrl =
     merchant?.latitude && merchant?.longitude
-      ? `https://www.google.com/maps/search/?api=1&query=${merchant.latitude},${merchant.longitude}`
+      ? `https://www.google.com/maps/dir/?api=1&destination=${merchant.latitude},${merchant.longitude}`
       : merchant?.address
-        ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+        ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
             `${merchant.address} ${merchant.city || ''}`
           )}`
         : null;
@@ -452,10 +477,6 @@ export default function OrderingPage() {
     );
   }
 
-  const visibleItems =
-    selectedCategory === 'all'
-      ? menu.flatMap((c) => c.items || [])
-      : menu.find((c) => c.id === selectedCategory)?.items || [];
   const allChannels: { id: ShopChannel; label: string }[] = [
     { id: 'takeaway', label: t('shopPickup') },
     { id: 'delivery', label: t('shopDelivery') },
@@ -485,7 +506,11 @@ export default function OrderingPage() {
     setChannelPromptOpen(true);
   };
 
-  const confirmChannelPrompt = () => {
+  const confirmChannelPrompt = (payload: {
+    channel: ShopChannel;
+    scheduledFor: string | null;
+  }) => {
+    patch({ channel: payload.channel, scheduledFor: payload.scheduledFor || '' });
     try {
       sessionStorage.setItem(`manupos_channel_prompted_${shopKey}`, '1');
     } catch {
@@ -493,6 +518,37 @@ export default function OrderingPage() {
     }
     setChannelPromptOpen(false);
     setError(null);
+  };
+
+  const nextOpen = useMemo(() => {
+    if (!merchant || channelMeta?.open) return null;
+    return findNextOpen(merchant.storeHours as StoreHours, channel);
+  }, [merchant, channelMeta?.open, channel]);
+
+  const statusLine = useMemo(() => {
+    if (channelMeta?.open) return t('shopOpenNow');
+    if (nextOpen) {
+      if (nextOpen.dayOffset === 0) {
+        return t('shopOpensAt').replace('{time}', nextOpen.labelHm);
+      }
+      if (nextOpen.dayOffset === 1) {
+        return t('shopOpensTomorrow').replace('{time}', nextOpen.labelHm);
+      }
+      return t('shopOpensLater').replace('{time}', nextOpen.labelHm);
+    }
+    return t('shopClosed');
+  }, [channelMeta?.open, nextOpen, t]);
+
+  const showProductImages = merchant?.menuShowProductImages !== false;
+  const showCategoryBanners = merchant?.menuShowCategoryBanners !== false;
+
+  const categoriesToRender = useMemo(() => {
+    if (selectedCategory === 'all') return menu;
+    return menu.filter((c) => c.id === selectedCategory);
+  }, [menu, selectedCategory]);
+
+  const toggleCategory = (id: string) => {
+    setExpandedCategoryId((prev) => (prev === id ? null : id));
   };
   const loyaltyEnabled = !!merchant?.loyalty?.enabled;
   const unlockedRewards = loyaltyRewards.filter((r) => r.unlocked);
@@ -686,6 +742,15 @@ export default function OrderingPage() {
             <span className="hidden sm:inline font-bold tracking-tight truncate">{merchant?.name}</span>
           </Link>
           <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => setInfoOpen(true)}
+              className="inline-flex h-9 w-9 items-center justify-center text-stone-700 hover:bg-stone-100 rounded-full"
+              aria-label={t('shopStoreInfo')}
+              title={t('shopStoreInfo')}
+            >
+              <Info className="h-5 w-5" strokeWidth={1.75} />
+            </button>
             <ShopLangSwitcher />
             {showReservations && (
               <Link
@@ -747,52 +812,82 @@ export default function OrderingPage() {
           </button>
         </div>
 
-        {merchant?.shopBannerUrl && (
-          <div
-            className="h-40 md:h-52 w-full bg-cover bg-center"
-            style={{ backgroundImage: `url(${merchant.shopBannerUrl})` }}
-          />
-        )}
-
-        <div className="max-w-7xl mx-auto px-4 py-4 space-y-2">
-          {!merchant?.shopBannerUrl ? (
-            <h1 className="text-xl md:text-2xl font-bold tracking-tight">{merchant?.name}</h1>
-          ) : null}
-          <div className="flex flex-wrap items-start justify-between gap-2 text-[13px] text-stone-600">
-            <div className="min-w-0 space-y-1">
+        <div className="max-w-7xl mx-auto px-4 py-4 space-y-3">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <h1 className="text-xl md:text-2xl font-bold tracking-tight">{merchant?.name}</h1>
               {(merchant?.address || merchant?.city) && (
-                <p>
-                  <span className="text-stone-800 font-medium">{merchant?.name}</span>
-                  {merchant?.address ? ` · ${merchant.address}` : ''}
+                <p className="mt-1 text-[13px] text-stone-600">
+                  {merchant?.address}
                   {merchant?.city ? `, ${merchant.city}` : ''}
-                  {mapsUrl ? (
+                  {directionsUrl ? (
                     <>
                       {' · '}
-                      <a href={mapsUrl} target="_blank" rel="noreferrer" className="font-medium text-rose-600 hover:underline">
-                        {t('shopGetMap')}
+                      <a
+                        href={directionsUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="font-medium text-rose-600 hover:underline"
+                      >
+                        {t('shopGetDirections')}
                       </a>
                     </>
                   ) : null}
                 </p>
               )}
-              <p className="flex flex-wrap items-center gap-2">
-                <span>
-                  {(merchant?.displayHours?.todayLabel || channelMeta?.todayLabel) || t('shopHoursNotSet')}
-                </span>
-                <span
-                  className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                    channelMeta?.open ? 'bg-emerald-50 text-emerald-700' : 'bg-stone-100 text-stone-600'
-                  }`}
-                >
-                  {channelMeta?.open ? t('shopOpenNow') : t('shopClosed')}
-                </span>
-                <span className="text-stone-400">·</span>
-                <span>
-                  {channelLabel} {etaMin}–{etaMin + 10} {t('shopMins')}
-                </span>
-              </p>
             </div>
+            <button
+              type="button"
+              onClick={() => setInfoOpen(true)}
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-stone-300 text-stone-700"
+              aria-label={t('shopStoreInfo')}
+              title={t('shopStoreInfo')}
+            >
+              <Info className="h-4 w-4" />
+            </button>
           </div>
+
+          {/* Hero / store image below address */}
+          {directionsUrl ? (
+            <a
+              href={directionsUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="block relative overflow-hidden rounded-xl bg-stone-100 aspect-[16/7] sm:aspect-[21/8]"
+            >
+              {merchant?.shopBannerUrl ? (
+                <img src={merchant.shopBannerUrl} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full w-full items-end bg-gradient-to-br from-stone-200 via-stone-100 to-amber-50 p-4">
+                  <span className="text-sm font-semibold text-stone-700">{t('shopGetDirections')}</span>
+                </div>
+              )}
+              <span className="absolute bottom-3 right-3 rounded-full bg-white/95 px-3 py-1.5 text-xs font-semibold text-rose-600 shadow-sm">
+                {t('shopGetDirections')}
+              </span>
+            </a>
+          ) : merchant?.shopBannerUrl ? (
+            <div className="relative overflow-hidden rounded-xl bg-stone-100 aspect-[16/7] sm:aspect-[21/8]">
+              <img src={merchant.shopBannerUrl} alt="" className="h-full w-full object-cover" />
+            </div>
+          ) : null}
+
+          <p className="flex flex-wrap items-center gap-2 text-[13px]">
+            <span className="text-stone-600">
+              {(merchant?.displayHours?.todayLabel || channelMeta?.todayLabel) || t('shopHoursNotSet')}
+            </span>
+            <span
+              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                channelMeta?.open ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-800'
+              }`}
+            >
+              {statusLine}
+            </span>
+            <span className="text-stone-400">·</span>
+            <span className="text-stone-600">
+              {channelLabel} {etaMin}–{etaMin + 10} {t('shopMins')}
+            </span>
+          </p>
 
           {showMenuChannelButtons ? (
             <div className="flex flex-wrap gap-2 pt-1">
@@ -814,7 +909,9 @@ export default function OrderingPage() {
                     }`}
                   >
                     {c.label}
-                    <span className="ml-1.5 font-normal opacity-70">{meta.etaMinutes} {t('shopMins')}</span>
+                    <span className="ml-1.5 font-normal opacity-70">
+                      {meta.etaMinutes} {t('shopMins')}
+                    </span>
                   </button>
                 );
               })}
@@ -878,11 +975,14 @@ export default function OrderingPage() {
               <div className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto pb-0.5">
                 <button
                   type="button"
-                  onClick={() => setSelectedCategory('all')}
+                  onClick={() => {
+                    setSelectedCategory('all');
+                    setExpandedCategoryId(menu[0]?.id || null);
+                  }}
                   className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-medium ${
                     selectedCategory === 'all'
-                      ? 'bg-stone-900 text-white'
-                      : 'bg-transparent text-stone-600 hover:bg-white'
+                      ? 'bg-amber-700 text-white'
+                      : 'bg-white text-stone-700 border border-stone-200'
                   }`}
                 >
                   {t('shopAllCategories')}
@@ -891,11 +991,14 @@ export default function OrderingPage() {
                   <button
                     key={cat.id}
                     type="button"
-                    onClick={() => setSelectedCategory(cat.id)}
+                    onClick={() => {
+                      setSelectedCategory(cat.id);
+                      setExpandedCategoryId(cat.id);
+                    }}
                     className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-medium ${
                       selectedCategory === cat.id
-                        ? 'bg-stone-900 text-white'
-                        : 'bg-transparent text-stone-600 hover:bg-white'
+                        ? 'bg-amber-700 text-white'
+                        : 'bg-white text-stone-700 border border-stone-200'
                     }`}
                   >
                     {cat.name}
@@ -929,78 +1032,102 @@ export default function OrderingPage() {
             </div>
           </div>
 
-          <div
-            className={
-              gridCols === 2
-                ? 'grid grid-cols-2 gap-3 sm:gap-4'
-                : 'grid grid-cols-1 gap-3 max-w-xl'
-            }
-          >
-            {visibleItems.map((product) => {
-              const rewardPts =
-                product.loyaltyRewardPoints != null && Number(product.loyaltyRewardPoints) >= 1
-                  ? Number(product.loyaltyRewardPoints)
-                  : null;
-              const unlocked = rewardPts != null && customer && loyaltyBalance >= rewardPts;
+          <div className="space-y-2">
+            {categoriesToRender.map((cat) => {
+              const open = expandedCategoryId === cat.id;
+              const items = cat.items || [];
               return (
-                <article key={product.id} className="group flex flex-col">
-                  <div className="relative aspect-square overflow-hidden bg-stone-100 rounded-sm">
-                    {product.image ? (
-                      <img
-                        src={product.image}
-                        alt=""
-                        className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"
-                      />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center text-stone-300 text-3xl font-light">
-                        {(product.name || '?').slice(0, 1).toUpperCase()}
-                      </div>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => handleProductClick(product)}
-                      className="absolute bottom-2 right-2 inline-flex h-9 w-9 items-center justify-center rounded-full bg-rose-500 text-white shadow-md hover:bg-rose-600 active:scale-95"
-                      aria-label={`${t('shopAdd')} ${product.name}`}
-                    >
-                      <Plus className="h-5 w-5" strokeWidth={2.5} />
-                    </button>
-                    {unlocked ? (
-                      <button
-                        type="button"
-                        onClick={() => addConfiguredItem(product, [], 0, [], true)}
-                        className="absolute left-2 top-2 rounded-full bg-teal-800 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white"
-                      >
-                        {t('shopFree')}
-                      </button>
-                    ) : null}
-                  </div>
+                <section key={cat.id} className="overflow-hidden rounded-lg border border-stone-200 bg-white">
                   <button
                     type="button"
-                    onClick={() => handleProductClick(product)}
-                    className="mt-2 text-left"
+                    onClick={() => toggleCategory(cat.id)}
+                    className="flex w-full items-center justify-between gap-2 bg-stone-100 px-3 py-3 text-left"
                   >
-                    <p className="font-semibold text-stone-900 text-sm sm:text-[15px] leading-snug line-clamp-2 uppercase tracking-wide">
-                      {product.name}
-                    </p>
-                    {gridCols === 1 && product.description ? (
-                      <p className="mt-0.5 text-sm text-stone-500 line-clamp-2">{product.description}</p>
-                    ) : null}
-                    <p className="mt-0.5 text-sm text-stone-700 tabular-nums">
-                      CHF {catalogUnitPrice(product.price).toFixed(2)}
-                    </p>
-                    {rewardPts != null ? (
-                      <p className="mt-0.5 text-[11px] font-medium text-amber-800">
-                        {t('shopPtsBadge').replace('{n}', String(rewardPts))}
-                      </p>
-                    ) : null}
+                    <span className="text-sm font-bold uppercase tracking-wide text-stone-900">
+                      {cat.name}
+                    </span>
+                    <ChevronDown
+                      className={`h-4 w-4 text-stone-500 transition ${open ? 'rotate-180' : ''}`}
+                    />
                   </button>
-                </article>
+                  {open ? (
+                    <div className="p-2 sm:p-3 space-y-3">
+                      {showCategoryBanners && cat.image ? (
+                        <img
+                          src={cat.image}
+                          alt=""
+                          className="w-full aspect-[21/9] object-cover rounded-md bg-stone-100"
+                        />
+                      ) : null}
+                      {gridCols === 2 ? (
+                        <div className="grid grid-cols-2 gap-3">
+                          {items.map((product) => (
+                            <ProductCard
+                              key={product.id}
+                              product={product}
+                              layout="grid"
+                              showImage={showProductImages}
+                              price={catalogUnitPrice(product.price)}
+                              onAdd={() => handleProductClick(product)}
+                              rewardPts={
+                                product.loyaltyRewardPoints != null &&
+                                Number(product.loyaltyRewardPoints) >= 1
+                                  ? Number(product.loyaltyRewardPoints)
+                                  : null
+                              }
+                              unlocked={
+                                !!(
+                                  product.loyaltyRewardPoints != null &&
+                                  customer &&
+                                  loyaltyBalance >= Number(product.loyaltyRewardPoints)
+                                )
+                              }
+                              onAddFree={() => addConfiguredItem(product, [], 0, [], true)}
+                              t={t}
+                            />
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-stone-100">
+                          {items.map((product) => (
+                            <ProductCard
+                              key={product.id}
+                              product={product}
+                              layout="list"
+                              showImage={showProductImages}
+                              price={catalogUnitPrice(product.price)}
+                              onAdd={() => handleProductClick(product)}
+                              rewardPts={
+                                product.loyaltyRewardPoints != null &&
+                                Number(product.loyaltyRewardPoints) >= 1
+                                  ? Number(product.loyaltyRewardPoints)
+                                  : null
+                              }
+                              unlocked={
+                                !!(
+                                  product.loyaltyRewardPoints != null &&
+                                  customer &&
+                                  loyaltyBalance >= Number(product.loyaltyRewardPoints)
+                                )
+                              }
+                              onAddFree={() => addConfiguredItem(product, [], 0, [], true)}
+                              t={t}
+                            />
+                          ))}
+                        </div>
+                      )}
+                      {items.length === 0 ? (
+                        <p className="text-sm text-stone-500 py-6 text-center">{t('shopNoProducts')}</p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </section>
               );
             })}
+            {categoriesToRender.length === 0 ? (
+              <p className="text-stone-500 py-12 text-center">{t('shopNoProducts')}</p>
+            ) : null}
           </div>
-          {visibleItems.length === 0 && (
-            <p className="text-stone-500 py-12 text-center">{t('shopNoProducts')}</p>
-          )}
         </div>
 
         <div className="hidden lg:block sticky top-20 h-[calc(100vh-6rem)]">{Basket}</div>
@@ -1064,6 +1191,9 @@ export default function OrderingPage() {
         selected={channel}
         confirmLabel={t('shopContinue')}
         dismissible={channelSelectMode !== 'popup_start'}
+        withSchedule={channelSelectMode === 'popup_start'}
+        storeHours={merchant?.storeHours}
+        scheduledFor={draft.scheduledFor || null}
         onSelect={(id) => {
           patch({ channel: id });
           setDeliveryInfo(null);
@@ -1072,6 +1202,125 @@ export default function OrderingPage() {
         onConfirm={confirmChannelPrompt}
         onClose={() => setChannelPromptOpen(false)}
       />
+
+      <ShopInfoSheet
+        open={infoOpen}
+        onClose={() => setInfoOpen(false)}
+        merchant={merchant}
+        zones={deliveryZones}
+      />
     </div>
+  );
+}
+
+function ProductCard({
+  product,
+  layout,
+  showImage,
+  price,
+  onAdd,
+  rewardPts,
+  unlocked,
+  onAddFree,
+  t,
+}: {
+  product: Product;
+  layout: 'grid' | 'list';
+  showImage: boolean;
+  price: number;
+  onAdd: () => void;
+  rewardPts: number | null;
+  unlocked: boolean;
+  onAddFree: () => void;
+  t: (k: string) => string;
+}) {
+  if (layout === 'list') {
+    return (
+      <div className="relative flex gap-3 py-3 px-1">
+        {showImage ? (
+          <button type="button" onClick={onAdd} className="shrink-0">
+            {product.image ? (
+              <img
+                src={product.image}
+                alt=""
+                className="h-20 w-20 rounded-lg object-cover bg-stone-100"
+              />
+            ) : (
+              <div className="flex h-20 w-20 items-center justify-center rounded-lg bg-stone-100 text-xl text-stone-300">
+                {(product.name || '?').slice(0, 1).toUpperCase()}
+              </div>
+            )}
+          </button>
+        ) : null}
+        <button type="button" onClick={onAdd} className="min-w-0 flex-1 text-left pr-10">
+          <p className="font-semibold text-stone-900 text-sm leading-snug">{product.name}</p>
+          {product.description ? (
+            <p className="mt-0.5 text-xs text-stone-500 line-clamp-2">{product.description}</p>
+          ) : null}
+          <p className="mt-1 text-sm font-medium tabular-nums">CHF {price.toFixed(2)}</p>
+          {rewardPts != null ? (
+            <p className="text-[11px] text-amber-800">{t('shopPtsBadge').replace('{n}', String(rewardPts))}</p>
+          ) : null}
+        </button>
+        <button
+          type="button"
+          onClick={onAdd}
+          className="absolute bottom-3 right-1 inline-flex h-9 w-9 items-center justify-center rounded-full bg-amber-700 text-white shadow-sm"
+          aria-label={`${t('shopAdd')} ${product.name}`}
+        >
+          <Plus className="h-5 w-5" strokeWidth={2.5} />
+        </button>
+        {unlocked ? (
+          <button
+            type="button"
+            onClick={onAddFree}
+            className="absolute top-2 right-1 rounded-full bg-teal-800 px-2 py-0.5 text-[10px] font-bold text-white"
+          >
+            {t('shopFree')}
+          </button>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <article className="group flex flex-col">
+      <div className="relative aspect-square overflow-hidden bg-stone-100 rounded-md">
+        {showImage && product.image ? (
+          <img
+            src={product.image}
+            alt=""
+            className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-stone-300 text-3xl font-light">
+            {(product.name || '?').slice(0, 1).toUpperCase()}
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={onAdd}
+          className="absolute bottom-2 right-2 inline-flex h-9 w-9 items-center justify-center rounded-full bg-amber-700 text-white shadow-md active:scale-95"
+          aria-label={`${t('shopAdd')} ${product.name}`}
+        >
+          <Plus className="h-5 w-5" strokeWidth={2.5} />
+        </button>
+        {unlocked ? (
+          <button
+            type="button"
+            onClick={onAddFree}
+            className="absolute left-2 top-2 rounded-full bg-teal-800 px-2 py-1 text-[10px] font-bold uppercase text-white"
+          >
+            {t('shopFree')}
+          </button>
+        ) : null}
+      </div>
+      <button type="button" onClick={onAdd} className="mt-2 text-left">
+        <p className="font-semibold text-stone-900 text-sm leading-snug line-clamp-2 uppercase tracking-wide">
+          {product.name}
+        </p>
+        <p className="mt-0.5 text-sm text-stone-700 tabular-nums">CHF {price.toFixed(2)}</p>
+      </button>
+    </article>
   );
 }

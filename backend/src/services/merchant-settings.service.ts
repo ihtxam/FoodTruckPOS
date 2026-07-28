@@ -88,6 +88,8 @@ export class MerchantSettingsService {
       dineInEnabled: merchant.dineInEnabled,
       deliveryEnabled: merchant.deliveryEnabled,
       channelSelectMode: normalizeChannelSelectMode(merchant.channelSelectMode),
+      menuShowProductImages: merchant.menuShowProductImages !== false,
+      menuShowCategoryBanners: merchant.menuShowCategoryBanners !== false,
       floorPlanEnabled: merchant.floorPlanEnabled,
       paxOrderingEnabled: merchant.paxOrderingEnabled,
       storeHours: merchant.storeHours || {},
@@ -142,6 +144,8 @@ export class MerchantSettingsService {
       dineInEnabled?: boolean;
       deliveryEnabled?: boolean;
       channelSelectMode?: ChannelSelectMode | string;
+      menuShowProductImages?: boolean;
+      menuShowCategoryBanners?: boolean;
       floorPlanEnabled?: boolean;
       paxOrderingEnabled?: boolean;
       storeHours?: Record<string, unknown>;
@@ -193,6 +197,12 @@ export class MerchantSettingsService {
     if (updates.deliveryEnabled !== undefined) patch.deliveryEnabled = !!updates.deliveryEnabled;
     if (updates.channelSelectMode !== undefined) {
       patch.channelSelectMode = normalizeChannelSelectMode(updates.channelSelectMode);
+    }
+    if (updates.menuShowProductImages !== undefined) {
+      patch.menuShowProductImages = !!updates.menuShowProductImages;
+    }
+    if (updates.menuShowCategoryBanners !== undefined) {
+      patch.menuShowCategoryBanners = !!updates.menuShowCategoryBanners;
     }
     if (updates.floorPlanEnabled !== undefined) patch.floorPlanEnabled = !!updates.floorPlanEnabled;
     if (updates.paxOrderingEnabled !== undefined) patch.paxOrderingEnabled = !!updates.paxOrderingEnabled;

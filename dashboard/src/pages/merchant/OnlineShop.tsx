@@ -402,6 +402,8 @@ export default function OnlineShop() {
         dineInEnabled: settings.dineInEnabled,
         deliveryEnabled: settings.deliveryEnabled,
         channelSelectMode: settings.channelSelectMode || 'checkout',
+        menuShowProductImages: settings.menuShowProductImages !== false,
+        menuShowCategoryBanners: settings.menuShowCategoryBanners !== false,
         storeHours: hours,
         latitude: settings.latitude,
         longitude: settings.longitude,
@@ -587,6 +589,44 @@ export default function OnlineShop() {
               <option value="popup_start">Popup when opening the menu</option>
               <option value="menu">Buttons on the menu page</option>
             </select>
+          </div>
+
+          <div className="rounded-lg border border-stone-200 bg-white p-3 space-y-2">
+            <p className="text-sm font-medium">Menu photos</p>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={settings.menuShowProductImages !== false}
+                onChange={(e) => setSettings({ ...settings, menuShowProductImages: e.target.checked })}
+              />
+              Show product photos
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={settings.menuShowCategoryBanners !== false}
+                onChange={(e) => setSettings({ ...settings, menuShowCategoryBanners: e.target.checked })}
+              />
+              Show category banner photos
+            </label>
+            <button
+              type="button"
+              className="btn-secondary text-sm"
+              onClick={async () => {
+                try {
+                  const res = await api.post('/merchant/demo-menu-photos');
+                  toast.success(
+                    `Demo photos applied (${res.data.productsUpdated || 0} products, ${
+                      res.data.categoriesUpdated || 0
+                    } categories)`
+                  );
+                } catch (e: any) {
+                  toast.error(e.response?.data?.error || 'Could not apply demo photos');
+                }
+              }}
+            >
+              Load demo photos (compressed)
+            </button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">

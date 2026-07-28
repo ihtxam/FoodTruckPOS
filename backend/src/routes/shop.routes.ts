@@ -562,6 +562,8 @@ router.get("/:slug", async (req: Request, res: Response) => {
             .toLowerCase();
           return v === "popup_start" || v === "menu" || v === "checkout" ? v : "checkout";
         })(),
+        menuShowProductImages: merchant.menuShowProductImages !== false,
+        menuShowCategoryBanners: merchant.menuShowCategoryBanners !== false,
         payment: {
           cash: true,
           card: true,
@@ -789,6 +791,7 @@ router.get("/:slug/menu", async (req: Request, res: Response) => {
     const menu = categories.map((cat) => ({
       id: cat.id,
       name: cat.name,
+      image: (cat as { imageUrl?: string | null }).imageUrl || null,
       items: products.filter((p) => p.categoryId === cat.id).map(toItem),
     }));
 
@@ -797,6 +800,7 @@ router.get("/:slug/menu", async (req: Request, res: Response) => {
       menu.push({
         id: "uncategorized",
         name: "Other",
+        image: null,
         items: uncategorized.map(toItem),
       });
     }
