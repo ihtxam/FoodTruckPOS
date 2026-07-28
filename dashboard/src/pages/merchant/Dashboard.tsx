@@ -90,6 +90,7 @@ function MerchantShell() {
             onMenuClick={() => setSidebarOpen(!sidebarOpen)}
             language={locale}
             onLanguageChange={changeLanguage}
+            showAcceptingMenu
           />
         )}
 

@@ -4,15 +4,24 @@ import toast from 'react-hot-toast';
 import { useAuthStore } from '@/store/auth';
 import { useTheme } from '@/lib/theme';
 import { useI18n, type Locale } from '@/lib/i18n';
+import AcceptingMenu from '@/components/AcceptingMenu';
 
 interface HeaderProps {
   title: string;
   onMenuClick: () => void;
   language?: Locale;
   onLanguageChange?: (locale: Locale) => void;
+  /** Show Accepting orders/reservations dropdown (merchant panel only) */
+  showAcceptingMenu?: boolean;
 }
 
-export default function Header({ title, onMenuClick, language, onLanguageChange }: HeaderProps) {
+export default function Header({
+  title,
+  onMenuClick,
+  language,
+  onLanguageChange,
+  showAcceptingMenu = false,
+}: HeaderProps) {
   const navigate = useNavigate();
   const { t } = useI18n();
   const { user, impersonating, stopImpersonation, logout } = useAuthStore();
@@ -65,6 +74,8 @@ export default function Header({ title, onMenuClick, language, onLanguageChange 
         </div>
 
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          {showAcceptingMenu ? <AcceptingMenu /> : null}
+
           {onLanguageChange && (
             <select
               className="input py-1 text-xs w-auto min-w-0"

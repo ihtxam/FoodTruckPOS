@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import toast from 'react-hot-toast';
 import {
   Building2,
@@ -173,6 +173,7 @@ export default function Settings() {
   const [savingAdyen, setSavingAdyen] = useState(false);
   const [savingFee, setSavingFee] = useState(false);
   const [savingTerminal, setSavingTerminal] = useState(false);
+  const vacationImageInputRef = useRef<HTMLInputElement>(null);
   const [tab, setTab] = useState<TabId>(() => {
     try {
       const q = new URLSearchParams(window.location.search).get('tab');
@@ -469,6 +470,102 @@ export default function Settings() {
                   </span>
                 </label>
 
+                <div className="rounded-md border-2 border-dashed border-[var(--border)] bg-[var(--bg-muted)] p-4 space-y-3">
+                  <div>
+                    <p className="text-sm font-semibold">{t('vacationPopupImage')}</p>
+                    <p className="text-xs muted mt-0.5">{t('vacationPopupImageHint')}</p>
+                  </div>
+                  {settings.vacationSettings?.popupImageUrl ? (
+                    <img
+                      src={settings.vacationSettings.popupImageUrl}
+                      alt=""
+                      className="max-h-44 w-auto max-w-full border border-[var(--border)] object-contain bg-[var(--bg-elevated)]"
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      className="w-full min-h-[7rem] rounded-md border border-dashed border-[var(--border)] bg-[var(--bg-elevated)] text-sm text-[var(--text-muted)] hover:border-[var(--text)] hover:text-[var(--text)] transition-colors"
+                      onClick={() => vacationImageInputRef.current?.click()}
+                    >
+                      {t('vacationUploadImage')}
+                    </button>
+                  )}
+                  <div className="flex flex-wrap gap-2">
+                    <input
+                      ref={vacationImageInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      className="sr-only"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        e.target.value = '';
+                        if (!file) return;
+                        try {
+                          const form = new FormData();
+                          form.append('file', file);
+                          const res = await api.post('/merchant/media', form, {
+                            headers: { 'Content-Type': 'multipart/form-data' },
+                          });
+                          const url = res.data?.url;
+                          if (!url) throw new Error('No URL returned');
+                          setSettings({
+                            ...settings,
+                            vacationSettings: {
+                              ...(settings.vacationSettings || { periods: [] }),
+                              popupImageUrl: url,
+                            },
+                          });
+                          toast.success(t('vacationImageUploaded'));
+                        } catch (error: any) {
+                          toast.error(
+                            error.response?.data?.error || t('vacationImageUploadFailed')
+                          );
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="btn-primary"
+                      onClick={() => vacationImageInputRef.current?.click()}
+                    >
+                      {t('vacationUploadImage')}
+                    </button>
+                    {settings.vacationSettings?.popupImageUrl ? (
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() =>
+                          setSettings({
+                            ...settings,
+                            vacationSettings: {
+                              ...(settings.vacationSettings || { periods: [] }),
+                              popupImageUrl: '',
+                            },
+                          })
+                        }
+                      >
+                        {t('vacationClearImage')}
+                      </button>
+                    ) : null}
+                  </div>
+                  <Field label={t('vacationOrPasteUrl')}>
+                    <input
+                      className="input"
+                      value={settings.vacationSettings?.popupImageUrl || ''}
+                      onChange={(e) =>
+                        setSettings({
+                          ...settings,
+                          vacationSettings: {
+                            ...(settings.vacationSettings || { periods: [] }),
+                            popupImageUrl: e.target.value,
+                          },
+                        })
+                      }
+                      placeholder="https://…"
+                    />
+                  </Field>
+                </div>
+
                 <LocalizedFields
                   label={t('vacationPopupTitle')}
                   value={settings.vacationSettings?.popupTitle}
@@ -498,84 +595,6 @@ export default function Settings() {
                     })
                   }
                 />
-                <Field label={t('vacationPopupImage')} hint={t('vacationPopupImageHint')}>
-                  <div className="space-y-2">
-                    {settings.vacationSettings?.popupImageUrl ? (
-                      <img
-                        src={settings.vacationSettings.popupImageUrl}
-                        alt=""
-                        className="max-h-40 w-auto max-w-full border border-[var(--border)] object-contain bg-[var(--bg-muted)]"
-                      />
-                    ) : null}
-                    <input
-                      className="input"
-                      value={settings.vacationSettings?.popupImageUrl || ''}
-                      onChange={(e) =>
-                        setSettings({
-                          ...settings,
-                          vacationSettings: {
-                            ...(settings.vacationSettings || { periods: [] }),
-                            popupImageUrl: e.target.value,
-                          },
-                        })
-                      }
-                      placeholder="https://… or /api/uploads/…"
-                    />
-                    <div className="flex flex-wrap items-center gap-2">
-                      <label className="btn-secondary cursor-pointer text-xs inline-flex items-center">
-                        <input
-                          type="file"
-                          accept="image/jpeg,image/png,image/webp,image/gif"
-                          className="sr-only"
-                          onChange={async (e) => {
-                            const file = e.target.files?.[0];
-                            e.target.value = '';
-                            if (!file) return;
-                            try {
-                              const form = new FormData();
-                              form.append('file', file);
-                              const res = await api.post('/merchant/media', form, {
-                                headers: { 'Content-Type': 'multipart/form-data' },
-                              });
-                              const url = res.data?.url;
-                              if (!url) throw new Error('No URL returned');
-                              setSettings({
-                                ...settings,
-                                vacationSettings: {
-                                  ...(settings.vacationSettings || { periods: [] }),
-                                  popupImageUrl: url,
-                                },
-                              });
-                              toast.success(t('vacationImageUploaded'));
-                            } catch (error: any) {
-                              toast.error(
-                                error.response?.data?.error || t('vacationImageUploadFailed')
-                              );
-                            }
-                          }}
-                        />
-                        {t('vacationUploadImage')}
-                      </label>
-                      {settings.vacationSettings?.popupImageUrl ? (
-                        <button
-                          type="button"
-                          className="text-xs text-red-700 underline"
-                          onClick={() =>
-                            setSettings({
-                              ...settings,
-                              vacationSettings: {
-                                ...(settings.vacationSettings || { periods: [] }),
-                                popupImageUrl: '',
-                              },
-                            })
-                          }
-                        >
-                          {t('vacationClearImage')}
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-                </Field>
                 <div className="space-y-2">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-sm font-medium">{t('vacationPeriods')}</span>
@@ -600,7 +619,6 @@ export default function Settings() {
                                 startTime: '00:00',
                                 endDate: today,
                                 endTime: '23:59',
-                                title: { en: '', fr: '', de: '' },
                               },
                             ],
                           },
@@ -685,19 +703,6 @@ export default function Settings() {
                               />
                             </Field>
                           </div>
-                          <LocalizedFields
-                            label={t('vacationPeriodTitle')}
-                            value={period.title}
-                            placeholder={t('vacationPeriodTitlePlaceholder')}
-                            onChange={(title) => {
-                              const periods = [...(settings.vacationSettings?.periods || [])];
-                              periods[idx] = { ...period, title };
-                              setSettings({
-                                ...settings,
-                                vacationSettings: { ...settings.vacationSettings, periods },
-                              });
-                            }}
-                          />
                           <button
                             type="button"
                             className="text-xs text-red-700 underline"

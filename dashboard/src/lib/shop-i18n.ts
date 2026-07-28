@@ -200,6 +200,9 @@ export const shopEn: Record<string, string> = {
   shopVacationDefaultMsg: 'We are currently on vacation. Online orders and reservations are temporarily unavailable.',
   shopVacationBrowseHint: 'You can still browse the website.',
   shopVacationContinue: 'Continue browsing',
+  shopNotAcceptingOrders: 'We are not accepting orders at the moment, please call us',
+  shopNotAcceptingReservations: 'We are not accepting reservations at the moment, please call us',
+  shopNotAcceptingBoth: 'We are not accepting orders or reservations at the moment, please call us',
   shopVacationOrdersBlocked: 'Online ordering is paused while we are on vacation.',
   shopVacationReservationsBlocked: 'Reservations are paused while we are on vacation.',
   shopReservationsUnavailable: 'Online reservations are not available',
@@ -424,6 +427,11 @@ export const shopFr: Record<string, string> = {
     'Nous sommes actuellement en vacances. Les commandes et réservations en ligne sont temporairement indisponibles.',
   shopVacationBrowseHint: 'Vous pouvez toujours consulter le site.',
   shopVacationContinue: 'Continuer à consulter',
+  shopNotAcceptingOrders: 'Nous n’acceptons pas de commandes pour le moment, veuillez nous appeler',
+  shopNotAcceptingReservations:
+    'Nous n’acceptons pas de réservations pour le moment, veuillez nous appeler',
+  shopNotAcceptingBoth:
+    'Nous n’acceptons pas de commandes ni de réservations pour le moment, veuillez nous appeler',
   shopVacationOrdersBlocked: 'Les commandes en ligne sont en pause pendant nos vacances.',
   shopVacationReservationsBlocked: 'Les réservations sont en pause pendant nos vacances.',
   shopReservationsUnavailable: 'Les réservations en ligne ne sont pas disponibles',
@@ -648,6 +656,11 @@ export const shopDe: Record<string, string> = {
     'Wir sind derzeit in den Ferien. Online-Bestellungen und Reservationen sind vorübergehend nicht möglich.',
   shopVacationBrowseHint: 'Sie können die Website weiterhin ansehen.',
   shopVacationContinue: 'Weiter stöbern',
+  shopNotAcceptingOrders: 'Wir nehmen derzeit keine Bestellungen an, bitte rufen Sie uns an',
+  shopNotAcceptingReservations:
+    'Wir nehmen derzeit keine Reservationen an, bitte rufen Sie uns an',
+  shopNotAcceptingBoth:
+    'Wir nehmen derzeit keine Bestellungen oder Reservationen an, bitte rufen Sie uns an',
   shopVacationOrdersBlocked: 'Online-Bestellungen sind während der Ferien pausiert.',
   shopVacationReservationsBlocked: 'Reservationen sind während der Ferien pausiert.',
   shopReservationsUnavailable: 'Online-Reservationen sind nicht verfügbar',

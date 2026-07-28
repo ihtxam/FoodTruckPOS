@@ -6,6 +6,7 @@ import { resolveShopKey, shopBasePath } from '@/lib/shop-cart';
 import { useI18n } from '@/lib/i18n';
 import ShopLangSwitcher from '@/components/shop/ShopLangSwitcher';
 import ShopVacationPopup from '@/components/shop/ShopVacationPopup';
+import ShopNotAcceptingBanner from '@/components/shop/ShopNotAcceptingBanner';
 
 type Slot = { time: string; available: boolean; remainingCovers: number };
 
@@ -147,6 +148,10 @@ export default function ReservationsPage() {
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
+    if (config?.acceptingReservations === false) {
+      setError(t('shopNotAcceptingReservations'));
+      return;
+    }
     if (config?.vacation?.active) {
       setError(t('shopVacationReservationsBlocked'));
       return;
@@ -270,6 +275,8 @@ export default function ReservationsPage() {
                   return t('shopVacationReservationsBlocked');
                 })()}
               </div>
+            ) : config?.acceptingReservations === false ? (
+              <ShopNotAcceptingBanner kind="reservations" phone={config?.phone} />
             ) : null}
 
             <fieldset className="space-y-2 min-w-0">
@@ -500,14 +507,21 @@ export default function ReservationsPage() {
 
             <button
               type="submit"
-              disabled={submitting || !time || !!config?.vacation?.active}
+              disabled={
+                submitting ||
+                !time ||
+                !!config?.vacation?.active ||
+                config?.acceptingReservations === false
+              }
               className="w-full bg-stone-900 text-white py-3 font-semibold disabled:opacity-40"
             >
-              {config?.vacation?.active
-                ? t('shopVacationTitle')
-                : submitting
-                  ? t('saving')
-                  : t('shopReservationsBook')}
+              {config?.acceptingReservations === false
+                ? t('shopNotAcceptingReservations')
+                : config?.vacation?.active
+                  ? t('shopVacationTitle')
+                  : submitting
+                    ? t('saving')
+                    : t('shopReservationsBook')}
             </button>
           </form>
         )}

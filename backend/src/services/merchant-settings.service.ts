@@ -71,6 +71,8 @@ export class MerchantSettingsService {
       customDomain: merchant.customDomain,
       cmsHomepageEnabled: !!merchant.cmsHomepageEnabled,
       shopEnabled: merchant.shopEnabled,
+      acceptingOrders: merchant.acceptingOrders !== false,
+      acceptingReservations: merchant.acceptingReservations !== false,
       pickupEnabled: merchant.pickupEnabled,
       dineInEnabled: merchant.dineInEnabled,
       deliveryEnabled: merchant.deliveryEnabled,
@@ -120,6 +122,8 @@ export class MerchantSettingsService {
       customDomain?: string | null;
       cmsHomepageEnabled?: boolean;
       shopEnabled?: boolean;
+      acceptingOrders?: boolean;
+      acceptingReservations?: boolean;
       pickupEnabled?: boolean;
       dineInEnabled?: boolean;
       deliveryEnabled?: boolean;
@@ -163,6 +167,10 @@ export class MerchantSettingsService {
     if (updates.taxDineInRate !== undefined) patch.taxDineInRate = updates.taxDineInRate.toString();
     if (updates.taxDeliveryRate !== undefined) patch.taxDeliveryRate = updates.taxDeliveryRate.toString();
     if (updates.shopEnabled !== undefined) patch.shopEnabled = !!updates.shopEnabled;
+    if (updates.acceptingOrders !== undefined) patch.acceptingOrders = !!updates.acceptingOrders;
+    if (updates.acceptingReservations !== undefined) {
+      patch.acceptingReservations = !!updates.acceptingReservations;
+    }
     if (updates.pickupEnabled !== undefined) patch.pickupEnabled = !!updates.pickupEnabled;
     if (updates.dineInEnabled !== undefined) patch.dineInEnabled = !!updates.dineInEnabled;
     if (updates.deliveryEnabled !== undefined) patch.deliveryEnabled = !!updates.deliveryEnabled;

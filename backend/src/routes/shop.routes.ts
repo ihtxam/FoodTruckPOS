@@ -17,7 +17,7 @@ import { AuthService } from "@/services/auth.service";
 import { ModifierService } from "@/services/modifier.service";
 import { CmsService } from "@/services/cms.service";
 import { normalizeComboSlots } from "@/lib/combo";
-import { isVacationActive, isDateInVacationPeriods, vacationPublicPayload, VACATION_BLOCK_MESSAGE } from "@/lib/vacation";
+import { isVacationActive, isDateInVacationPeriods, vacationPublicPayload, VACATION_BLOCK_MESSAGE, NOT_ACCEPTING_ORDERS_MESSAGE, NOT_ACCEPTING_RESERVATIONS_MESSAGE } from "@/lib/vacation";
 import { geocodeQuery } from "@/lib/geocode";
 import { v4 as uuidv4 } from "uuid";
 
@@ -564,6 +564,8 @@ router.get("/:slug", async (req: Request, res: Response) => {
         },
         loyalty: ShopLoyaltyService.programFromMerchant(merchant),
         reservationsEnabled: !!merchant.reservationsEnabled,
+        acceptingOrders: merchant.acceptingOrders !== false,
+        acceptingReservations: merchant.acceptingReservations !== false,
         vacation: vacationPublicPayload(merchant.vacationSettings),
         /** Merchant panel language — used as shop default when customer has no preference */
         language: merchant.shopLanguage || merchant.panelLanguage || "en",
@@ -612,6 +614,8 @@ router.get("/:slug/pages/home", async (req: Request, res: Response) => {
           city: merchant.city,
           phone: merchant.phone,
           reservationsEnabled: !!merchant.reservationsEnabled,
+          acceptingOrders: merchant.acceptingOrders !== false,
+          acceptingReservations: merchant.acceptingReservations !== false,
           vacation: vacationPublicPayload(merchant.vacationSettings),
           language: merchant.shopLanguage || merchant.panelLanguage || "en",
         },
@@ -1032,6 +1036,7 @@ router.get("/:slug/reservations/config", async (req: Request, res: Response) => 
         shopName: config.shopName,
         address: config.address,
         phone: config.phone,
+        acceptingReservations: merchant.acceptingReservations !== false,
         vacation,
       },
     });
@@ -1048,6 +1053,14 @@ router.get("/:slug/reservations/slots", async (req: Request, res: Response) => {
     const merchant = await resolveMerchant(req.params.slug);
     if (!merchant?.shopEnabled || !merchant.reservationsEnabled) {
       return res.status(404).json({ error: "Reservations not available" });
+    }
+    if (merchant.acceptingReservations === false) {
+      return res.json({
+        success: true,
+        slots: [],
+        notAccepting: true,
+        message: NOT_ACCEPTING_RESERVATIONS_MESSAGE,
+      });
     }
     if (isVacationActive(merchant.vacationSettings)) {
       return res.json({ success: true, slots: [], vacation: true, message: VACATION_BLOCK_MESSAGE });
@@ -1078,6 +1091,9 @@ router.post("/:slug/reservations", async (req: Request, res: Response) => {
     const merchant = await resolveMerchant(req.params.slug);
     if (!merchant?.shopEnabled || !merchant.reservationsEnabled) {
       return res.status(404).json({ error: "Reservations not available" });
+    }
+    if (merchant.acceptingReservations === false) {
+      return res.status(400).json({ error: NOT_ACCEPTING_RESERVATIONS_MESSAGE });
     }
     if (isVacationActive(merchant.vacationSettings)) {
       return res.status(400).json({ error: VACATION_BLOCK_MESSAGE });
@@ -1170,6 +1186,9 @@ router.post("/:slug/orders", async (req: Request, res: Response) => {
     }
     if (isVacationActive(merchant.vacationSettings)) {
       return res.status(400).json({ error: VACATION_BLOCK_MESSAGE });
+    }
+    if (merchant.acceptingOrders === false) {
+      return res.status(400).json({ error: NOT_ACCEPTING_ORDERS_MESSAGE });
     }
 
     const {
