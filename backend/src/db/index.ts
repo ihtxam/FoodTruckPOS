@@ -25,4 +25,4 @@ export function getDb(): Database {
 
 export type { Database };
 export { schema };
-export type { CmsBlock, CmsPuckData, CmsTheme, ReservationSettings, ReservationStatus } from "./schema";
+export type { CmsBlock, CmsPuckData, CmsTheme, ReservationSettings, ReservationStatus, VacationSettings, VacationPeriod } from "./schema";

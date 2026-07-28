@@ -9,6 +9,7 @@ import ShopLangSwitcher from '@/components/shop/ShopLangSwitcher';
 import { CalendarDays, ShoppingBag } from 'lucide-react';
 import { cmsPuckConfig, emptyPuckData, withReservationsHomeCtas } from '@/lib/cms/puck-config';
 import { CmsShopProvider } from '@/lib/cms/CmsShopContext';
+import ShopVacationPopup from '@/components/shop/ShopVacationPopup';
 
 function asPuckData(blocks: unknown): Data {
   if (blocks && typeof blocks === 'object' && !Array.isArray(blocks) && Array.isArray((blocks as Data).content)) {
@@ -85,9 +86,10 @@ export default function ShopHomePage() {
   }, [seoTitle]);
 
   const themeCss = useMemo(() => themeToCss(theme), [theme]);
+  const vacationActive = Boolean(merchant?.vacation?.active);
   const renderData = useMemo(
-    () => withReservationsHomeCtas(data, Boolean(merchant?.reservationsEnabled)),
-    [data, merchant?.reservationsEnabled],
+    () => withReservationsHomeCtas(data, Boolean(merchant?.reservationsEnabled) && !vacationActive),
+    [data, merchant?.reservationsEnabled, vacationActive],
   );
   const hasContent = Array.isArray(data.content) && data.content.length > 0;
 
@@ -122,10 +124,11 @@ export default function ShopHomePage() {
         menu,
         storeHours: merchant.storeHours || {},
         merchantName: merchant.name,
-        reservationsEnabled: Boolean(merchant.reservationsEnabled),
+        reservationsEnabled: Boolean(merchant.reservationsEnabled) && !vacationActive,
       }}
     >
       {themeCss ? <style dangerouslySetInnerHTML={{ __html: themeCss }} /> : null}
+      <ShopVacationPopup vacation={merchant.vacation} shopKey={shopKey} />
       <div className="cms-puck-page min-h-screen bg-stone-50 text-stone-900">
         <header className="border-b border-stone-200 bg-white/90 backdrop-blur sticky top-0 z-20">
           <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between gap-2">
@@ -145,7 +148,7 @@ export default function ShopHomePage() {
             </Link>
             <div className="flex items-center gap-1 shrink-0">
               <ShopLangSwitcher />
-              {merchant.reservationsEnabled ? (
+              {merchant.reservationsEnabled && !vacationActive ? (
                 <Link
                   to={`${base}/reservations`}
                   className="inline-flex h-9 w-9 items-center justify-center text-stone-700 hover:bg-stone-100"
@@ -187,7 +190,7 @@ export default function ShopHomePage() {
               {merchant.phone && <p className="mt-1">{merchant.phone}</p>}
             </div>
             <div className="flex flex-wrap gap-4 self-start">
-              {merchant.reservationsEnabled ? (
+              {merchant.reservationsEnabled && !vacationActive ? (
                 <Link to={`${base}/reservations`} className="underline">
                   {t('shopReservations')}
                 </Link>
