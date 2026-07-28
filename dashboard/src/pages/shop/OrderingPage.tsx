@@ -110,8 +110,8 @@ export default function OrderingPage() {
   const [channelPromptOpen, setChannelPromptOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
   const [deliveryZones, setDeliveryZones] = useState<any[]>([]);
-  /** null = all collapsed; string = that category expanded */
-  const [expandedCategoryId, setExpandedCategoryId] = useState<string | null>(null);
+  /** true = every category expanded; false = headers only */
+  const [allCategoriesOpen, setAllCategoriesOpen] = useState(true);
 
   useEffect(() => {
     if (!shopKey) {
@@ -136,8 +136,7 @@ export default function OrderingPage() {
         setMenu(menuRes.data.data || []);
         setShopOffers(menuRes.data.offers || []);
         setSelectedCategory('all');
-        const cats = menuRes.data.data || [];
-        setExpandedCategoryId(cats[0]?.id || null);
+        setAllCategoriesOpen(true);
 
         try {
           const z = await axios.get(`/api/shop/${shopKey}/delivery-zones`);
@@ -555,8 +554,8 @@ export default function OrderingPage() {
   const showProductImages = merchant?.menuShowProductImages !== false;
   const showCategoryBanners = merchant?.menuShowCategoryBanners !== false;
   const allowScheduledOrders = merchant?.scheduledOrdersEnabled !== false;
-  const toggleCategory = (id: string) => {
-    setExpandedCategoryId((prev) => (prev === id ? null : id));
+  const toggleCategory = () => {
+    setAllCategoriesOpen((prev) => !prev);
   };
   const loyaltyEnabled = !!merchant?.loyalty?.enabled;
   const unlockedRewards = loyaltyRewards.filter((r) => r.unlocked);
@@ -1019,7 +1018,7 @@ export default function OrderingPage() {
                   type="button"
                   onClick={() => {
                     setSelectedCategory('all');
-                    setExpandedCategoryId(menu[0]?.id || null);
+                    setAllCategoriesOpen(true);
                   }}
                   className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-medium ${
                     selectedCategory === 'all'
@@ -1035,7 +1034,7 @@ export default function OrderingPage() {
                     type="button"
                     onClick={() => {
                       setSelectedCategory(cat.id);
-                      setExpandedCategoryId(cat.id);
+                      setAllCategoriesOpen(true);
                     }}
                     className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-medium ${
                       selectedCategory === cat.id
@@ -1076,13 +1075,13 @@ export default function OrderingPage() {
 
           <div className="space-y-2">
             {categoriesToRender.map((cat) => {
-              const open = expandedCategoryId === cat.id;
+              const open = allCategoriesOpen;
               const items = cat.items || [];
               return (
                 <section key={cat.id} className="overflow-hidden rounded-lg border border-stone-200 bg-white">
                   <button
                     type="button"
-                    onClick={() => toggleCategory(cat.id)}
+                    onClick={() => toggleCategory()}
                     className="flex w-full items-center justify-between gap-2 bg-stone-100 px-3 py-3 text-left"
                   >
                     <span className="text-sm font-bold uppercase tracking-wide text-stone-900">
