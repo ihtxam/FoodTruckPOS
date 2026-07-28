@@ -259,7 +259,16 @@ export default function ReservationsPage() {
 
             {config?.vacation?.active ? (
               <div className="text-sm border border-amber-200 bg-amber-50 text-amber-950 px-3 py-2">
-                {config.vacation.message?.trim() || t('shopVacationReservationsBlocked')}
+                {(() => {
+                  const msg = config.vacation.message;
+                  if (typeof msg === 'string' && msg.trim()) return msg.trim();
+                  if (msg && typeof msg === 'object') {
+                    const loc = (locale === 'fr' || locale === 'de' ? locale : 'en') as 'en' | 'fr' | 'de';
+                    const picked = msg[loc] || msg.en || msg.fr || msg.de;
+                    if (picked) return String(picked);
+                  }
+                  return t('shopVacationReservationsBlocked');
+                })()}
               </div>
             ) : null}
 

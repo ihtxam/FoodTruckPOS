@@ -1,9 +1,17 @@
 import { useEffect, useState } from 'react';
-import { useI18n } from '@/lib/i18n';
+import { useI18n, type Locale } from '@/lib/i18n';
+
+export type LocalizedText = {
+  en?: string | null;
+  fr?: string | null;
+  de?: string | null;
+};
 
 export type ShopVacationInfo = {
   active?: boolean;
-  message?: string | null;
+  message?: LocalizedText | string | null;
+  popupTitle?: LocalizedText | string | null;
+  label?: LocalizedText | string | null;
   popupImageUrl?: string | null;
 };
 
@@ -12,13 +20,27 @@ type Props = {
   shopKey?: string;
 };
 
+function pickLocalized(
+  raw: LocalizedText | string | null | undefined,
+  locale: Locale,
+  fallback = ''
+): string {
+  if (raw == null) return fallback;
+  if (typeof raw === 'string') return raw.trim() || fallback;
+  const v = raw[locale] || raw.en || raw.fr || raw.de || '';
+  return String(v).trim() || fallback;
+}
+
 /**
  * Full-screen vacation notice. Dismissible so visitors can still browse the site;
  * ordering / reservations stay blocked by the API and UI CTAs.
  */
 export default function ShopVacationPopup({ vacation, shopKey }: Props) {
-  const { t } = useI18n();
-  const storageKey = `chaslay_vacation_dismissed:${shopKey || 'shop'}:${vacation?.popupImageUrl || ''}:${vacation?.message || ''}`;
+  const { t, locale } = useI18n();
+  const title = pickLocalized(vacation?.popupTitle, locale, t('shopVacationTitle'));
+  const message = pickLocalized(vacation?.message, locale, t('shopVacationDefaultMsg'));
+  const label = pickLocalized(vacation?.label, locale, '');
+  const storageKey = `chaslay_vacation_dismissed:${shopKey || 'shop'}:${vacation?.popupImageUrl || ''}:${title}:${message}:${label}`;
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -53,7 +75,7 @@ export default function ShopVacationPopup({ vacation, shopKey }: Props) {
       className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4"
       role="dialog"
       aria-modal="true"
-      aria-label={t('shopVacationTitle')}
+      aria-label={title}
     >
       <div className="relative w-full max-w-lg bg-white shadow-xl overflow-hidden">
         {vacation.popupImageUrl ? (
@@ -64,10 +86,11 @@ export default function ShopVacationPopup({ vacation, shopKey }: Props) {
           />
         ) : null}
         <div className="p-5 space-y-3 text-center">
-          <h2 className="text-xl font-bold tracking-tight text-stone-900">{t('shopVacationTitle')}</h2>
-          <p className="text-sm text-stone-600">
-            {vacation.message?.trim() || t('shopVacationDefaultMsg')}
-          </p>
+          <h2 className="text-xl font-bold tracking-tight text-stone-900">{title}</h2>
+          {label ? (
+            <p className="text-sm font-medium text-stone-800">{label}</p>
+          ) : null}
+          <p className="text-sm text-stone-600">{message}</p>
           <p className="text-xs text-stone-500">{t('shopVacationBrowseHint')}</p>
           <button
             type="button"

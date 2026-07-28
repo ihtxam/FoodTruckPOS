@@ -37,7 +37,7 @@ function themeToCss(theme: Record<string, unknown> | null): string {
 }
 
 export default function ShopHomePage() {
-  const { t, locale } = useI18n();
+  const { t, locale, setLocale } = useI18n();
   const { merchantSlug } = useParams<{ merchantSlug?: string }>();
   const shopKey = useMemo(() => resolveShopKey(merchantSlug), [merchantSlug]);
   const base = shopBasePath(shopKey);
@@ -70,6 +70,15 @@ export default function ShopHomePage() {
         setMerchant(page.merchant);
         setSeoTitle(page.seoTitle || page.title || page.merchant?.name || '');
         setMenu(menuRes.data.data || []);
+        const lang = page.merchant?.language;
+        if (lang === 'en' || lang === 'fr' || lang === 'de') {
+          try {
+            const stored = localStorage.getItem('manupos_shop_lang');
+            if (stored !== 'en' && stored !== 'fr' && stored !== 'de') setLocale(lang);
+          } catch {
+            setLocale(lang);
+          }
+        }
       } catch {
         if (!cancelled) setError(t('cmsHomeUnavailable'));
       } finally {
@@ -79,7 +88,7 @@ export default function ShopHomePage() {
     return () => {
       cancelled = true;
     };
-  }, [shopKey, t]);
+  }, [shopKey, t, setLocale]);
 
   useEffect(() => {
     if (seoTitle) document.title = seoTitle;
