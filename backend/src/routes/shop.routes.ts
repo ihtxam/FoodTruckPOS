@@ -1054,30 +1054,25 @@ router.get("/:slug/reservations/slots", async (req: Request, res: Response) => {
     if (!merchant?.shopEnabled || !merchant.reservationsEnabled) {
       return res.status(404).json({ error: "Reservations not available" });
     }
-    if (merchant.acceptingReservations === false) {
-      return res.json({
-        success: true,
-        slots: [],
-        notAccepting: true,
-        message: NOT_ACCEPTING_RESERVATIONS_MESSAGE,
-      });
-    }
-    if (isVacationActive(merchant.vacationSettings)) {
-      return res.json({ success: true, slots: [], vacation: true, message: VACATION_BLOCK_MESSAGE });
-    }
     const date = String(req.query.date || "");
-    if (date && isDateInVacationPeriods(merchant.vacationSettings, date)) {
-      return res.json({
-        success: true,
-        slots: [],
-        vacation: true,
-        message: VACATION_BLOCK_MESSAGE,
-      });
-    }
+    const notAccepting = merchant.acceptingReservations === false;
+    const vacation =
+      isVacationActive(merchant.vacationSettings) ||
+      (!!date && isDateInVacationPeriods(merchant.vacationSettings, date));
     const { ReservationService } = await import("@/services/reservation.service");
     const partySize = Number(req.query.partySize) || 2;
     const result = await ReservationService.getSlots(merchant.id, date, partySize);
-    res.json({ success: true, ...result });
+    res.json({
+      success: true,
+      ...result,
+      notAccepting,
+      vacation,
+      message: notAccepting
+        ? NOT_ACCEPTING_RESERVATIONS_MESSAGE
+        : vacation
+          ? VACATION_BLOCK_MESSAGE
+          : undefined,
+    });
   } catch (error) {
     res.status(400).json({ error: error instanceof Error ? error.message : "Failed" });
   }

@@ -41,8 +41,8 @@ export async function saveMerchantImage(opts: {
   if (!opts.buffer?.length) {
     throw new Error("Empty file");
   }
-  if (opts.buffer.length > 5 * 1024 * 1024) {
-    throw new Error("Image must be 5 MB or smaller");
+  if (opts.buffer.length > 12 * 1024 * 1024) {
+    throw new Error("Image must be 12 MB or smaller");
   }
 
   const root = ensureUploadsRoot();

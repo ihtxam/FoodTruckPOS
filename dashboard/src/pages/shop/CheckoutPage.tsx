@@ -26,7 +26,6 @@ import { isLocale, useI18n } from '@/lib/i18n';
 import ShopLangSwitcher from '@/components/shop/ShopLangSwitcher';
 import ZipCityFields from '@/components/shop/ZipCityFields';
 import ShopVacationPopup from '@/components/shop/ShopVacationPopup';
-import ShopNotAcceptingBanner from '@/components/shop/ShopNotAcceptingBanner';
 
 type Step = 'details' | 'payment' | 'review';
 type WhenMode = 'asap' | 'later';
@@ -500,11 +499,6 @@ export default function CheckoutPage() {
   return (
     <div className="min-h-screen bg-[#f6f5f2] text-stone-900">
       <ShopVacationPopup vacation={merchant?.vacation} shopKey={shopKey} />
-      {merchant?.acceptingOrders === false && !merchant?.vacation?.active ? (
-        <div className="max-w-5xl mx-auto px-4 pt-4">
-          <ShopNotAcceptingBanner kind="orders" phone={merchant?.phone} />
-        </div>
-      ) : null}
       <header className="bg-white border-b border-stone-200">
         <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between gap-3">
           <Link to={`${shopBasePath(shopKey) || '/'}`} className="font-bold tracking-tight min-w-0 truncate">

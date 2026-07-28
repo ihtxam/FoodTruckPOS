@@ -1,4 +1,4 @@
-import { Router, Request, Response } from "express";
+import { Router, Request, Response, NextFunction } from "express";
 import multer from "multer";
 import { and, eq, inArray } from "drizzle-orm";
 import { verifyToken, requireMerchant, setMerchantContext } from "@/middleware/auth.middleware";
@@ -19,7 +19,7 @@ const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 const imageUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 },
+  limits: { fileSize: 12 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     if (isAllowedImageMime(file.mimetype)) {
       cb(null, true);
@@ -1080,9 +1080,22 @@ router.post("/geocode", async (req: Request, res: Response) => {
 
 /**
  * POST /api/merchant/media
- * multipart field "file" — image upload (JPEG/PNG/WebP/GIF, max 5 MB)
+ * multipart field "file" — image upload (JPEG/PNG/WebP/GIF)
  */
-router.post("/media", imageUpload.single("file"), async (req: Request, res: Response) => {
+router.post("/media", (req: Request, res: Response, next: NextFunction) => {
+  imageUpload.single("file")(req, res, (err: unknown) => {
+    if (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : typeof err === "string"
+            ? err
+            : "Upload failed";
+      return res.status(400).json({ error: message });
+    }
+    next();
+  });
+}, async (req: Request, res: Response) => {
   try {
     const merchantId = req.merchantId;
     if (!merchantId) return res.status(400).json({ error: "Merchant ID is required" });
