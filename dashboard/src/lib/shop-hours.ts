@@ -192,6 +192,35 @@ export function buildScheduleDays(opts: {
   return days;
 }
 
+/** Find the next opening time after `at` when the channel is currently closed. */
+export function findNextOpen(
+  storeHours: StoreHours | null | undefined,
+  channel: ShopChannel,
+  at = new Date(),
+  horizonDays = 7
+): { at: Date; labelHm: string; dayOffset: number } | null {
+  if (isChannelOpenAt(storeHours, channel, at).open) return null;
+  const channelHours = storeHours?.[channel] || {};
+  for (let offset = 0; offset <= horizonDays; offset++) {
+    const cal = addCalendarDaysZurich(at, offset);
+    const dayKey = zonedParts(zonedLocalDate(cal.year, cal.month, cal.day, 12, 0)).day;
+    const ranges = channelHours[dayKey] || [];
+    for (const range of ranges) {
+      const openMin = parseHm(range.open);
+      const closeMin = parseHm(range.close);
+      if (!Number.isFinite(openMin) || !Number.isFinite(closeMin)) continue;
+      const openDate = zonedLocalDate(cal.year, cal.month, cal.day, Math.floor(openMin / 60), openMin % 60);
+      if (openDate.getTime() <= at.getTime()) continue;
+      return {
+        at: openDate,
+        labelHm: `${pad2(Math.floor(openMin / 60))}:${pad2(openMin % 60)}`,
+        dayOffset: offset,
+      };
+    }
+  }
+  return null;
+}
+
 /** Convert Zurich datetime-local value to ISO string for API. */
 export function localDateTimeToIso(value: string): string | null {
   if (!value) return null;

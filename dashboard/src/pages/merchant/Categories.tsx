@@ -9,6 +9,7 @@ interface Category {
   name: string;
   description?: string | null;
   color?: string | null;
+  imageUrl?: string | null;
   sortOrder?: number;
 }
 
@@ -21,6 +22,8 @@ export default function Categories() {
   const [saving, setSaving] = useState(false);
   const [reordering, setReordering] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [imageUrl, setImageUrl] = useState('');
+  const [uploading, setUploading] = useState(false);
 
   const load = async () => {
     try {
@@ -40,6 +43,7 @@ export default function Categories() {
   const reset = () => {
     setName('');
     setDescription('');
+    setImageUrl('');
     setEditingId(null);
   };
 
@@ -47,6 +51,29 @@ export default function Categories() {
     setEditingId(category.id);
     setName(category.name);
     setDescription(category.description || '');
+    setImageUrl(category.imageUrl || '');
+  };
+
+  const onUploadImage = async (file: File | null) => {
+    if (!file) return;
+    setUploading(true);
+    try {
+      const { compressImageIfNeeded } = await import('@/lib/compress-image');
+      const compressed = await compressImageIfNeeded(file, {
+        maxBytes: 350 * 1024,
+        targetBytes: 350 * 1024,
+        maxWidth: 1400,
+      });
+      const fd = new FormData();
+      fd.append('file', compressed);
+      const res = await api.post('/merchant/media', fd);
+      setImageUrl(res.data.url);
+      toast.success('Image uploaded');
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Upload failed');
+    } finally {
+      setUploading(false);
+    }
   };
 
   const onSubmit = async (e: FormEvent) => {
@@ -54,10 +81,19 @@ export default function Categories() {
     setSaving(true);
     try {
       if (editingId) {
-        await api.put(`/merchant/categories/${editingId}`, { name, description });
+        await api.put(`/merchant/categories/${editingId}`, {
+          name,
+          description,
+          imageUrl: imageUrl || null,
+        });
         toast.success('Category updated');
       } else {
-        await api.post('/merchant/categories', { name, description });
+        const created = await api.post('/merchant/categories', { name, description });
+        if (imageUrl && created.data?.category?.id) {
+          await api.put(`/merchant/categories/${created.data.category.id}`, {
+            imageUrl,
+          });
+        }
         toast.success('Category created');
       }
       reset();
@@ -121,8 +157,27 @@ export default function Categories() {
             value={description}
             onChange={(e) => setDescription(e.target.value)}
           />
+          <div className="md:col-span-3 flex flex-wrap items-center gap-3">
+            <label className="text-sm">
+              <span className="font-medium mr-2">Category photo</span>
+              <input
+                type="file"
+                accept="image/*"
+                disabled={uploading}
+                onChange={(e) => void onUploadImage(e.target.files?.[0] || null)}
+              />
+            </label>
+            {imageUrl ? (
+              <img src={imageUrl} alt="" className="h-12 w-20 object-cover rounded border" />
+            ) : null}
+            {imageUrl ? (
+              <button type="button" className="text-sm text-red-600" onClick={() => setImageUrl('')}>
+                Remove photo
+              </button>
+            ) : null}
+          </div>
           <div className="flex gap-2">
-            <button type="submit" className="btn-primary" disabled={saving}>
+            <button type="submit" className="btn-primary" disabled={saving || uploading}>
               {saving ? 'Saving...' : editingId ? t('save') : t('add')}
             </button>
             {editingId && (

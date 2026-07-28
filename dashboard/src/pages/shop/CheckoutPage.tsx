@@ -144,16 +144,24 @@ export default function CheckoutPage() {
       const items = prev.items.map((item) => {
         if (item.loyaltyReward) return item;
         const extrasTotal = roundMoney2(
-          (item.selectedExtras || []).reduce((s, e) => s + e.price, 0) +
+          (item.selectedExtras || []).reduce((s, e) => s + Number(e.price || 0), 0) +
             (item.comboSelections || []).reduce(
-              (s, c) => s + c.extraPrice + (c.selectedExtras || []).reduce((x, e) => x + e.price, 0),
+              (s, c) =>
+                s +
+                Number(c.extraPrice || 0) +
+                (c.selectedExtras || []).reduce((x, e) => x + Number(e.price || 0), 0),
               0
             )
         );
-        const nextPrice = roundMoney2(item.basePrice + addMarkup + extrasTotal);
-        if (nextPrice !== item.price) {
+        const base =
+          typeof item.basePrice === 'number' && Number.isFinite(item.basePrice)
+            ? item.basePrice
+            : roundMoney2(Number(item.price || 0) - extrasTotal);
+        const nextPrice = roundMoney2(base + addMarkup + extrasTotal);
+        if (!Number.isFinite(nextPrice)) return item;
+        if (nextPrice !== item.price || item.basePrice !== base) {
           changed = true;
-          return { ...item, price: nextPrice };
+          return { ...item, basePrice: base, price: nextPrice };
         }
         return item;
       });

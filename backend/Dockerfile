@@ -15,6 +15,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY package.json tsconfig.json drizzle.config.ts ./
 COPY src ./src
 COPY drizzle ./drizzle
+COPY assets ./assets
 
 EXPOSE 3000
 CMD ["npx", "tsx", "src/index.ts"]

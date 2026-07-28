@@ -83,6 +83,10 @@ export const merchants = pgTable(
      * checkout | popup_start | menu
      */
     channelSelectMode: varchar("channel_select_mode", { length: 20 }).default("checkout").notNull(),
+    /** Show product photos on the public menu */
+    menuShowProductImages: boolean("menu_show_product_images").default(true).notNull(),
+    /** Show category banner images on the public menu */
+    menuShowCategoryBanners: boolean("menu_show_category_banners").default(true).notNull(),
     // Per-channel weekly hours (+ optional display for homepage banner):
     // { takeaway: { mon: [{ open, close }] }, delivery, dine_in, display }
     storeHours: json("store_hours").$type<Record<string, Record<string, Array<{ open: string; close: string }>>>>().default({}),
@@ -371,6 +375,7 @@ export const categories = pgTable(
     name: varchar("name", { length: 255 }).notNull(),
     description: text("description"),
     color: varchar("color", { length: 7 }), // hex color
+    imageUrl: varchar("image_url", { length: 500 }),
     sortOrder: integer("sort_order").default(0).notNull(),
     clientId: varchar("client_id", { length: 64 }), // offline sync id from POS device
     createdAt: timestamp("created_at").defaultNow().notNull(),
