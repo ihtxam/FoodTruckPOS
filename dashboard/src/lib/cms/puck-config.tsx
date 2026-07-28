@@ -1,6 +1,7 @@
 import type { Config, Data } from '@puckeditor/core';
 import { Link } from 'react-router-dom';
 import { useCmsShop } from '@/lib/cms/CmsShopContext';
+import { useI18n } from '@/lib/i18n';
 
 function resolveHref(href: string | undefined, base: string) {
   if (!href) return base || '/';
@@ -22,28 +23,34 @@ function isReservationsPath(href: string | undefined) {
   return href === '/reservations' || href.startsWith('/reservations');
 }
 
+/** Map common English CMS defaults to shop i18n keys so the lang switch updates them. */
+function localizeCmsText(raw: string | undefined, t: (k: string) => string): string {
+  if (!raw) return '';
+  const map: Record<string, string> = {
+    'Order now': 'shopOrderNow',
+    'See the menu': 'cmsOrderOnline',
+    'Order online': 'cmsOrderOnline',
+    'Start order': 'shopOrderNow',
+    'Full menu & checkout': 'cmsGoToMenu',
+    Reservations: 'shopReservations',
+    'Book a table': 'shopBookTable',
+    'Reserve a table': 'shopReserveTable',
+    'Opening hours': 'shopHours',
+    "When we're open": 'shopHours',
+    Hours: 'shopHours',
+    Hungry: 'shopHungry',
+    'Hungry?': 'shopHungry',
+    'Order ahead': 'shopOrderNow',
+    'Ready to order?': 'shopReadyToOrder',
+  };
+  const key = map[raw.trim()];
+  return key ? t(key) : raw;
+}
+
 /** Ensure a mid-page reservations band exists when online booking is enabled. */
 export function withReservationsHomeCtas(data: Data, reservationsEnabled: boolean): Data {
   if (!reservationsEnabled || !Array.isArray(data.content)) return data;
-  const content = data.content.map((block) => {
-    if (block.type === 'Hero') {
-      const props = { ...(block.props || {}) } as Record<string, unknown>;
-      if (!props.secondaryCtaLabel) {
-        props.secondaryCtaLabel = 'Reservations';
-        props.secondaryCtaHref = props.secondaryCtaHref || '/reservations';
-      }
-      return { ...block, props };
-    }
-    if (block.type === 'Cta') {
-      const props = { ...(block.props || {}) } as Record<string, unknown>;
-      if (!props.secondaryLabel) {
-        props.secondaryLabel = 'Book a table';
-        props.secondaryHref = props.secondaryHref || '/reservations';
-      }
-      return { ...block, props };
-    }
-    return block;
-  });
+  const content = [...data.content];
   if (!content.some((b) => b.type === 'ReservationsCta')) {
     const posIdx = content.findIndex((b) => b.type === 'PosMenu');
     const insertAt = posIdx >= 0 ? posIdx + 1 : Math.min(2, content.length);
@@ -51,9 +58,9 @@ export function withReservationsHomeCtas(data: Data, reservationsEnabled: boolea
       type: 'ReservationsCta',
       props: {
         id: 'auto-reservations-cta',
-        title: 'Reserve a table',
-        subtitle: 'Book online and we will have everything ready when you arrive.',
-        ctaLabel: 'Book a table',
+        title: '',
+        subtitle: '',
+        ctaLabel: '',
         ctaHref: '/reservations',
       },
     });
@@ -104,16 +111,18 @@ function HeroBlock({
   align,
 }: CmsPuckProps['Hero']) {
   const shop = useCmsShop();
+  const { t } = useI18n();
   const base = shop?.basePath || '';
   const bg = imageUrl || '';
   const secondaryHref = secondaryCtaHref || '/reservations';
   const secondaryLabel = (() => {
     if (secondaryCtaLabel) {
       if (isReservationsPath(secondaryHref) && !shop?.reservationsEnabled) return '';
-      return secondaryCtaLabel;
+      return localizeCmsText(secondaryCtaLabel, t);
     }
-    return shop?.reservationsEnabled ? 'Reservations' : '';
+    return shop?.reservationsEnabled ? t('shopReservations') : '';
   })();
+  const primaryLabel = localizeCmsText(ctaLabel, t);
   return (
     <section
       className="relative min-h-[48vh] flex items-end md:items-center"
@@ -144,18 +153,18 @@ function HeroBlock({
             {subtitle}
           </p>
         ) : null}
-        {(ctaLabel || secondaryLabel) && (
+        {(primaryLabel || secondaryLabel) && (
           <div
             className={`mt-8 flex flex-wrap gap-3 ${
               align === 'left' ? '' : 'justify-center'
             }`}
           >
-            {ctaLabel ? (
+            {primaryLabel ? (
               <Link
                 to={resolveHref(ctaHref, base)}
                 className="inline-block bg-white text-stone-900 font-semibold px-6 py-3 text-sm"
               >
-                {ctaLabel}
+                {primaryLabel}
               </Link>
             ) : null}
             {secondaryLabel ? (
@@ -176,11 +185,13 @@ function HeroBlock({
 function PosMenuBlock(props: CmsPuckProps['PosMenu']) {
   const { title, subtitle, mode, showPrices, limit, ctaLabel, ctaHref } = props;
   const shop = useCmsShop();
+  const { t } = useI18n();
   const menu = shop?.menu || [];
   const base = shop?.basePath || '';
   const products = menu.flatMap((c) => c.items.map((item) => ({ ...item, categoryName: c.name })));
   const featured = products.slice(0, Number(limit) || 8);
   const href = resolveHref(ctaHref, base);
+  const linkLabel = localizeCmsText(ctaLabel, t);
   return (
     <section className="max-w-5xl mx-auto px-4 py-12">
       <div className="flex flex-wrap items-end justify-between gap-3 mb-6">
@@ -188,9 +199,9 @@ function PosMenuBlock(props: CmsPuckProps['PosMenu']) {
           {title ? <h2 className="text-2xl font-semibold tracking-tight">{title}</h2> : null}
           {subtitle ? <p className="text-stone-600 mt-1">{subtitle}</p> : null}
         </div>
-        {ctaLabel ? (
+        {linkLabel ? (
           <Link to={href} className="text-sm font-semibold underline">
-            {ctaLabel}
+            {linkLabel}
           </Link>
         ) : null}
       </div>
@@ -216,16 +227,19 @@ function PosMenuBlock(props: CmsPuckProps['PosMenu']) {
 
 function ShopHoursBlock({ title, channel }: CmsPuckProps['ShopHours']) {
   const shop = useCmsShop();
+  const { t } = useI18n();
   const storeHours = shop?.storeHours || {};
   const chKey = channel === 'pickup' ? 'takeaway' : channel === 'delivery' ? 'delivery' : 'display';
   const ch = storeHours[chKey] || storeHours.display || storeHours.takeaway || {};
   const day = DAY_KEYS[new Date().getDay()];
   const slots = ch[day] || [];
-  const label = slots.length ? slots.map((s) => `${s.open}–${s.close}`).join(', ') : 'Closed today';
+  const label = slots.length
+    ? slots.map((s) => `${s.open}–${s.close}`).join(', ')
+    : t('shopClosedToday');
   return (
     <section className="max-w-5xl mx-auto px-4 py-10">
       <div className="border-y border-stone-300 py-8 text-center">
-        <h2 className="text-xl font-semibold">{title || 'Hours'}</h2>
+        <h2 className="text-xl font-semibold">{localizeCmsText(title, t) || t('shopHours')}</h2>
         <p className="mt-3 text-stone-600">{label}</p>
       </div>
     </section>
@@ -235,19 +249,22 @@ function ShopHoursBlock({ title, channel }: CmsPuckProps['ShopHours']) {
 function CtaBlock(props: CmsPuckProps['Cta']) {
   const { title, subtitle, primaryLabel, primaryHref, secondaryLabel, secondaryHref } = props;
   const shop = useCmsShop();
+  const { t } = useI18n();
   const base = shop?.basePath || '';
   const secondHref = secondaryHref || '/reservations';
   const secondLabel = (() => {
     if (secondaryLabel) {
       if (isReservationsPath(secondHref) && !shop?.reservationsEnabled) return '';
-      return secondaryLabel;
+      return localizeCmsText(secondaryLabel, t);
     }
-    return shop?.reservationsEnabled ? 'Book a table' : '';
+    return shop?.reservationsEnabled ? t('shopBookTable') : '';
   })();
   return (
     <section className="bg-stone-900 text-white">
       <div className="max-w-5xl mx-auto px-4 py-14 text-center">
-        <h2 className="text-2xl md:text-3xl font-semibold">{title}</h2>
+        <h2 className="text-2xl md:text-3xl font-semibold">
+          {localizeCmsText(title, t) || title}
+        </h2>
         {subtitle ? <p className="mt-3 text-stone-300">{subtitle}</p> : null}
         <div className="mt-6 flex flex-wrap justify-center gap-3">
           {primaryLabel ? (
@@ -255,7 +272,7 @@ function CtaBlock(props: CmsPuckProps['Cta']) {
               to={resolveHref(primaryHref, base)}
               className="bg-white text-stone-900 font-semibold px-5 py-2.5 text-sm"
             >
-              {primaryLabel}
+              {localizeCmsText(primaryLabel, t)}
             </Link>
           ) : null}
           {secondLabel ? (
@@ -274,12 +291,13 @@ function CtaBlock(props: CmsPuckProps['Cta']) {
 
 function ReservationsCtaBlock(props: CmsPuckProps['ReservationsCta']) {
   const shop = useCmsShop();
+  const { t } = useI18n();
   if (!shop?.reservationsEnabled) return null;
   const base = shop.basePath || '';
-  const title = props.title || 'Reserve a table';
+  const title = localizeCmsText(props.title, t) || t('shopReserveTable');
   const subtitle =
-    props.subtitle || 'Book online and we will have everything ready when you arrive.';
-  const label = props.ctaLabel || 'Book a table';
+    props.subtitle || t('shopReservationsIntro');
+  const label = localizeCmsText(props.ctaLabel, t) || t('shopBookTable');
   const href = resolveHref(props.ctaHref || '/reservations', base);
   return (
     <section className="border-y border-stone-200 bg-stone-100/80">

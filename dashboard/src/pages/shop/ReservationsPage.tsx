@@ -37,6 +37,11 @@ export default function ReservationsPage() {
   const [done, setDone] = useState<{ code: string; status: string; reservedAt: string } | null>(
     null
   );
+  const [partyExpanded, setPartyExpanded] = useState(false);
+
+  useEffect(() => {
+    if (partySize > 3) setPartyExpanded(true);
+  }, [partySize]);
 
   useEffect(() => {
     if (!shopKey) return;
@@ -237,11 +242,11 @@ export default function ReservationsPage() {
             <fieldset className="space-y-2">
               <legend className="text-sm font-medium">{t('shopReservationsParty')}</legend>
               <div
-                className="grid grid-cols-4 gap-2 sm:grid-cols-6"
+                className="grid grid-cols-4 gap-2"
                 role="radiogroup"
                 aria-label={t('shopReservationsParty')}
               >
-                {partyOptions.map((n) => {
+                {(partyExpanded ? partyOptions : partyOptions.slice(0, 3)).map((n) => {
                   const selected = partySize === n;
                   return (
                     <button
@@ -250,7 +255,7 @@ export default function ReservationsPage() {
                       role="radio"
                       aria-checked={selected}
                       onClick={() => setPartySize(n)}
-                      className={`min-h-12 text-base font-semibold border transition-colors ${
+                      className={`min-h-11 text-base font-semibold border transition-colors ${
                         selected
                           ? 'border-stone-900 bg-stone-900 text-white'
                           : 'border-stone-300 bg-white text-stone-800 hover:border-stone-900'
@@ -260,13 +265,31 @@ export default function ReservationsPage() {
                     </button>
                   );
                 })}
+                {!partyExpanded && partyOptions.length > 3 ? (
+                  <button
+                    type="button"
+                    onClick={() => setPartyExpanded(true)}
+                    className="min-h-11 text-xs font-semibold border border-stone-300 bg-white text-stone-700 hover:border-stone-900 px-1"
+                  >
+                    {t('shopReservationsShowMore')}
+                  </button>
+                ) : null}
+                {partyExpanded && partyOptions.length > 3 ? (
+                  <button
+                    type="button"
+                    onClick={() => setPartyExpanded(false)}
+                    className="min-h-11 text-xs font-semibold border border-stone-300 bg-white text-stone-700 hover:border-stone-900 px-1 col-span-4 sm:col-span-1"
+                  >
+                    {t('shopReservationsShowLess')}
+                  </button>
+                ) : null}
               </div>
             </fieldset>
 
             <fieldset className="space-y-2">
               <legend className="text-sm font-medium">{t('shopReservationsDate')}</legend>
               <div
-                className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 snap-x snap-mandatory"
+                className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 snap-x snap-mandatory"
                 role="radiogroup"
                 aria-label={t('shopReservationsDate')}
               >
@@ -279,17 +302,17 @@ export default function ReservationsPage() {
                       role="radio"
                       aria-checked={selected}
                       onClick={() => setDate(d.value)}
-                      className={`snap-start shrink-0 w-[4.5rem] min-h-[4.75rem] px-2 py-2.5 border text-center transition-colors ${
+                      className={`snap-start shrink-0 w-14 min-h-[3.5rem] px-1 py-1.5 border text-center transition-colors ${
                         selected
                           ? 'border-stone-900 bg-stone-900 text-white'
                           : 'border-stone-300 bg-white text-stone-800 hover:border-stone-900'
                       }`}
                     >
-                      <span className="block text-[11px] font-medium uppercase tracking-wide opacity-80">
+                      <span className="block text-[10px] font-medium uppercase tracking-wide opacity-80 leading-tight">
                         {d.isToday ? t('shopReservationsToday') : d.weekday}
                       </span>
-                      <span className="mt-1 block text-xl font-bold leading-none">{d.dayNum}</span>
-                      <span className="mt-1 block text-[11px] opacity-80">{d.month}</span>
+                      <span className="mt-0.5 block text-base font-bold leading-none">{d.dayNum}</span>
+                      <span className="mt-0.5 block text-[10px] opacity-80 leading-tight">{d.month}</span>
                     </button>
                   );
                 })}
@@ -298,7 +321,7 @@ export default function ReservationsPage() {
                 <span className="sr-only">{t('shopReservationsDate')}</span>
                 <input
                   type="date"
-                  className="border border-stone-300 px-3 py-2.5 w-full text-sm text-stone-800"
+                  className="border border-stone-300 px-3 py-2 w-full text-sm text-stone-800"
                   min={ymdLocal(new Date())}
                   max={maxDate}
                   value={date}

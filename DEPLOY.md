@@ -7,7 +7,7 @@ Server IP: **116.202.26.15**
 | `api.chaslay.com` | POS license, menu sync, order API, `/v1/receipts` |
 | `pay.chaslay.com` | Digital receipt pages (`/receipts/{id}`) |
 | `shop.chaslay.com/{clientName}` | Customer online shop per merchant |
-| `admin.chaslay.com` | Merchant back office + superadmin |
+| `app.chaslay.com` | Merchant back office + superadmin |
 
 ---
 
@@ -18,7 +18,7 @@ Point these **A records** to `116.202.26.15`:
 - `api.chaslay.com`
 - `pay.chaslay.com`
 - `shop.chaslay.com`
-- `admin.chaslay.com`
+- `app.chaslay.com`
 
 ---
 
@@ -119,9 +119,9 @@ docker compose exec api npm run seed
 | `LICENSE_SECRET` | Min 32 chars |
 | `SUPERADMIN_PASSWORD` | Set once in `/root/chaslay-secrets/backend.env`; stored in Postgres and survives redeploys |
 
-`Caddyfile` is already set for `api.chaslay.com`, `shop.chaslay.com`, `admin.chaslay.com`.
+`Caddyfile` is already set for `api.chaslay.com`, `shop.chaslay.com`, `app.chaslay.com`.
 
-**Superadmin panel:** https://admin.chaslay.com (password saved in database after first login)
+**Superadmin panel:** https://app.chaslay.com (password saved in database after first login)
 
 **Reset superadmin password anytime:**
 
@@ -136,7 +136,7 @@ After changing `.env`, restart: `docker compose up -d --build`
 
 ## Merchant portal (shop owners)
 
-Merchants log in at **https://admin.chaslay.com** with email + password.
+Merchants log in at **https://app.chaslay.com** with email + password.
 
 **Create a merchant login** (superadmin ? Manage tenant ? Merchant portal login), or:
 
@@ -229,6 +229,27 @@ Orders appear in POS **Ongoing Orders** when the tablet is online and `SYNC_API_
 ## Optional later
 
 - Stripe for online payment
-- Full admin UI at `admin.chaslay.com`
+- Full admin UI at `app.chaslay.com`
 - POS menu push to server
 - Waiter / kiosk apps
+
+## Custom domain (merchant shop)
+
+Shop **slug** is enough: `https://shop.chaslay.com/{slug}` (also `/shop/{slug}` on admin).
+
+Shop **subdomain** (`https://{sub}.chaslay.com`) is optional — it is **not** required for custom domains.
+
+### DNS for a custom domain
+
+Create a **CNAME** at your DNS provider:
+
+| Field | Value |
+|-------|--------|
+| **Type** | `CNAME` |
+| **Host / Name** | `www` (or `order`, `shop`, … — the hostname customers will use) |
+| **Target / Value / Points to** | `shop.chaslay.com` |
+
+Then in Merchant → Settings (or Website CMS), enter the full hostname, e.g. `www.mycafe.ch`.
+
+TLS certificates are issued automatically via on-demand TLS once DNS points at the platform and the domain is saved on the merchant.
+

@@ -91,13 +91,13 @@ ensure_env_production() {
 
   # Ensure Chaslay host defaults
   grep -qE '^DOMAIN=' "$ENV_FILE" || echo 'DOMAIN=chaslay.com' >>"$ENV_FILE"
-  grep -qE '^PUBLIC_APP_URL=' "$ENV_FILE" || echo 'PUBLIC_APP_URL=https://admin.chaslay.com' >>"$ENV_FILE"
+  grep -qE '^PUBLIC_APP_URL=' "$ENV_FILE" || echo 'PUBLIC_APP_URL=https://app.chaslay.com' >>"$ENV_FILE"
   grep -qE '^PUBLIC_RECEIPT_BASE_URL=' "$ENV_FILE" || echo 'PUBLIC_RECEIPT_BASE_URL=https://pay.chaslay.com' >>"$ENV_FILE"
   grep -qE '^CORS_ALLOW_ALL=' "$ENV_FILE" || echo 'CORS_ALLOW_ALL=true' >>"$ENV_FILE"
 
   # Force known-good public URLs for this stack
   sed -i 's|^DOMAIN=.*|DOMAIN=chaslay.com|' "$ENV_FILE"
-  sed -i 's|^PUBLIC_APP_URL=.*|PUBLIC_APP_URL=https://admin.chaslay.com|' "$ENV_FILE"
+  sed -i 's|^PUBLIC_APP_URL=.*|PUBLIC_APP_URL=https://app.chaslay.com|' "$ENV_FILE"
   if grep -qE '^PUBLIC_RECEIPT_BASE_URL=' "$ENV_FILE"; then
     sed -i 's|^PUBLIC_RECEIPT_BASE_URL=.*|PUBLIC_RECEIPT_BASE_URL=https://pay.chaslay.com|' "$ENV_FILE"
   else
@@ -267,7 +267,7 @@ else
 fi
 
 echo "=== Deploy complete ==="
-echo "  Admin:  https://admin.chaslay.com/"
+echo "  Admin:  https://app.chaslay.com/"
 echo "  API:    https://api.chaslay.com/health"
 echo "  Shop:   https://shop.chaslay.com/"
 echo "  Pay:    https://pay.chaslay.com/receipt/"

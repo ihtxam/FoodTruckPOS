@@ -144,7 +144,7 @@ export default function OrderConfirmationPage() {
         setDemoMode(true);
         setPayMsg(
           e.response?.data?.error ||
-            'Adyen is not configured for this shop — you can confirm with the demo button.'
+            'Card payments are not configured for this shop — you can confirm with the demo button.'
         );
       }
     })();
@@ -184,7 +184,7 @@ export default function OrderConfirmationPage() {
         dropinMounted.current = true;
       } catch {
         setDemoMode(true);
-        setPayMsg('Adyen widget unavailable — use demo confirm below.');
+        setPayMsg('Card payment form unavailable — use demo confirm below.');
       }
     })();
 

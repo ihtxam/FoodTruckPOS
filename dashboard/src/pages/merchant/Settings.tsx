@@ -220,7 +220,7 @@ export default function Settings() {
       setApiKey('');
       toast.success(t('adyenSaved'));
     } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Failed to save Adyen credentials');
+      toast.error(error.response?.data?.error || 'Failed to save Swisspayout credentials');
     } finally {
       setSavingAdyen(false);
     }
@@ -450,7 +450,10 @@ export default function Settings() {
                   </span>
                 </label>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <Field label={t('shopSlug')} hint={settings.shopPathUrl || undefined}>
+                  <Field
+                    label={t('shopSlug')}
+                    hint={settings.shopPathUrl || t('shopSlugHint')}
+                  >
                     <input
                       className="input"
                       value={settings.slug || ''}
@@ -458,7 +461,10 @@ export default function Settings() {
                       placeholder="my-cafe"
                     />
                   </Field>
-                  <Field label={t('subdomain')} hint={settings.shopSubdomainUrl || undefined}>
+                  <Field
+                    label={t('subdomain')}
+                    hint={settings.shopSubdomainUrl || t('shopSubdomainHint')}
+                  >
                     <input
                       className="input"
                       value={settings.subdomain || ''}
@@ -468,7 +474,7 @@ export default function Settings() {
                   </Field>
                   <Field
                     label={t('cmsCustomDomain')}
-                    hint={settings.shopCustomDomainUrl || t('cmsCustomDomainHint')}
+                    hint={settings.shopCustomDomainUrl || undefined}
                   >
                     <input
                       className="input"
@@ -476,6 +482,22 @@ export default function Settings() {
                       onChange={(e) => setSettings({ ...settings, customDomain: e.target.value })}
                       placeholder="www.mycafe.ch"
                     />
+                    <p className="text-xs muted mt-2 whitespace-pre-line">{t('cmsCustomDomainHint')}</p>
+                    <div className="mt-2 rounded-md border border-[var(--border)] bg-[var(--bg-muted)] px-3 py-2 text-xs space-y-1">
+                      <p className="font-semibold">{t('cmsDnsRecordTitle')}</p>
+                      <p>
+                        <span className="font-medium">Type:</span> CNAME
+                      </p>
+                      <p>
+                        <span className="font-medium">Host / Name:</span> www{' '}
+                        <span className="muted">({t('cmsDnsHostExample')})</span>
+                      </p>
+                      <p>
+                        <span className="font-medium">Target / Value / Points to:</span>{' '}
+                        <code className="font-mono">shop.chaslay.com</code>
+                      </p>
+                      <p className="muted pt-1">{t('cmsDnsThenEnter')}</p>
+                    </div>
                   </Field>
                 </div>
               </Section>

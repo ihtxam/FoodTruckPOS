@@ -733,6 +733,32 @@ router.get("/:slug/delivery-zones", async (req: Request, res: Response) => {
 });
 
 /**
+ * GET /api/shop/:slug/postal-suggest?q=80
+ * Swiss PLZ autocomplete → zip + city name(s)
+ */
+router.get("/:slug/postal-suggest", async (req: Request, res: Response) => {
+  try {
+    const merchant = await resolveMerchant(req.params.slug);
+    if (!merchant || !merchant.shopEnabled) {
+      return res.status(404).json({ error: "Shop not found" });
+    }
+    const { suggestSwissPostal, cityForSwissPostal } = await import("@/data/swiss-postal");
+    const q = String(req.query.q || "");
+    const suggestions = suggestSwissPostal(q, 15);
+    const exact = cityForSwissPostal(q);
+    res.json({
+      success: true,
+      suggestions,
+      city: exact,
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Postal lookup failed",
+    });
+  }
+});
+
+/**
  * POST /api/shop/:slug/geocode
  * Body: { query }
  */

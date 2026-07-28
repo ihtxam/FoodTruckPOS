@@ -45,6 +45,10 @@ export class MerchantSettingsService {
     }
 
     const domain = process.env.DOMAIN || process.env.PUBLIC_APP_URL?.replace(/^https?:\/\//, "") || "localhost";
+    const shopHost =
+      process.env.SHOP_PUBLIC_HOST ||
+      (domain.includes("chaslay.com") ? "shop.chaslay.com" : domain.startsWith("shop.") ? domain : `shop.${domain}`);
+    const apex = domain.replace(/^shop\./, "");
 
     return {
       id: merchant.id,
@@ -77,8 +81,8 @@ export class MerchantSettingsService {
       longitude: merchant.longitude,
       pickupEtaMinutes: merchant.pickupEtaMinutes,
       deliveryEtaMinutes: merchant.deliveryEtaMinutes,
-      shopPathUrl: merchant.slug ? `https://${domain}/shop/${merchant.slug}` : null,
-      shopSubdomainUrl: merchant.subdomain ? `https://${merchant.subdomain}.${domain}` : null,
+      shopPathUrl: merchant.slug ? `https://${shopHost}/${merchant.slug}` : null,
+      shopSubdomainUrl: merchant.subdomain ? `https://${merchant.subdomain}.${apex}` : null,
       shopCustomDomainUrl: merchant.customDomain ? `https://${merchant.customDomain}` : null,
       adyenMerchantAccount: merchant.adyenMerchantAccount,
       adyenApiKeyMasked: maskSecret(merchant.adyenApiKey),

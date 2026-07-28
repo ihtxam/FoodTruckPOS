@@ -30,6 +30,7 @@ import ShopComboWizard, {
 import { CalendarDays, ShoppingBag, User } from 'lucide-react';
 import { isLocale, useI18n } from '@/lib/i18n';
 import ShopLangSwitcher from '@/components/shop/ShopLangSwitcher';
+import ZipCityFields from '@/components/shop/ZipCityFields';
 
 interface Product {
   id: string;
@@ -482,20 +483,15 @@ export default function OrderingPage() {
               value={draft.address}
               onChange={(e) => patch({ address: e.target.value })}
             />
-            <div className="flex gap-2">
-              <input
-                className="w-28 border border-stone-300 px-3 py-2 text-sm"
-                placeholder={t('shopZip')}
-                value={draft.zipCode}
-                onChange={(e) => patch({ zipCode: e.target.value })}
-              />
-              <input
-                className="flex-1 border border-stone-300 px-3 py-2 text-sm"
-                placeholder={t('shopCity')}
-                value={draft.city}
-                onChange={(e) => patch({ city: e.target.value })}
-              />
-            </div>
+            <ZipCityFields
+              shopKey={shopKey}
+              zipCode={draft.zipCode}
+              city={draft.city}
+              onZipChange={(zipCode) => patch({ zipCode })}
+              onCityChange={(city) => patch({ city })}
+              zipClassName="w-full border border-stone-300 px-3 py-2 text-sm"
+              cityClassName="w-full border border-stone-300 px-3 py-2 text-sm"
+            />
             <button
               type="button"
               onClick={() => void checkDeliveryPreview()}

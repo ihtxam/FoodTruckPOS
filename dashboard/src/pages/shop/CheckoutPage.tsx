@@ -24,6 +24,7 @@ import {
 import { roundMoney2, roundTo005, roundingAdjustment } from '@/lib/money';
 import { isLocale, useI18n } from '@/lib/i18n';
 import ShopLangSwitcher from '@/components/shop/ShopLangSwitcher';
+import ZipCityFields from '@/components/shop/ZipCityFields';
 
 type Step = 'details' | 'payment' | 'review';
 type WhenMode = 'asap' | 'later';
@@ -653,20 +654,15 @@ export default function CheckoutPage() {
                     value={draft.address}
                     onChange={(e) => patch({ address: e.target.value })}
                   />
-                  <div className="grid grid-cols-2 gap-3">
-                    <input
-                      className="border border-stone-300 px-3 py-2 text-sm"
-                      placeholder={t('shopZip')}
-                      value={draft.zipCode}
-                      onChange={(e) => patch({ zipCode: e.target.value })}
-                    />
-                    <input
-                      className="border border-stone-300 px-3 py-2 text-sm"
-                      placeholder={t('shopCity')}
-                      value={draft.city}
-                      onChange={(e) => patch({ city: e.target.value })}
-                    />
-                  </div>
+                  <ZipCityFields
+                    shopKey={shopKey}
+                    zipCode={draft.zipCode}
+                    city={draft.city}
+                    onZipChange={(zipCode) => patch({ zipCode })}
+                    onCityChange={(city) => patch({ city })}
+                    zipClassName="border border-stone-300 px-3 py-2 text-sm w-full"
+                    cityClassName="border border-stone-300 px-3 py-2 text-sm w-full"
+                  />
                   <button
                     type="button"
                     className="border border-stone-900 px-4 py-2 text-sm font-semibold"
