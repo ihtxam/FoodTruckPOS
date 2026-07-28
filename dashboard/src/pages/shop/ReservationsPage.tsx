@@ -16,7 +16,7 @@ function ymdLocal(d: Date) {
 }
 
 export default function ReservationsPage() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { merchantSlug } = useParams<{ merchantSlug?: string }>();
   const shopKey = useMemo(() => resolveShopKey(merchantSlug), [merchantSlug]);
   const base = shopBasePath(shopKey);
@@ -94,6 +94,38 @@ export default function ReservationsPage() {
 
   const minParty = Number(config?.settings?.minPartySize) || 1;
   const maxParty = Number(config?.settings?.maxPartySize) || 12;
+
+  const partyOptions = useMemo(() => {
+    const list: number[] = [];
+    for (let n = minParty; n <= maxParty; n += 1) list.push(n);
+    return list;
+  }, [minParty, maxParty]);
+
+  const dateOptions = useMemo(() => {
+    const days = Math.min(Math.max(Number(config?.settings?.maxDaysAhead) || 30, 1), 60);
+    const loc = locale === 'fr' || locale === 'de' ? locale : 'en';
+    const start = new Date();
+    start.setHours(12, 0, 0, 0);
+    const out: Array<{
+      value: string;
+      weekday: string;
+      dayNum: string;
+      month: string;
+      isToday: boolean;
+    }> = [];
+    for (let i = 0; i < days; i += 1) {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      out.push({
+        value: ymdLocal(d),
+        weekday: d.toLocaleDateString(loc, { weekday: 'short' }),
+        dayNum: String(d.getDate()),
+        month: d.toLocaleDateString(loc, { month: 'short' }),
+        isToday: i === 0,
+      });
+    }
+    return out;
+  }, [config, locale]);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -202,68 +234,125 @@ export default function ReservationsPage() {
               <div className="text-sm border border-red-200 bg-red-50 text-red-800 px-3 py-2">{error}</div>
             )}
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <label className="text-sm block">
-                <span className="font-medium block mb-1">{t('shopReservationsParty')}</span>
-                <input
-                  type="number"
-                  min={minParty}
-                  max={maxParty}
-                  className="border border-stone-300 px-3 py-2 w-full"
-                  value={partySize}
-                  onChange={(e) => setPartySize(Number(e.target.value) || minParty)}
-                  required
-                />
-              </label>
-              <label className="text-sm block">
-                <span className="font-medium block mb-1">{t('shopReservationsDate')}</span>
+            <fieldset className="space-y-2">
+              <legend className="text-sm font-medium">{t('shopReservationsParty')}</legend>
+              <div
+                className="grid grid-cols-4 gap-2 sm:grid-cols-6"
+                role="radiogroup"
+                aria-label={t('shopReservationsParty')}
+              >
+                {partyOptions.map((n) => {
+                  const selected = partySize === n;
+                  return (
+                    <button
+                      key={n}
+                      type="button"
+                      role="radio"
+                      aria-checked={selected}
+                      onClick={() => setPartySize(n)}
+                      className={`min-h-12 text-base font-semibold border transition-colors ${
+                        selected
+                          ? 'border-stone-900 bg-stone-900 text-white'
+                          : 'border-stone-300 bg-white text-stone-800 hover:border-stone-900'
+                      }`}
+                    >
+                      {n}
+                    </button>
+                  );
+                })}
+              </div>
+            </fieldset>
+
+            <fieldset className="space-y-2">
+              <legend className="text-sm font-medium">{t('shopReservationsDate')}</legend>
+              <div
+                className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 snap-x snap-mandatory"
+                role="radiogroup"
+                aria-label={t('shopReservationsDate')}
+              >
+                {dateOptions.map((d) => {
+                  const selected = date === d.value;
+                  return (
+                    <button
+                      key={d.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={selected}
+                      onClick={() => setDate(d.value)}
+                      className={`snap-start shrink-0 w-[4.5rem] min-h-[4.75rem] px-2 py-2.5 border text-center transition-colors ${
+                        selected
+                          ? 'border-stone-900 bg-stone-900 text-white'
+                          : 'border-stone-300 bg-white text-stone-800 hover:border-stone-900'
+                      }`}
+                    >
+                      <span className="block text-[11px] font-medium uppercase tracking-wide opacity-80">
+                        {d.isToday ? t('shopReservationsToday') : d.weekday}
+                      </span>
+                      <span className="mt-1 block text-xl font-bold leading-none">{d.dayNum}</span>
+                      <span className="mt-1 block text-[11px] opacity-80">{d.month}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <label className="block text-xs text-stone-500 pt-1">
+                <span className="sr-only">{t('shopReservationsDate')}</span>
                 <input
                   type="date"
-                  className="border border-stone-300 px-3 py-2 w-full"
+                  className="border border-stone-300 px-3 py-2.5 w-full text-sm text-stone-800"
                   min={ymdLocal(new Date())}
                   max={maxDate}
                   value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  required
+                  onChange={(e) => {
+                    if (e.target.value) setDate(e.target.value);
+                  }}
                 />
               </label>
-            </div>
+            </fieldset>
 
-            <div>
-              <p className="text-sm font-medium mb-2">{t('shopReservationsTime')}</p>
+            <fieldset className="space-y-2">
+              <legend className="text-sm font-medium">{t('shopReservationsTime')}</legend>
               {slotsLoading ? (
-                <p className="text-sm text-stone-500">{t('loading')}</p>
+                <p className="text-sm text-stone-500 py-4">{t('loading')}</p>
               ) : slots.length === 0 ? (
                 <p className="text-sm text-stone-500 border border-dashed border-stone-300 p-4 text-center">
                   {t('shopReservationsNoSlots')}
                 </p>
               ) : (
-                <div className="flex flex-wrap gap-2">
-                  {slots.map((s) => (
-                    <button
-                      key={s.time}
-                      type="button"
-                      disabled={!s.available}
-                      onClick={() => setTime(s.time)}
-                      className={`px-3 py-2 text-sm border ${
-                        time === s.time
-                          ? 'border-stone-900 bg-stone-900 text-white'
-                          : s.available
-                            ? 'border-stone-300 bg-white hover:border-stone-900'
-                            : 'border-stone-200 bg-stone-100 text-stone-400 cursor-not-allowed'
-                      }`}
-                    >
-                      {s.time}
-                    </button>
-                  ))}
+                <div
+                  className="grid grid-cols-3 gap-2 sm:grid-cols-4"
+                  role="radiogroup"
+                  aria-label={t('shopReservationsTime')}
+                >
+                  {slots.map((s) => {
+                    const selected = time === s.time;
+                    return (
+                      <button
+                        key={s.time}
+                        type="button"
+                        role="radio"
+                        aria-checked={selected}
+                        disabled={!s.available}
+                        onClick={() => setTime(s.time)}
+                        className={`min-h-12 text-sm font-semibold border tabular-nums transition-colors ${
+                          selected
+                            ? 'border-stone-900 bg-stone-900 text-white'
+                            : s.available
+                              ? 'border-stone-300 bg-white text-stone-800 hover:border-stone-900'
+                              : 'border-stone-200 bg-stone-100 text-stone-400 cursor-not-allowed line-through'
+                        }`}
+                      >
+                        {s.time}
+                      </button>
+                    );
+                  })}
                 </div>
               )}
-              <p className="text-xs text-stone-500 mt-2">
+              <p className="text-xs text-stone-500">
                 {t('shopReservationsSlotHint')
                   .replace('{interval}', String(config?.settings?.slotIntervalMinutes || 30))
                   .replace('{hours}', String(config?.settings?.minHoursBefore || 0))}
               </p>
-            </div>
+            </fieldset>
 
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="text-sm block sm:col-span-2">
