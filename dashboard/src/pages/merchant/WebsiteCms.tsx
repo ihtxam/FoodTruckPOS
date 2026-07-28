@@ -303,6 +303,7 @@ export default function WebsiteCms() {
 
       <form onSubmit={saveSite} className="rounded-md border border-[var(--border)] bg-[var(--bg)] p-4 space-y-3">
         <h2 className="text-sm font-semibold">{t('cmsCustomDomain')}</h2>
+        <p className="text-xs muted">{t('cmsDnsGoCreate')}</p>
         <table className="w-full max-w-md text-xs border border-[var(--border)]">
           <tbody>
             <tr className="border-b border-[var(--border)]">

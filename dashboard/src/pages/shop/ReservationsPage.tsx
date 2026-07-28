@@ -194,7 +194,7 @@ export default function ReservationsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f6f5f2] text-stone-900">
+    <div className="min-h-screen bg-[#f6f5f2] text-stone-900 overflow-x-hidden">
       <header className="sticky top-0 z-30 bg-white border-b border-stone-200">
         <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between gap-2">
           <Link
@@ -218,7 +218,7 @@ export default function ReservationsPage() {
         </div>
       </header>
 
-      <main className="max-w-3xl mx-auto px-4 py-8">
+      <main className="max-w-3xl mx-auto px-4 py-8 min-w-0 overflow-x-hidden">
         {done ? (
           <div className="bg-white border border-stone-200 p-6 space-y-3 text-center">
             <h1 className="text-2xl font-bold tracking-tight">{t('shopReservationsThanks')}</h1>
@@ -240,7 +240,7 @@ export default function ReservationsPage() {
             </Link>
           </div>
         ) : (
-          <form onSubmit={submit} className="bg-white border border-stone-200 p-5 md:p-6 space-y-5">
+          <form onSubmit={submit} className="bg-white border border-stone-200 p-5 md:p-6 space-y-5 overflow-x-hidden max-w-full">
             <div>
               <h1 className="text-2xl font-bold tracking-tight">{t('shopReservations')}</h1>
               <p className="text-sm text-stone-500 mt-1">{t('shopReservationsIntro')}</p>
@@ -251,7 +251,7 @@ export default function ReservationsPage() {
               <div className="text-sm border border-red-200 bg-red-50 text-red-800 px-3 py-2">{error}</div>
             )}
 
-            <fieldset className="space-y-2">
+            <fieldset className="space-y-2 min-w-0">
               <legend className="text-sm font-medium">{t('shopReservationsParty')}</legend>
               <div
                 className="grid grid-cols-4 gap-2"
@@ -277,67 +277,81 @@ export default function ReservationsPage() {
                     </button>
                   );
                 })}
+                {!partyExpanded && partyOptions.length > 4 ? (
+                  <button
+                    type="button"
+                    onClick={() => setPartyExpanded(true)}
+                    className="col-span-4 min-h-11 text-base font-semibold border border-stone-300 bg-white text-stone-800 hover:border-stone-900"
+                  >
+                    {t('shopReservationsShowMore')}
+                  </button>
+                ) : null}
+                {partyExpanded && partyOptions.length > 4 ? (
+                  <button
+                    type="button"
+                    onClick={() => setPartyExpanded(false)}
+                    className="col-span-4 min-h-11 text-base font-semibold border border-stone-300 bg-white text-stone-800 hover:border-stone-900"
+                  >
+                    {t('shopReservationsShowLess')}
+                  </button>
+                ) : null}
               </div>
-              {!partyExpanded && partyOptions.length > 4 ? (
-                <button
-                  type="button"
-                  onClick={() => setPartyExpanded(true)}
-                  className="w-full min-h-10 text-sm font-semibold border border-stone-300 bg-white text-stone-700 hover:border-stone-900"
-                >
-                  {t('shopReservationsShowMore')}
-                </button>
-              ) : null}
-              {partyExpanded && partyOptions.length > 4 ? (
-                <button
-                  type="button"
-                  onClick={() => setPartyExpanded(false)}
-                  className="w-full min-h-10 text-sm font-semibold border border-stone-300 bg-white text-stone-700 hover:border-stone-900"
-                >
-                  {t('shopReservationsShowLess')}
-                </button>
-              ) : null}
             </fieldset>
 
-            <fieldset className="space-y-2">
+            <fieldset className="space-y-2 min-w-0">
               <legend className="text-sm font-medium">{t('shopReservationsDate')}</legend>
-              <div
-                className="flex gap-1.5 overflow-x-auto overscroll-x-contain snap-x snap-mandatory [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-                role="radiogroup"
-                aria-label={t('shopReservationsDate')}
-              >
-                {dateOptions.map((d) => {
-                  const selected = date === d.value;
-                  return (
-                    <button
-                      key={d.value}
-                      type="button"
-                      role="radio"
-                      aria-checked={selected}
-                      onClick={() => setDate(d.value)}
-                      className={`snap-start shrink-0 w-12 py-1.5 border text-center transition-colors ${
-                        selected
-                          ? 'border-stone-900 bg-stone-900 text-white'
-                          : 'border-stone-300 bg-white text-stone-800 hover:border-stone-900'
-                      }`}
-                    >
-                      <span className="block text-[9px] font-medium uppercase tracking-wide opacity-80 leading-none">
-                        {d.isToday ? t('shopReservationsToday') : d.weekday}
-                      </span>
-                      <span className="mt-1 block text-sm font-bold leading-none">{d.dayNum}</span>
-                      <span className="mt-0.5 block text-[9px] opacity-80 leading-none">{d.month}</span>
-                    </button>
-                  );
-                })}
-              </div>
-              {!datePickerOpen ? (
-                <button
-                  type="button"
-                  onClick={() => setDatePickerOpen(true)}
-                  className="text-xs font-semibold text-stone-600 underline underline-offset-2"
+              <div className="max-w-full min-w-0 overflow-x-hidden">
+                <div
+                  className="flex gap-1.5 overflow-x-auto overscroll-x-contain touch-pan-x snap-x snap-mandatory max-w-full [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                  role="radiogroup"
+                  aria-label={t('shopReservationsDate')}
                 >
-                  {t('shopReservationsOtherDate')}
-                </button>
-              ) : (
+                  {dateOptions.map((d) => {
+                    const selected = date === d.value;
+                    return (
+                      <button
+                        key={d.value}
+                        type="button"
+                        role="radio"
+                        aria-checked={selected}
+                        onClick={() => {
+                          setDate(d.value);
+                          setDatePickerOpen(false);
+                        }}
+                        className={`snap-start shrink-0 w-12 min-h-11 py-1.5 border text-center transition-colors ${
+                          selected && !datePickerOpen
+                            ? 'border-stone-900 bg-stone-900 text-white'
+                            : 'border-stone-300 bg-white text-stone-800 hover:border-stone-900'
+                        }`}
+                      >
+                        <span className="block text-[9px] font-medium uppercase tracking-wide opacity-80 leading-none">
+                          {d.isToday ? t('shopReservationsToday') : d.weekday}
+                        </span>
+                        <span className="mt-1 block text-sm font-bold leading-none">{d.dayNum}</span>
+                        <span className="mt-0.5 block text-[9px] opacity-80 leading-none">{d.month}</span>
+                      </button>
+                    );
+                  })}
+                  <button
+                    type="button"
+                    onClick={() => setDatePickerOpen((v) => !v)}
+                    className={`snap-start shrink-0 w-12 min-h-11 py-1.5 border text-center transition-colors ${
+                      datePickerOpen
+                        ? 'border-stone-900 bg-stone-900 text-white'
+                        : 'border-stone-300 bg-white text-stone-800 hover:border-stone-900'
+                    }`}
+                    aria-expanded={datePickerOpen}
+                    title={t('shopReservationsOtherDate')}
+                  >
+                    <span className="block text-[9px] font-medium uppercase tracking-wide opacity-80 leading-none">
+                      {t('shopReservationsOtherShort')}
+                    </span>
+                    <span className="mt-1 block text-sm font-bold leading-none">···</span>
+                    <span className="mt-0.5 block text-[9px] opacity-80 leading-none">&nbsp;</span>
+                  </button>
+                </div>
+              </div>
+              {datePickerOpen ? (
                 <label className="block text-xs text-stone-500">
                   <span className="sr-only">{t('shopReservationsDate')}</span>
                   <input
@@ -351,10 +365,10 @@ export default function ReservationsPage() {
                     }}
                   />
                 </label>
-              )}
+              ) : null}
             </fieldset>
 
-            <fieldset className="space-y-2">
+            <fieldset className="space-y-2 min-w-0">
               <legend className="text-sm font-medium">{t('shopReservationsTime')}</legend>
               {slotsLoading ? (
                 <p className="text-sm text-stone-500 py-4">{t('loading')}</p>
@@ -391,25 +405,25 @@ export default function ReservationsPage() {
                         </button>
                       );
                     })}
+                    {!timesExpanded && slots.length > 6 ? (
+                      <button
+                        type="button"
+                        onClick={() => setTimesExpanded(true)}
+                        className="col-span-3 min-h-11 text-sm font-semibold border border-stone-300 bg-white text-stone-800 hover:border-stone-900"
+                      >
+                        {t('shopReservationsShowMore')}
+                      </button>
+                    ) : null}
+                    {timesExpanded && slots.length > 6 ? (
+                      <button
+                        type="button"
+                        onClick={() => setTimesExpanded(false)}
+                        className="col-span-3 min-h-11 text-sm font-semibold border border-stone-300 bg-white text-stone-800 hover:border-stone-900"
+                      >
+                        {t('shopReservationsShowLess')}
+                      </button>
+                    ) : null}
                   </div>
-                  {!timesExpanded && slots.length > 6 ? (
-                    <button
-                      type="button"
-                      onClick={() => setTimesExpanded(true)}
-                      className="w-full min-h-10 text-sm font-semibold border border-stone-300 bg-white text-stone-700 hover:border-stone-900"
-                    >
-                      {t('shopReservationsShowMore')}
-                    </button>
-                  ) : null}
-                  {timesExpanded && slots.length > 6 ? (
-                    <button
-                      type="button"
-                      onClick={() => setTimesExpanded(false)}
-                      className="w-full min-h-10 text-sm font-semibold border border-stone-300 bg-white text-stone-700 hover:border-stone-900"
-                    >
-                      {t('shopReservationsShowLess')}
-                    </button>
-                  ) : null}
                 </>
               )}
               <p className="text-xs text-stone-500">

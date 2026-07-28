@@ -77,6 +77,11 @@ export const merchants = pgTable(
     longitude: decimal("longitude", { precision: 10, scale: 7 }),
     pickupEtaMinutes: integer("pickup_eta_minutes").default(25),
     deliveryEtaMinutes: integer("delivery_eta_minutes").default(45),
+    /**
+     * Fixed CHF amount added to each menu item base price for delivery orders
+     * (e.g. 2 → delivery item prices = takeaway + 2.00).
+     */
+    deliveryMenuMarkup: decimal("delivery_menu_markup", { precision: 10, scale: 2 }).default("0"),
     // Adyen credentials (merchant-level; shared by online shop + payment terminals)
     adyenMerchantAccount: varchar("adyen_merchant_account", { length: 255 }),
     adyenApiKey: text("adyen_api_key"),
