@@ -140,6 +140,16 @@ export const merchants = pgTable(
      * }
      */
     vacationSettings: json("vacation_settings").$type<VacationSettings | null>(),
+    /**
+     * Merchant SMTP for newsletters / marketing (optional; falls back to platform Brevo).
+     * { enabled, host, port, secure, user, password, fromEmail, fromName }
+     */
+    emailSmtpSettings: json("email_smtp_settings").$type<MerchantSmtpSettings | null>(),
+    /**
+     * Marketing automation:
+     * { reorderReminderEnabled, reorderReminderDays, reorderReminderSubject, reorderReminderBody }
+     */
+    marketingSettings: json("marketing_settings").$type<MarketingSettings | null>(),
     status: varchar("status", { length: 50 }).default("active").notNull(), // active, suspended, trial, expired
     subscriptionPlan: varchar("subscription_plan", { length: 50 }).default("free"), // free, starter, professional, enterprise
     trialEndsAt: timestamp("trial_ends_at"),
@@ -533,12 +543,19 @@ export const customers = pgTable(
     defaultCity: varchar("default_city", { length: 100 }),
     loyaltyPoints: integer("loyalty_points").default(0),
     totalSpent: decimal("total_spent", { precision: 10, scale: 2 }).default("0"),
+    /** Opt-in for newsletters / marketing (default true when email known from orders) */
+    marketingOptIn: boolean("marketing_opt_in").default(true).notNull(),
+    /** Denormalized last paid/completed web or POS order time */
+    lastOrderAt: timestamp("last_order_at"),
+    /** Last automatic reorder-reminder email sent */
+    lastReorderReminderAt: timestamp("last_reorder_reminder_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
   (table) => ({
     merchantIdIdx: index("customers_merchant_id_idx").on(table.merchantId),
     emailIdx: index("customers_email_idx").on(table.email),
+    lastOrderIdx: index("customers_last_order_idx").on(table.merchantId, table.lastOrderAt),
   })
 );
 
@@ -786,6 +803,27 @@ export type VacationSettings = {
   /** Optional visitor-facing message — multilingual */
   message?: LocalizedText | string | null;
   periods?: VacationPeriod[];
+};
+
+export type MerchantSmtpSettings = {
+  enabled?: boolean;
+  host?: string | null;
+  port?: number | null;
+  secure?: boolean;
+  user?: string | null;
+  /** Stored as plain text for SMTP AUTH — protect DB access */
+  password?: string | null;
+  fromEmail?: string | null;
+  fromName?: string | null;
+};
+
+export type MarketingSettings = {
+  reorderReminderEnabled?: boolean;
+  /** Days after last order before sending reminder (default 5) */
+  reorderReminderDays?: number;
+  reorderReminderSubject?: string | null;
+  /** Plain text / simple HTML body. Placeholders: {{name}} {{shopUrl}} {{businessName}} */
+  reorderReminderBody?: string | null;
 };
 
 export const reservations = pgTable(
@@ -1333,6 +1371,58 @@ export const deliveryZonesRelations = relations(deliveryZones, ({ one }) => ({
 export const paymentTerminalsRelations = relations(paymentTerminals, ({ one }) => ({
   merchant: one(merchants, { fields: [paymentTerminals.merchantId], references: [merchants.id] }),
 }));
+
+/** Newsletter / marketing campaigns designed and sent by merchants */
+export const newsletterCampaigns = pgTable(
+  "newsletter_campaigns",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    merchantId: uuid("merchant_id")
+      .notNull()
+      .references(() => merchants.id, { onDelete: "cascade" }),
+    title: varchar("title", { length: 200 }).notNull().default("Newsletter"),
+    subject: varchar("subject", { length: 300 }).notNull(),
+    bodyHtml: text("body_html").notNull().default(""),
+    status: varchar("status", { length: 30 }).notNull().default("draft"), // draft | sending | sent | failed
+    audience: varchar("audience", { length: 30 }).notNull().default("all"), // all | selected
+    recipientCount: integer("recipient_count").default(0),
+    sentCount: integer("sent_count").default(0),
+    failedCount: integer("failed_count").default(0),
+    selectedEmails: json("selected_emails").$type<string[] | null>(),
+    sentAt: timestamp("sent_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    merchantIdx: index("newsletter_campaigns_merchant_idx").on(table.merchantId),
+    statusIdx: index("newsletter_campaigns_status_idx").on(table.merchantId, table.status),
+  })
+);
+
+/** Log of marketing emails (newsletter + reorder reminders) */
+export const marketingEmailLog = pgTable(
+  "marketing_email_log",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    merchantId: uuid("merchant_id")
+      .notNull()
+      .references(() => merchants.id, { onDelete: "cascade" }),
+    campaignId: uuid("campaign_id").references(() => newsletterCampaigns.id, {
+      onDelete: "set null",
+    }),
+    email: varchar("email", { length: 255 }).notNull(),
+    customerId: uuid("customer_id").references(() => customers.id, { onDelete: "set null" }),
+    type: varchar("type", { length: 40 }).notNull(), // newsletter | reorder_reminder
+    status: varchar("status", { length: 30 }).notNull().default("sent"), // sent | failed
+    error: text("error"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    merchantIdx: index("marketing_email_log_merchant_idx").on(table.merchantId),
+    emailIdx: index("marketing_email_log_email_idx").on(table.merchantId, table.email),
+    typeIdx: index("marketing_email_log_type_idx").on(table.merchantId, table.type),
+  })
+);
 
 export const subscriptionPlansRelations = relations(subscriptionPlans, ({ many }) => ({
   payments: many(subscriptionPayments),

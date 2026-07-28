@@ -1604,6 +1604,17 @@ router.post("/:slug/orders", async (req: Request, res: Response) => {
       })
       .returning();
 
+    try {
+      const { MarketingService } = await import("@/services/marketing.service");
+      await MarketingService.touchLastOrder(merchant.id, {
+        customerId,
+        email: emailNorm || null,
+        at: new Date(),
+      });
+    } catch {
+      /* non-fatal */
+    }
+
     for (const line of lineItems) {
       await db.insert(schema.orderItems).values({
         orderId: order.id,

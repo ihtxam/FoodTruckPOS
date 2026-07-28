@@ -16,6 +16,7 @@ import Billing from './Billing';
 import OnlineShop from './OnlineShop';
 import FloorPlan from './FloorPlan';
 import Reservations from './Reservations';
+import Newsletter from './Newsletter';
 import WebPos from './WebPos';
 import api from '@/lib/api';
 import { I18nProvider, useI18n, type Locale } from '@/lib/i18n';
@@ -69,6 +70,7 @@ function MerchantShell() {
     { label: t('categories'), path: '/merchant/categories', icon: '🏷️' },
     { label: t('customers'), path: '/merchant/customers', icon: '👥' },
     { label: t('loyalty'), path: '/merchant/loyalty', icon: '🎁' },
+    { label: t('newsletter'), path: '/merchant/newsletter', icon: '✉️' },
     { label: t('shop'), path: '/merchant/online-shop', icon: '🌐' },
     { label: t('cmsWebsite'), path: '/merchant/website', icon: '✏️' },
     { label: t('floorPlan'), path: '/merchant/floor-plan', icon: '🪑' },
@@ -110,6 +112,7 @@ function MerchantShell() {
             <Route path="categories" element={<Categories />} />
             <Route path="customers" element={<Customers />} />
             <Route path="loyalty" element={<Loyalty />} />
+            <Route path="newsletter" element={<Newsletter />} />
             <Route path="online-shop" element={<OnlineShop />} />
             <Route
               path="website"

@@ -1,25 +1,30 @@
+import nodemailer from "nodemailer";
 import axios from "axios";
 import sgMail from "@sendgrid/mail";
+import type { MerchantSmtpSettings } from "@/db/schema";
 
 export type SendEmailInput = {
   to: string;
   subject: string;
   html: string;
   text?: string;
+  /** Optional merchant override for SMTP / from */
+  merchantId?: string;
 };
 
-type EmailProvider = "brevo" | "sendgrid" | null;
+type EmailProvider = "smtp" | "brevo" | "sendgrid" | null;
 
 type ResolvedEmailConfig = {
   provider: EmailProvider;
   apiKey: string;
   fromEmail: string;
   fromName: string;
-  source: "database" | "env" | "none";
+  source: "merchant_smtp" | "database" | "env" | "none";
+  smtp?: MerchantSmtpSettings | null;
 };
 
 /**
- * Prefer Brevo (DB platform settings → env aliases), fall back to SendGrid.
+ * Prefer merchant SMTP when enabled, then platform Brevo, then env / SendGrid.
  */
 export class EmailService {
   private static envBrevoApiKey() {
@@ -53,7 +58,38 @@ export class EmailService {
     ).trim();
   }
 
-  static async resolveConfig(): Promise<ResolvedEmailConfig> {
+  static async resolveConfig(merchantId?: string | null): Promise<ResolvedEmailConfig> {
+    if (merchantId) {
+      try {
+        const { getDb, schema } = await import("@/db");
+        const { eq } = await import("drizzle-orm");
+        const db = getDb();
+        const merchant = await db.query.merchants.findFirst({
+          where: eq(schema.merchants.id, merchantId),
+          columns: { emailSmtpSettings: true, name: true },
+        });
+        const smtp = merchant?.emailSmtpSettings || null;
+        if (
+          smtp?.enabled &&
+          smtp.host &&
+          smtp.fromEmail &&
+          String(smtp.host).trim() &&
+          String(smtp.fromEmail).trim()
+        ) {
+          return {
+            provider: "smtp",
+            apiKey: "",
+            fromEmail: String(smtp.fromEmail).trim(),
+            fromName: String(smtp.fromName || merchant?.name || "Shop").trim(),
+            source: "merchant_smtp",
+            smtp,
+          };
+        }
+      } catch {
+        /* continue to platform */
+      }
+    }
+
     let dbApiKey = "";
     let dbFromEmail = "";
     let dbFromName = "";
@@ -65,7 +101,7 @@ export class EmailService {
       dbFromEmail = (s.fromEmail || "").trim();
       dbFromName = (s.fromName || "").trim();
     } catch {
-      /* platform settings table may be unavailable in some contexts */
+      /* platform settings table may be unavailable */
     }
 
     const apiKey = dbApiKey || this.envBrevoApiKey();
@@ -94,13 +130,13 @@ export class EmailService {
     return { provider: null, apiKey: "", fromEmail, fromName, source: "none" };
   }
 
-  static async isConfigured() {
-    const cfg = await this.resolveConfig();
+  static async isConfigured(merchantId?: string | null) {
+    const cfg = await this.resolveConfig(merchantId);
     return cfg.provider !== null;
   }
 
-  static async status() {
-    const cfg = await this.resolveConfig();
+  static async status(merchantId?: string | null) {
+    const cfg = await this.resolveConfig(merchantId);
     let apiKeyMasked = "";
     let apiKeySet = false;
     try {
@@ -122,15 +158,21 @@ export class EmailService {
       apiKeyMasked,
       brevoKeySet: cfg.provider === "brevo" || !!this.envBrevoApiKey() || apiKeySet,
       sendgridKeySet: !!process.env.SENDGRID_API_KEY,
+      smtpEnabled: cfg.provider === "smtp",
     };
   }
 
   static async send(input: SendEmailInput) {
-    const cfg = await this.resolveConfig();
+    const cfg = await this.resolveConfig(input.merchantId);
     if (!cfg.provider) {
       throw new Error(
-        "Email is not configured. Add Brevo in Superadmin → Settings, or set BREVO_API_KEY + BREVO_FROM_EMAIL."
+        "Email is not configured. Add SMTP in Settings → Email, or platform Brevo (BREVO_API_KEY)."
       );
+    }
+
+    if (cfg.provider === "smtp") {
+      await this.sendViaSmtp(cfg, input);
+      return;
     }
 
     if (cfg.provider === "brevo") {
@@ -142,6 +184,31 @@ export class EmailService {
     await sgMail.send({
       to: input.to,
       from: cfg.fromEmail,
+      subject: input.subject,
+      html: input.html,
+      text: input.text || input.html.replace(/<[^>]+>/g, " "),
+    });
+  }
+
+  private static async sendViaSmtp(cfg: ResolvedEmailConfig, input: SendEmailInput) {
+    const smtp = cfg.smtp || {};
+    const port = Number(smtp.port) || (smtp.secure ? 465 : 587);
+    const transporter = nodemailer.createTransport({
+      host: String(smtp.host || "").trim(),
+      port,
+      secure: !!smtp.secure || port === 465,
+      auth:
+        smtp.user || smtp.password
+          ? {
+              user: String(smtp.user || "").trim(),
+              pass: String(smtp.password || ""),
+            }
+          : undefined,
+    });
+
+    await transporter.sendMail({
+      from: `"${cfg.fromName || "Shop"}" <${cfg.fromEmail}>`,
+      to: input.to,
       subject: input.subject,
       html: input.html,
       text: input.text || input.html.replace(/<[^>]+>/g, " "),

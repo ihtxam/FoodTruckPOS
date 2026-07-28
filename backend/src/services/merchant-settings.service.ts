@@ -1,8 +1,9 @@
 import { getDb, schema } from "@/db";
-import type { VacationSettings } from "@/db/schema";
+import type { VacationSettings, MerchantSmtpSettings, MarketingSettings } from "@/db/schema";
 import { eq, and, or } from "drizzle-orm";
 import { normalizeCustomDomain } from "@/services/cms.service";
 import { normalizeVacationSettings } from "@/lib/vacation";
+import { MarketingService } from "@/services/marketing.service";
 
 function maskSecret(value?: string | null): string | null {
   if (!value) return null;
@@ -88,6 +89,8 @@ export class MerchantSettingsService {
       deliveryEtaMinutes: merchant.deliveryEtaMinutes,
       deliveryMenuMarkup: merchant.deliveryMenuMarkup ?? "0",
       vacationSettings: normalizeVacationSettings(merchant.vacationSettings),
+      emailSmtpSettings: MarketingService.getSmtpPublic(merchant.emailSmtpSettings),
+      marketingSettings: MarketingService.normalizeMarketing(merchant.marketingSettings),
       shopPathUrl: merchant.slug ? `https://${shopHost}/${merchant.slug}` : null,
       shopSubdomainUrl: merchant.subdomain ? `https://${merchant.subdomain}.${apex}` : null,
       shopCustomDomainUrl: merchant.customDomain ? `https://${merchant.customDomain}` : null,
@@ -139,6 +142,8 @@ export class MerchantSettingsService {
       deliveryEtaMinutes?: number;
       deliveryMenuMarkup?: number;
       vacationSettings?: VacationSettings | null;
+      emailSmtpSettings?: MerchantSmtpSettings | null;
+      marketingSettings?: MarketingSettings | null;
       adyenMerchantAccount?: string;
       adyenApiKey?: string;
       adyenClientId?: string;
@@ -249,6 +254,21 @@ export class MerchantSettingsService {
     }
     if (updates.vacationSettings !== undefined) {
       patch.vacationSettings = normalizeVacationSettings(updates.vacationSettings);
+    }
+    if (updates.emailSmtpSettings !== undefined) {
+      const next = MarketingService.normalizeSmtp(updates.emailSmtpSettings);
+      if (!next.password) {
+        const current = await db.query.merchants.findFirst({
+          where: eq(schema.merchants.id, merchantId),
+          columns: { emailSmtpSettings: true },
+        });
+        const prev = MarketingService.normalizeSmtp(current?.emailSmtpSettings || null);
+        if (prev.password) next.password = prev.password;
+      }
+      patch.emailSmtpSettings = next;
+    }
+    if (updates.marketingSettings !== undefined) {
+      patch.marketingSettings = MarketingService.normalizeMarketing(updates.marketingSettings);
     }
 
     // Auto-create slug when enabling shop without one

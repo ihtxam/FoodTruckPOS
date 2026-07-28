@@ -10,11 +10,24 @@ import ShopNotAcceptingBanner from '@/components/shop/ShopNotAcceptingBanner';
 
 type Slot = { time: string; available: boolean; remainingCovers: number };
 
-function ymdLocal(d: Date) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+/** Calendar date YYYY-MM-DD in Europe/Zurich (matches reservation backend). */
+function ymdZurich(d: Date = new Date()) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Zurich',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(d);
+}
+
+/** Current HH:mm in Europe/Zurich */
+function hmZurich(d: Date = new Date()) {
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Zurich',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(d);
 }
 
 export default function ReservationsPage() {
@@ -27,7 +40,7 @@ export default function ReservationsPage() {
   const [error, setError] = useState<string | null>(null);
   const [config, setConfig] = useState<any>(null);
   const [partySize, setPartySize] = useState(2);
-  const [date, setDate] = useState(() => ymdLocal(new Date()));
+  const [date, setDate] = useState(() => ymdZurich());
   const [slots, setSlots] = useState<Slot[]>([]);
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [time, setTime] = useState('');
@@ -89,7 +102,18 @@ export default function ReservationsPage() {
           params: { date, partySize },
         });
         if (cancelled) return;
-        setSlots(res.data.slots || []);
+        setSlots(
+          (res.data.slots || []).filter((s: Slot) => {
+            if (date !== ymdZurich()) return true;
+            // Hide past times for today (Zurich), even if API lag/clock skew
+            const leadH = Number(config?.settings?.minHoursBefore) || 0;
+            const nowHm = hmZurich();
+            const [nh, nm] = nowHm.split(':').map(Number);
+            const nowMins = nh * 60 + nm + Math.max(0, leadH) * 60;
+            const [sh, sm] = String(s.time || '00:00').split(':').map(Number);
+            return sh * 60 + sm > nowMins;
+          })
+        );
       } catch (e: any) {
         if (!cancelled) {
           setSlots([]);
@@ -106,9 +130,9 @@ export default function ReservationsPage() {
 
   const maxDate = useMemo(() => {
     const days = Number(config?.settings?.maxDaysAhead) || 30;
-    const d = new Date();
-    d.setDate(d.getDate() + days);
-    return ymdLocal(d);
+    const [y, m, d] = ymdZurich().split('-').map(Number);
+    const dt = new Date(Date.UTC(y, m - 1, d + days));
+    return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(dt.getUTCDate()).padStart(2, '0')}`;
   }, [config]);
 
   const minParty = Number(config?.settings?.minPartySize) || 1;
@@ -123,8 +147,7 @@ export default function ReservationsPage() {
   const dateOptions = useMemo(() => {
     const days = Math.min(Math.max(Number(config?.settings?.maxDaysAhead) || 30, 1), 60);
     const loc = locale === 'fr' || locale === 'de' ? locale : 'en';
-    const start = new Date();
-    start.setHours(12, 0, 0, 0);
+    const [y0, m0, d0] = ymdZurich().split('-').map(Number);
     const out: Array<{
       value: string;
       weekday: string;
@@ -133,13 +156,15 @@ export default function ReservationsPage() {
       isToday: boolean;
     }> = [];
     for (let i = 0; i < days; i += 1) {
-      const d = new Date(start);
-      d.setDate(start.getDate() + i);
+      const dt = new Date(Date.UTC(y0, m0 - 1, d0 + i, 12, 0, 0));
+      const value = `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(dt.getUTCDate()).padStart(2, '0')}`;
+      // Display labels via Zurich-noon Instant
+      const labelDate = new Date(`${value}T12:00:00+02:00`);
       out.push({
-        value: ymdLocal(d),
-        weekday: d.toLocaleDateString(loc, { weekday: 'short' }),
-        dayNum: String(d.getDate()),
-        month: d.toLocaleDateString(loc, { month: 'short' }),
+        value,
+        weekday: labelDate.toLocaleDateString(loc, { weekday: 'short' }),
+        dayNum: String(dt.getUTCDate()),
+        month: labelDate.toLocaleDateString(loc, { month: 'short' }),
         isToday: i === 0,
       });
     }
@@ -387,7 +412,7 @@ export default function ReservationsPage() {
                   <input
                     type="date"
                     className="border border-stone-300 px-3 py-2 w-full max-w-[11rem] text-sm text-stone-800"
-                    min={ymdLocal(new Date())}
+                    min={ymdZurich()}
                     max={maxDate}
                     value={date}
                     onChange={(e) => {
