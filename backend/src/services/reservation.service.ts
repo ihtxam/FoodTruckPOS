@@ -15,11 +15,15 @@ import { FloorPlanService } from "@/services/floor-plan.service";
 const DAY_KEYS: DayKey[] = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 
 export const DEFAULT_RESERVATION_SETTINGS: Required<
-  Omit<ReservationSettings, "maxCoversPerSlot" | "policiesText" | "slotDiscounts">
+  Omit<
+    ReservationSettings,
+    "maxCoversPerSlot" | "policiesText" | "slotDiscounts" | "lastDailySummaryDate"
+  >
 > & {
   maxCoversPerSlot: number | null;
   policiesText: string | null;
   slotDiscounts: NonNullable<ReservationSettings["slotDiscounts"]>;
+  lastDailySummaryDate: string | null;
 } = {
   dineInHoursMode: "same_as_takeaway",
   slotIntervalMinutes: 30,
@@ -35,9 +39,12 @@ export const DEFAULT_RESERVATION_SETTINGS: Required<
   reminderEnabled: true,
   reminderHoursBefore: 24,
   sendReminderEmail: true,
+  notifyAdminEmail: true,
+  dailySummaryEnabled: true,
   maxCoversPerSlot: null,
   policiesText: null,
   slotDiscounts: [],
+  lastDailySummaryDate: null,
 };
 
 const ACTIVE_STATUSES: ReservationStatus[] = ["pending", "confirmed", "seated"];
@@ -74,6 +81,9 @@ export function normalizeReservationSettings(
     reminderEnabled: s.reminderEnabled !== false,
     reminderHoursBefore: clampInt(s.reminderHoursBefore, 1, 168, 24),
     sendReminderEmail: s.sendReminderEmail !== false,
+    notifyAdminEmail: s.notifyAdminEmail !== false,
+    dailySummaryEnabled: s.dailySummaryEnabled !== false,
+    lastDailySummaryDate: s.lastDailySummaryDate?.trim() || null,
     slotDiscounts: Array.isArray(s.slotDiscounts)
       ? s.slotDiscounts
           .filter((d) => d && Number(d.percentOff) > 0)
@@ -256,6 +266,11 @@ export class ReservationService {
     const nextSettings = resolveSettings({
       ...current,
       ...(input.settings || {}),
+      // Keep internal daily-summary cursor unless explicitly provided
+      lastDailySummaryDate:
+        input.settings && Object.prototype.hasOwnProperty.call(input.settings, "lastDailySummaryDate")
+          ? input.settings.lastDailySummaryDate ?? null
+          : current.lastDailySummaryDate,
     });
 
     const storeHours = {
@@ -528,6 +543,8 @@ export class ReservationService {
 
     if (settings.sendConfirmationEmail && email) {
       await this.sendLifecycleEmail(merchant, row, status === "confirmed" ? "confirmed" : "received");
+    } else {
+      await this.sendAdminNotifyEmail(merchant, row, status === "confirmed" ? "confirmed" : "received");
     }
 
     return row;
@@ -716,6 +733,8 @@ export class ReservationService {
     const settings = resolveSettings(merchant.reservationSettings);
     if (emailKind && settings.sendStatusEmails && updated.guestEmail) {
       await this.sendLifecycleEmail(merchant, updated, emailKind);
+    } else if (emailKind) {
+      await this.sendAdminNotifyEmail(merchant, updated, emailKind);
     }
 
     return updated;
@@ -725,14 +744,19 @@ export class ReservationService {
     merchant: {
       id?: string;
       name?: string | null;
+      email?: string | null;
       address?: string | null;
       city?: string | null;
       phone?: string | null;
+      reservationSettings?: ReservationSettings | null;
     },
     reservation: typeof schema.reservations.$inferSelect,
     kind: "received" | "confirmed" | "rejected" | "cancelled" | "seated" | "reminder"
   ) {
-    if (!reservation.guestEmail) return;
+    if (!reservation.guestEmail) {
+      await this.sendAdminNotifyEmail(merchant, reservation, kind);
+      return;
+    }
     if (!(await EmailService.isConfigured(merchant.id))) return;
 
     const when = new Date(reservation.reservedAt).toLocaleString("en-CH", {
@@ -796,7 +820,73 @@ export class ReservationService {
           .where(eq(schema.reservations.id, reservation.id));
       }
     } catch (err) {
-      console.error("[reservations] email failed", err);
+      console.error("[reservations] guest email failed", err);
+    }
+
+    if (kind !== "reminder") {
+      await this.sendAdminNotifyEmail(merchant, reservation, kind);
+    }
+  }
+
+  /** Notify the restaurant (merchant account email) about a booking event. */
+  static async sendAdminNotifyEmail(
+    merchant: {
+      id?: string;
+      name?: string | null;
+      email?: string | null;
+      reservationSettings?: ReservationSettings | null;
+    },
+    reservation: typeof schema.reservations.$inferSelect,
+    kind: "received" | "confirmed" | "rejected" | "cancelled" | "seated" | "reminder"
+  ) {
+    const settings = resolveSettings(merchant.reservationSettings);
+    if (settings.notifyAdminEmail === false) return;
+    const to = String(merchant.email || "").trim();
+    if (!to) return;
+    if (!(await EmailService.isConfigured(merchant.id))) return;
+
+    const when = new Date(reservation.reservedAt).toLocaleString("en-CH", {
+      timeZone: MERCHANT_TZ,
+      dateStyle: "full",
+      timeStyle: "short",
+    });
+    const shop = merchant.name || "Restaurant";
+    const subjects: Record<typeof kind, string> = {
+      received: `New reservation request — ${reservation.code}`,
+      confirmed: `Reservation confirmed — ${reservation.code}`,
+      rejected: `Reservation rejected — ${reservation.code}`,
+      cancelled: `Reservation cancelled — ${reservation.code}`,
+      seated: `Guest seated — ${reservation.code}`,
+      reminder: `Reservation reminder — ${reservation.code}`,
+    };
+    const html = `
+      <div style="font-family:system-ui,sans-serif;max-width:560px;margin:0 auto;color:#1c1917">
+        <h1 style="font-size:20px">${subjects[kind]}</h1>
+        <p style="font-size:14px;color:#57534e">${shop} — reservation update</p>
+        <table style="width:100%;border-collapse:collapse;margin:16px 0;font-size:14px">
+          <tr><td style="padding:6px 0;color:#78716c">Status</td><td style="padding:6px 0;text-align:right"><strong>${kind}</strong></td></tr>
+          <tr><td style="padding:6px 0;color:#78716c">Code</td><td style="padding:6px 0;text-align:right"><strong>${reservation.code}</strong></td></tr>
+          <tr><td style="padding:6px 0;color:#78716c">When</td><td style="padding:6px 0;text-align:right">${when}</td></tr>
+          <tr><td style="padding:6px 0;color:#78716c">Guests</td><td style="padding:6px 0;text-align:right">${reservation.partySize}</td></tr>
+          <tr><td style="padding:6px 0;color:#78716c">Name</td><td style="padding:6px 0;text-align:right">${reservation.guestName}</td></tr>
+          ${reservation.guestPhone ? `<tr><td style="padding:6px 0;color:#78716c">Phone</td><td style="padding:6px 0;text-align:right">${reservation.guestPhone}</td></tr>` : ""}
+          ${reservation.guestEmail ? `<tr><td style="padding:6px 0;color:#78716c">Email</td><td style="padding:6px 0;text-align:right">${reservation.guestEmail}</td></tr>` : ""}
+          ${reservation.tableLabel ? `<tr><td style="padding:6px 0;color:#78716c">Table</td><td style="padding:6px 0;text-align:right">${reservation.tableLabel}</td></tr>` : ""}
+          ${reservation.notes ? `<tr><td style="padding:6px 0;color:#78716c">Notes</td><td style="padding:6px 0;text-align:right">${reservation.notes}</td></tr>` : ""}
+        </table>
+      </div>
+    `;
+
+    try {
+      await EmailService.send({
+        to,
+        subject: subjects[kind],
+        html,
+        text: `${subjects[kind]}\n${reservation.guestName} · ${reservation.partySize} guests · ${when}`,
+        merchantId: merchant.id,
+      });
+    } catch (err) {
+      console.error("[reservations] admin email failed", err);
     }
   }
 
@@ -808,6 +898,7 @@ export class ReservationService {
       columns: {
         id: true,
         name: true,
+        email: true,
         address: true,
         city: true,
         phone: true,
@@ -836,6 +927,160 @@ export class ReservationService {
         if (!r.guestEmail) continue;
         await this.sendLifecycleEmail(merchant, r, "reminder");
         sent += 1;
+      }
+    }
+    return { sent };
+  }
+
+  /**
+   * After 10:00 Europe/Zurich each day, email the merchant a lunch/dinner
+   * summary of today's reservations (once per calendar day).
+   */
+  static async processDailySummaries() {
+    const db = getDb();
+    const now = new Date();
+    const parts = zurichParts(now);
+    if (parts.hour < 10) return { sent: 0 };
+
+    const today = `${parts.y}-${pad2(parts.m)}-${pad2(parts.d)}`;
+    const dayStart = zurichLocalToDate(today, "00:00");
+    const tomorrow = addDaysYmd(today, 1);
+    const dayEnd = zurichLocalToDate(tomorrow, "00:00");
+
+    const merchants = await db.query.merchants.findMany({
+      where: eq(schema.merchants.reservationsEnabled, true),
+      columns: {
+        id: true,
+        name: true,
+        email: true,
+        reservationSettings: true,
+        emailSmtpSettings: true,
+      },
+    });
+
+    let sent = 0;
+    for (const merchant of merchants) {
+      const settings = resolveSettings(merchant.reservationSettings);
+      if (settings.dailySummaryEnabled === false) continue;
+      if (settings.lastDailySummaryDate === today) continue;
+      const to = String(merchant.email || "").trim();
+      if (!to) continue;
+      if (!(await EmailService.isConfigured(merchant.id))) continue;
+
+      const rows = await db.query.reservations.findMany({
+        where: and(
+          eq(schema.reservations.merchantId, merchant.id),
+          inArray(schema.reservations.status, ["pending", "confirmed", "seated"]),
+          gte(schema.reservations.reservedAt, dayStart),
+          lte(schema.reservations.reservedAt, new Date(dayEnd.getTime() - 1))
+        ),
+        orderBy: [asc(schema.reservations.reservedAt)],
+      });
+
+      const lunch: typeof rows = [];
+      const dinner: typeof rows = [];
+      for (const r of rows) {
+        const hm = zurichParts(new Date(r.reservedAt));
+        if (hm.hour < 15) lunch.push(r);
+        else dinner.push(r);
+      }
+
+      const rowHtml = (list: typeof rows) => {
+        if (!list.length) {
+          return `<p style="color:#a8a29e;font-size:14px;margin:8px 0">None</p>`;
+        }
+        return `
+          <table style="width:100%;border-collapse:collapse;font-size:14px;margin:8px 0 16px">
+            <thead>
+              <tr style="text-align:left;color:#78716c;border-bottom:1px solid #e7e5e4">
+                <th style="padding:6px 4px">Time</th>
+                <th style="padding:6px 4px">Name</th>
+                <th style="padding:6px 4px">Guests</th>
+                <th style="padding:6px 4px">Status</th>
+                <th style="padding:6px 4px">Table</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${list
+                .map((r) => {
+                  const time = formatZurichHm(new Date(r.reservedAt));
+                  return `<tr style="border-bottom:1px solid #f5f5f4">
+                    <td style="padding:6px 4px"><strong>${time}</strong></td>
+                    <td style="padding:6px 4px">${r.guestName}</td>
+                    <td style="padding:6px 4px">${r.partySize}</td>
+                    <td style="padding:6px 4px">${r.status}</td>
+                    <td style="padding:6px 4px">${r.tableLabel || "—"}</td>
+                  </tr>`;
+                })
+                .join("")}
+            </tbody>
+          </table>`;
+      };
+
+      const lunchCovers = lunch.reduce((s, r) => s + Number(r.partySize || 0), 0);
+      const dinnerCovers = dinner.reduce((s, r) => s + Number(r.partySize || 0), 0);
+      const shop = merchant.name || "Restaurant";
+      const dateLabel = new Date(dayStart).toLocaleDateString("en-CH", {
+        timeZone: MERCHANT_TZ,
+        weekday: "long",
+        day: "2-digit",
+        month: "long",
+        year: "numeric",
+      });
+      const subject = `Today's reservations — ${shop} (${dateLabel})`;
+      const html = `
+        <div style="font-family:system-ui,sans-serif;max-width:640px;margin:0 auto;color:#1c1917">
+          <h1 style="font-size:20px;margin-bottom:4px">Today's reservations</h1>
+          <p style="color:#78716c;font-size:14px;margin-top:0">${shop} · ${dateLabel}</p>
+          <p style="font-size:14px">
+            <strong>${rows.length}</strong> booking${rows.length === 1 ? "" : "s"} ·
+            <strong>${lunchCovers + dinnerCovers}</strong> covers
+          </p>
+          <h2 style="font-size:16px;margin:20px 0 4px">Lunch <span style="color:#78716c;font-weight:500">(${lunch.length} · ${lunchCovers} covers)</span></h2>
+          ${rowHtml(lunch)}
+          <h2 style="font-size:16px;margin:20px 0 4px">Dinner <span style="color:#78716c;font-weight:500">(${dinner.length} · ${dinnerCovers} covers)</span></h2>
+          ${rowHtml(dinner)}
+        </div>
+      `;
+      const text = [
+        subject,
+        `Total: ${rows.length} bookings, ${lunchCovers + dinnerCovers} covers`,
+        "",
+        `LUNCH (${lunch.length})`,
+        ...lunch.map(
+          (r) =>
+            `${formatZurichHm(new Date(r.reservedAt))} · ${r.guestName} · ${r.partySize} · ${r.status}`
+        ),
+        "",
+        `DINNER (${dinner.length})`,
+        ...dinner.map(
+          (r) =>
+            `${formatZurichHm(new Date(r.reservedAt))} · ${r.guestName} · ${r.partySize} · ${r.status}`
+        ),
+      ].join("\n");
+
+      try {
+        await EmailService.send({
+          to,
+          subject,
+          html,
+          text,
+          merchantId: merchant.id,
+        });
+        const nextSettings = {
+          ...settings,
+          lastDailySummaryDate: today,
+        };
+        await db
+          .update(schema.merchants)
+          .set({
+            reservationSettings: nextSettings,
+            updatedAt: new Date(),
+          })
+          .where(eq(schema.merchants.id, merchant.id));
+        sent += 1;
+      } catch (err) {
+        console.error("[reservations] daily summary failed", merchant.id, err);
       }
     }
     return { sent };

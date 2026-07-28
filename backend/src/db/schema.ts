@@ -792,6 +792,12 @@ export type ReservationSettings = {
     timeEnd?: string | null;
     enabled?: boolean;
   }>;
+  /** Email merchant account on new / updated reservations (default true) */
+  notifyAdminEmail?: boolean;
+  /** Daily 10:00 Europe/Zurich summary of today's bookings (default true) */
+  dailySummaryEnabled?: boolean;
+  /** Last YYYY-MM-DD (Zurich) a daily summary was sent */
+  lastDailySummaryDate?: string | null;
 };
 
 export type ReservationStatus =
