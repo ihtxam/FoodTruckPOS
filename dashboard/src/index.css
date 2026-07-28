@@ -137,4 +137,16 @@ button {
   .muted {
     color: var(--text-muted);
   }
+
+  .webpos-shell {
+    overscroll-behavior: none;
+  }
+
+  .webpos-cat-scroll {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .webpos-cat-scroll::-webkit-scrollbar {
+    display: none;
+  }
 }

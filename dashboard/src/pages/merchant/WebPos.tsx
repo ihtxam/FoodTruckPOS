@@ -1,5 +1,16 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
+import {
+  Banknote,
+  CreditCard,
+  MoreHorizontal,
+  PanelLeft,
+  Printer,
+  RefreshCw,
+  Search,
+  ShoppingBag,
+  X,
+} from 'lucide-react';
 import api from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
 import { roundMoney2, roundTo005, roundingAdjustment } from '@/lib/money';
@@ -122,6 +133,23 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
   const [lastReceiptUrl, setLastReceiptUrl] = useState<string>('');
   const [pendingProduct, setPendingProduct] = useState<ShopProductForModifiers | null>(null);
   const [pendingCombo, setPendingCombo] = useState<ShopComboProduct | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [mobileCartOpen, setMobileCartOpen] = useState(false);
+  const [recentOpen, setRecentOpen] = useState(false);
+  const settingsRef = useRef<HTMLDivElement>(null);
+
+  const cartCount = useMemo(() => cart.reduce((n, l) => n + l.quantity, 0), [cart]);
+
+  useEffect(() => {
+    if (!settingsOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      if (settingsRef.current && !settingsRef.current.contains(e.target as Node)) {
+        setSettingsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [settingsOpen]);
 
   const showPanelMenus = useCallback(() => {
     window.dispatchEvent(new CustomEvent('webpos:show-panel'));
@@ -134,10 +162,24 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      // Close product modal first, then restore merchant panel chrome
       if (pendingProduct) {
         e.preventDefault();
         setPendingProduct(null);
+        return;
+      }
+      if (pendingCombo) {
+        e.preventDefault();
+        setPendingCombo(null);
+        return;
+      }
+      if (settingsOpen) {
+        e.preventDefault();
+        setSettingsOpen(false);
+        return;
+      }
+      if (mobileCartOpen) {
+        e.preventDefault();
+        setMobileCartOpen(false);
         return;
       }
       if (appMode) {
@@ -147,7 +189,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [appMode, pendingProduct, showPanelMenus]);
+  }, [appMode, pendingProduct, pendingCombo, settingsOpen, mobileCartOpen, showPanelMenus]);
 
   const taxRate = useMemo(() => {
     if (!merchant) return 8.1;
@@ -432,86 +474,374 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
   };
 
   if (loading) {
-    return <div className="text-center py-16 text-slate-500">Loading WebPOS…</div>;
+    return (
+      <div className="flex h-full items-center justify-center text-sm text-[var(--text-muted)]">
+        Loading WebPOS…
+      </div>
+    );
   }
+
+  const renderCartPanel = (opts?: { showClose?: boolean }) => (
+    <div className="flex h-full min-h-0 flex-col bg-[var(--bg-elevated)]">
+      <div className="shrink-0 border-b border-[var(--border)] px-3 pt-3 pb-2 space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <p className="text-sm font-semibold tracking-tight">Current order</p>
+            <p className="text-[11px] text-[var(--text-muted)]">
+              {cartCount === 0 ? 'No items yet' : `${cartCount} item${cartCount === 1 ? '' : 's'}`}
+            </p>
+          </div>
+          {opts?.showClose ? (
+            <button
+              type="button"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--border)]"
+              aria-label="Close cart"
+              onClick={() => setMobileCartOpen(false)}
+            >
+              <X size={18} />
+            </button>
+          ) : null}
+        </div>
+        <div className="grid grid-cols-3 gap-1 rounded-xl bg-[var(--bg-muted)] p-1">
+          {CHANNELS.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => setChannel(c.id)}
+              className={`rounded-lg py-2 text-xs font-semibold transition ${
+                channel === c.id
+                  ? 'bg-[var(--bg-elevated)] text-[var(--text)] shadow-sm'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text)]'
+              }`}
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-auto px-3 py-2 space-y-2">
+        {cart.length === 0 ? (
+          <div className="flex h-full min-h-[8rem] flex-col items-center justify-center gap-2 text-center px-4">
+            <ShoppingBag className="text-[var(--text-muted)] opacity-50" size={28} />
+            <p className="text-sm text-[var(--text-muted)]">Tap products to add them</p>
+          </div>
+        ) : (
+          cart.map((l) => (
+            <div
+              key={l.lineId}
+              className="rounded-xl border border-[var(--border)] bg-[var(--bg)]/40 px-2.5 py-2"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium leading-snug">{l.name}</p>
+                  {!!lineExtrasLabel(l) && (
+                    <p className="mt-0.5 text-[11px] text-[var(--text-muted)] leading-snug">
+                      {lineExtrasLabel(l)}
+                    </p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  className="shrink-0 rounded-md p-1 text-[var(--text-muted)] hover:bg-[var(--bg-muted)] hover:text-[var(--danger)]"
+                  aria-label="Remove item"
+                  onClick={() => setQty(l.lineId, 0)}
+                >
+                  <X size={14} />
+                </button>
+              </div>
+              <div className="mt-2 flex items-center justify-between gap-2">
+                <div className="inline-flex items-center rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)]">
+                  <button
+                    type="button"
+                    className="flex h-9 w-9 items-center justify-center text-base font-semibold"
+                    onClick={() => setQty(l.lineId, l.quantity - 1)}
+                  >
+                    −
+                  </button>
+                  <span className="w-8 text-center text-sm font-bold tabular-nums">{l.quantity}</span>
+                  <button
+                    type="button"
+                    className="flex h-9 w-9 items-center justify-center text-base font-semibold"
+                    onClick={() => setQty(l.lineId, l.quantity + 1)}
+                  >
+                    +
+                  </button>
+                </div>
+                <p className="text-sm font-semibold tabular-nums">{money(l.lineTotal)}</p>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      <div className="shrink-0 border-t border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-3 space-y-2.5">
+        <div className="space-y-1 text-sm">
+          <div className="flex justify-between text-[var(--text-muted)]">
+            <span>Subtotal</span>
+            <span className="tabular-nums">{money(totals.subtotal)}</span>
+          </div>
+          <div className="flex justify-between text-[var(--text-muted)]">
+            <span>Tax ({taxRate}%)</span>
+            <span className="tabular-nums">{money(totals.tax)}</span>
+          </div>
+          {totals.rounding !== 0 && (
+            <div className="flex justify-between text-[var(--text-muted)]">
+              <span>Rounding</span>
+              <span className="tabular-nums">
+                {totals.rounding > 0 ? '+' : ''}
+                {money(totals.rounding)}
+              </span>
+            </div>
+          )}
+          <div className="flex items-end justify-between pt-1">
+            <span className="text-base font-semibold">Total</span>
+            <span className="text-2xl font-bold tracking-tight tabular-nums">{money(totals.total)}</span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => setPaymentMethod('cash')}
+            className={`inline-flex items-center justify-center gap-1.5 rounded-xl border py-2.5 text-sm font-semibold transition ${
+              paymentMethod === 'cash'
+                ? 'border-stone-900 bg-stone-900 text-white'
+                : 'border-[var(--border)] bg-[var(--bg)] text-[var(--text)]'
+            }`}
+          >
+            <Banknote size={16} />
+            Cash
+          </button>
+          <button
+            type="button"
+            onClick={() => setPaymentMethod('card')}
+            className={`inline-flex items-center justify-center gap-1.5 rounded-xl border py-2.5 text-sm font-semibold transition ${
+              paymentMethod === 'card'
+                ? 'border-stone-900 bg-stone-900 text-white'
+                : 'border-[var(--border)] bg-[var(--bg)] text-[var(--text)]'
+            }`}
+          >
+            <CreditCard size={16} />
+            Card
+          </button>
+        </div>
+
+        <button
+          type="button"
+          disabled={!cart.length || busy}
+          onClick={() => void completeSale()}
+          className="w-full rounded-xl bg-teal-700 py-3.5 text-base font-semibold text-white shadow-sm transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {busy ? 'Processing…' : cart.length ? `Charge ${money(totals.total)}` : 'Add items to charge'}
+        </button>
+
+        {lastReceipt ? (
+          <button
+            type="button"
+            className="w-full inline-flex items-center justify-center gap-1.5 rounded-xl border border-[var(--border)] py-2 text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--bg-muted)]"
+            onClick={() =>
+              void printReceipt(lastReceipt, lastReceiptUrl || undefined).catch((e) =>
+                toast.error(e.message)
+              )
+            }
+          >
+            <Printer size={15} />
+            Re-print last receipt
+          </button>
+        ) : null}
+
+        {sales.length > 0 ? (
+          <div className="border-t border-[var(--border)] pt-2">
+            <button
+              type="button"
+              className="flex w-full items-center justify-between text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]"
+              onClick={() => setRecentOpen((v) => !v)}
+            >
+              Recent sales
+              <span>{recentOpen ? '−' : '+'}</span>
+            </button>
+            {recentOpen ? (
+              <div className="mt-1.5 max-h-28 overflow-auto space-y-1">
+                {sales.slice(0, 8).map((s) => (
+                  <div key={s.id} className="flex justify-between text-xs">
+                    <span className="text-[var(--text-muted)]">
+                      {new Date(s.completedAt).toLocaleTimeString([], {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </span>
+                    <span className="font-medium tabular-nums">
+                      {money(s.total)} · {s.paymentMethod}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
 
   return (
     <div
-      className={`${
+      className={`webpos-shell ${
         appMode ? 'h-dvh' : '-m-3 sm:-m-4 h-[calc(100dvh-4rem)]'
-      } flex flex-col bg-slate-100`}
+      } flex flex-col bg-[var(--bg)]`}
     >
-      <div className="flex items-center justify-between gap-3 px-4 py-3 bg-white border-b border-slate-200 shrink-0">
-        <div>
-          <h1 className="text-xl font-bold text-slate-900">WebPOS</h1>
-          <p className="text-xs text-slate-500">
-            {merchant?.name || 'Store'} · Swiss 0.05 rounding ·{' '}
-            {agentOk ? (
-              <span className="text-emerald-600 font-semibold">Print agent online</span>
-            ) : (
-              <span className="text-amber-600 font-semibold">Print agent offline (browser print fallback)</span>
-            )}
-            {appMode ? (
-              <>
-                {' '}
-                · <span className="text-slate-400">{t('webPosEscHint')}</span>
-              </>
-            ) : null}
+      {/* Compact top bar — selling chrome only */}
+      <header className="relative z-20 flex shrink-0 items-center gap-2 border-b border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 sm:px-4">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <h1 className="truncate text-base font-bold tracking-tight sm:text-lg">WebPOS</h1>
+            <span
+              className={`hidden sm:inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                agentOk
+                  ? 'bg-emerald-50 text-emerald-700'
+                  : 'bg-amber-50 text-amber-700'
+              }`}
+            >
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${agentOk ? 'bg-emerald-500' : 'bg-amber-500'}`}
+              />
+              {agentOk ? 'Printer ready' : 'Browser print'}
+            </span>
+          </div>
+          <p className="truncate text-[11px] text-[var(--text-muted)]">
+            {merchant?.name || 'Store'}
+            {appMode ? ` · ${t('webPosEscHint')}` : ''}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <select
-            className="input py-1.5 text-sm w-auto min-w-[180px]"
-            value={printerName}
-            onChange={(e) => setPrinterName(e.target.value)}
-            disabled={!agentOk}
+
+        <div className="flex shrink-0 items-center gap-1.5">
+          <button
+            type="button"
+            className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-[var(--border)] px-2.5 text-sm font-medium lg:hidden"
+            onClick={() => setMobileCartOpen(true)}
           >
-            <option value="">Default printer</option>
-            {printers.map((p) => (
-              <option key={p.name} value={p.name}>
-                {p.name}
-                {p.isDefault ? ' (default)' : ''}
-              </option>
-            ))}
-          </select>
-          <label className="flex items-center gap-1.5 text-xs text-slate-600">
-            <input type="checkbox" checked={autoPrint} onChange={(e) => setAutoPrint(e.target.checked)} />
-            Auto-print
-          </label>
-          <button type="button" className="btn-secondary text-sm py-1.5" onClick={() => refreshAgent()}>
-            Refresh printers
+            <ShoppingBag size={16} />
+            <span className="tabular-nums">{cartCount}</span>
           </button>
-          <button type="button" className="btn-secondary text-sm py-1.5" onClick={() => load()}>
-            Reload catalog
-          </button>
+
+          <div className="relative" ref={settingsRef}>
+            <button
+              type="button"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--border)] hover:bg-[var(--bg-muted)]"
+              aria-label="Printer & tools"
+              aria-expanded={settingsOpen}
+              onClick={() => setSettingsOpen((v) => !v)}
+            >
+              <MoreHorizontal size={18} />
+            </button>
+            {settingsOpen ? (
+              <div className="absolute right-0 top-[calc(100%+6px)] w-[min(20rem,calc(100vw-1.5rem))] rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-3 shadow-lg space-y-3">
+                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                  <Printer size={14} />
+                  Printing
+                </div>
+                <label className="block space-y-1 text-sm">
+                  <span className="text-xs text-[var(--text-muted)]">Printer</span>
+                  <select
+                    className="input"
+                    value={printerName}
+                    onChange={(e) => setPrinterName(e.target.value)}
+                    disabled={!agentOk}
+                  >
+                    <option value="">Default printer</option>
+                    {printers.map((p) => (
+                      <option key={p.name} value={p.name}>
+                        {p.name}
+                        {p.isDefault ? ' (default)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="rounded"
+                    checked={autoPrint}
+                    onChange={(e) => setAutoPrint(e.target.checked)}
+                  />
+                  Auto-print after sale
+                </label>
+                <div className="grid grid-cols-1 gap-1.5">
+                  <button
+                    type="button"
+                    className="btn-secondary justify-start text-sm"
+                    onClick={() => {
+                      void refreshAgent();
+                      toast.success('Printers refreshed');
+                    }}
+                  >
+                    <RefreshCw size={14} />
+                    Refresh printers
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary justify-start text-sm"
+                    onClick={() => {
+                      void load();
+                      setSettingsOpen(false);
+                    }}
+                  >
+                    <RefreshCw size={14} />
+                    Reload catalog
+                  </button>
+                </div>
+                <p className="text-[11px] leading-snug text-[var(--text-muted)]">
+                  {agentOk
+                    ? 'Print agent online — receipts go to the selected printer.'
+                    : 'Print agent offline — browser print is used as fallback.'}
+                </p>
+              </div>
+            ) : null}
+          </div>
+
           {appMode ? (
-            <button type="button" className="btn-secondary text-sm py-1.5" onClick={showPanelMenus}>
-              {t('webPosShowPanel')}
+            <button
+              type="button"
+              className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-[var(--border)] px-2.5 text-sm font-medium hover:bg-[var(--bg-muted)]"
+              onClick={showPanelMenus}
+              title={t('webPosShowPanel')}
+            >
+              <PanelLeft size={16} />
+              <span className="hidden sm:inline">Menus</span>
             </button>
           ) : (
-            <button type="button" className="btn-primary text-sm py-1.5" onClick={enterPosApp}>
+            <button type="button" className="btn-primary h-10 text-sm" onClick={enterPosApp}>
               {t('webPosEnterApp')}
             </button>
           )}
         </div>
-      </div>
+      </header>
 
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_360px] min-h-0">
+      <div className="relative grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[1fr_min(24rem,38vw)]">
         {/* Catalog */}
-        <div className="flex flex-col min-h-0 p-3 gap-3">
-          <div className="flex flex-wrap gap-2 items-center">
-            <input
-              className="input flex-1 min-w-[180px]"
-              placeholder="Search products…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-            <div className="flex gap-1 flex-wrap">
+        <section className="flex min-h-0 flex-col">
+          <div className="shrink-0 space-y-2.5 border-b border-[var(--border)] bg-[var(--bg-elevated)]/80 px-3 py-2.5 sm:px-4 backdrop-blur-sm">
+            <label className="relative block">
+              <Search
+                size={16}
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"
+              />
+              <input
+                className="input h-11 rounded-xl pl-9 text-base sm:text-sm"
+                placeholder="Search products…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                autoComplete="off"
+              />
+            </label>
+            <div className="webpos-cat-scroll -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5">
               <button
                 type="button"
                 onClick={() => setCategoryId('all')}
-                className={`px-3 py-1.5 rounded-full text-sm border ${
-                  categoryId === 'all' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white'
+                className={`shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium transition ${
+                  categoryId === 'all'
+                    ? 'bg-stone-900 text-white'
+                    : 'bg-[var(--bg-muted)] text-[var(--text)] hover:bg-[var(--border)]'
                 }`}
               >
                 All
@@ -521,8 +851,10 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
                   key={c.id}
                   type="button"
                   onClick={() => setCategoryId(c.id)}
-                  className={`px-3 py-1.5 rounded-full text-sm border ${
-                    categoryId === c.id ? 'bg-slate-900 text-white border-slate-900' : 'bg-white'
+                  className={`shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium transition ${
+                    categoryId === c.id
+                      ? 'bg-stone-900 text-white'
+                      : 'bg-[var(--bg-muted)] text-[var(--text)] hover:bg-[var(--border)]'
                   }`}
                 >
                   {c.name}
@@ -531,11 +863,13 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
             </div>
           </div>
 
-          <div className="flex-1 overflow-auto">
+          <div className="min-h-0 flex-1 overflow-auto p-3 pb-24 sm:p-4 lg:pb-4">
             {visibleProducts.length === 0 ? (
-              <div className="text-center text-slate-500 py-16">No products</div>
+              <div className="flex h-full min-h-[12rem] items-center justify-center text-sm text-[var(--text-muted)]">
+                No products match
+              </div>
             ) : (
-              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
                 {visibleProducts.map((p) => {
                   const isCombo = productHasComboSlots(p);
                   const hasMods = !isCombo && productHasModifiers(p as ShopProductForModifiers);
@@ -544,153 +878,83 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
                       key={p.id}
                       type="button"
                       onClick={() => onProductClick(p)}
-                      className="text-left bg-white border border-slate-200 rounded-xl p-3 hover:border-indigo-400 hover:shadow-sm transition"
+                      className="group flex min-h-[5.5rem] flex-col items-stretch rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-3 text-left transition hover:border-stone-400 active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-400"
                     >
-                      <div className="font-semibold text-slate-900 line-clamp-2 min-h-[2.5rem]">{p.name}</div>
-                      {(isCombo || hasMods) && (
-                        <div className="text-[11px] font-medium text-slate-500 mt-1">
-                          {isCombo ? 'Combo' : 'Options'}
-                        </div>
-                      )}
-                      <div className="text-lg font-bold text-indigo-600 mt-2">
-                        {money(Number(p.price) || 0)}
+                      <div className="flex items-start justify-between gap-1">
+                        <span className="line-clamp-2 text-sm font-semibold leading-snug text-[var(--text)]">
+                          {p.name}
+                        </span>
+                        {(isCombo || hasMods) && (
+                          <span className="shrink-0 rounded-md bg-[var(--bg-muted)] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                            {isCombo ? 'Combo' : 'Opts'}
+                          </span>
+                        )}
                       </div>
+                      <span className="mt-auto pt-3 text-base font-bold tabular-nums tracking-tight text-teal-800">
+                        {money(Number(p.price) || 0)}
+                      </span>
                     </button>
                   );
                 })}
               </div>
             )}
           </div>
-        </div>
+        </section>
 
-        {/* Cart */}
-        <aside className="bg-white border-l border-slate-200 flex flex-col min-h-0">
-          <div className="p-3 border-b border-slate-100">
-            <div className="text-sm font-semibold mb-2">Channel</div>
-            <div className="grid grid-cols-3 gap-1">
-              {CHANNELS.map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() => setChannel(c.id)}
-                  className={`py-2 text-xs font-semibold rounded-lg border ${
-                    channel === c.id ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-slate-50'
-                  }`}
-                >
-                  {c.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-auto p-3 space-y-2">
-            {cart.length === 0 ? (
-              <p className="text-sm text-slate-400 text-center py-10">Cart is empty</p>
-            ) : (
-              cart.map((l) => (
-                <div key={l.lineId} className="border border-slate-200 rounded-lg p-2">
-                  <div className="flex justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="font-medium text-sm text-slate-900">{l.name}</div>
-                      {!!lineExtrasLabel(l) && (
-                        <div className="text-xs text-slate-500 mt-0.5">{lineExtrasLabel(l)}</div>
-                      )}
-                    </div>
-                    <button type="button" className="text-red-500 text-xs shrink-0" onClick={() => setQty(l.lineId, 0)}>
-                      ✕
-                    </button>
-                  </div>
-                  <div className="flex items-center justify-between mt-2">
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        className="w-7 h-7 rounded bg-slate-900 text-white"
-                        onClick={() => setQty(l.lineId, l.quantity - 1)}
-                      >
-                        −
-                      </button>
-                      <span className="font-bold w-6 text-center">{l.quantity}</span>
-                      <button
-                        type="button"
-                        className="w-7 h-7 rounded bg-slate-900 text-white"
-                        onClick={() => setQty(l.lineId, l.quantity + 1)}
-                      >
-                        +
-                      </button>
-                    </div>
-                    <div className="font-semibold text-indigo-600">{money(l.lineTotal)}</div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-
-          <div className="p-3 border-t border-slate-100 space-y-1 text-sm">
-            <div className="flex justify-between"><span className="text-slate-500">Subtotal</span><span>{money(totals.subtotal)}</span></div>
-            <div className="flex justify-between"><span className="text-slate-500">Tax ({taxRate}%)</span><span>{money(totals.tax)}</span></div>
-            {totals.rounding !== 0 && (
-              <div className="flex justify-between">
-                <span className="text-slate-500">Rounding</span>
-                <span>{totals.rounding > 0 ? '+' : ''}{money(totals.rounding)}</span>
-              </div>
-            )}
-            <div className="flex justify-between text-lg font-bold pt-1">
-              <span>Total</span>
-              <span className="text-indigo-600">{money(totals.total)}</span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 pt-2">
-              {(['cash', 'card'] as const).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => setPaymentMethod(m)}
-                  className={`py-2 rounded-lg border text-sm font-semibold capitalize ${
-                    paymentMethod === m ? 'bg-slate-900 text-white' : 'bg-slate-50'
-                  }`}
-                >
-                  {m}
-                </button>
-              ))}
-            </div>
-
-            <button
-              type="button"
-              disabled={!cart.length || busy}
-              onClick={() => void completeSale()}
-              className="w-full mt-2 btn-primary py-3 text-base disabled:opacity-40"
-            >
-              {busy ? 'Processing…' : `Charge ${money(totals.total)}`}
-            </button>
-
-            {lastReceipt && (
-              <button
-                type="button"
-                className="w-full btn-secondary text-sm"
-                onClick={() =>
-                  void printReceipt(lastReceipt, lastReceiptUrl || undefined).catch((e) =>
-                    toast.error(e.message)
-                  )
-                }
-              >
-                Re-print last receipt
-              </button>
-            )}
-          </div>
-
-          {sales.length > 0 && (
-            <div className="border-t border-slate-100 p-3 max-h-36 overflow-auto">
-              <div className="text-xs font-semibold text-slate-500 mb-1">Recent sales</div>
-              {sales.slice(0, 8).map((s) => (
-                <div key={s.id} className="flex justify-between text-xs py-0.5">
-                  <span className="text-slate-500">{new Date(s.completedAt).toLocaleTimeString()}</span>
-                  <span className="font-medium">{money(s.total)} · {s.paymentMethod}</span>
-                </div>
-              ))}
-            </div>
-          )}
+        {/* Desktop cart */}
+        <aside className="hidden min-h-0 border-l border-[var(--border)] lg:flex lg:flex-col">
+          {renderCartPanel()}
         </aside>
       </div>
+
+      {/* Mobile sticky checkout bar */}
+      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-30 p-3 lg:hidden">
+        <div className="pointer-events-auto mx-auto flex max-w-lg items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)]/95 p-2 shadow-lg backdrop-blur-md">
+          <button
+            type="button"
+            className="flex min-w-0 flex-1 items-center gap-3 rounded-xl px-2 py-1.5 text-left hover:bg-[var(--bg-muted)]"
+            onClick={() => setMobileCartOpen(true)}
+          >
+            <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-stone-900 text-sm font-bold text-white tabular-nums">
+              {cartCount}
+            </span>
+            <span className="min-w-0">
+              <span className="block text-xs text-[var(--text-muted)]">Order total</span>
+              <span className="block truncate text-base font-bold tabular-nums">{money(totals.total)}</span>
+            </span>
+          </button>
+          <button
+            type="button"
+            disabled={!cart.length || busy}
+            onClick={() => {
+              if (!cart.length) {
+                setMobileCartOpen(true);
+                return;
+              }
+              void completeSale();
+            }}
+            className="shrink-0 rounded-xl bg-teal-700 px-4 py-3 text-sm font-semibold text-white disabled:opacity-40"
+          >
+            {busy ? '…' : 'Charge'}
+          </button>
+        </div>
+      </div>
+
+      {/* Mobile cart sheet */}
+      {mobileCartOpen ? (
+        <div className="fixed inset-0 z-40 lg:hidden">
+          <button
+            type="button"
+            className="absolute inset-0 bg-stone-900/40"
+            aria-label="Dismiss cart"
+            onClick={() => setMobileCartOpen(false)}
+          />
+          <div className="absolute inset-x-0 bottom-0 flex max-h-[88dvh] flex-col overflow-hidden rounded-t-2xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-2xl">
+            <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-[var(--border)]" />
+            <div className="min-h-0 flex-1">{renderCartPanel({ showClose: true })}</div>
+          </div>
+        </div>
+      ) : null}
 
       {pendingProduct && (
         <ShopProductModifiersModal
