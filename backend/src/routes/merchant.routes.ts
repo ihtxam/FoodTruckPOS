@@ -12,10 +12,22 @@ import { ModifierService } from "@/services/modifier.service";
 import { normalizeComboSlots } from "@/lib/combo";
 import { roundMoney2 } from "@/lib/money";
 import { geocodeQuery } from "@/lib/geocode";
+import { isAllowedImageMime, saveMerchantImage } from "@/services/media-upload.service";
 import { getDb, schema } from "@/db";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+const imageUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (isAllowedImageMime(file.mimetype)) {
+      cb(null, true);
+      return;
+    }
+    cb(new Error("Only JPEG, PNG, WebP, or GIF images are allowed"));
+  },
+});
 
 // Apply merchant middleware to all routes
 router.use(verifyToken);
@@ -1063,6 +1075,34 @@ router.post("/geocode", async (req: Request, res: Response) => {
     });
   } catch (error) {
     res.status(400).json({ error: error instanceof Error ? error.message : "Geocode failed" });
+  }
+});
+
+/**
+ * POST /api/merchant/media
+ * multipart field "file" — image upload (JPEG/PNG/WebP/GIF, max 5 MB)
+ */
+router.post("/media", imageUpload.single("file"), async (req: Request, res: Response) => {
+  try {
+    const merchantId = req.merchantId;
+    if (!merchantId) return res.status(400).json({ error: "Merchant ID is required" });
+    if (!req.file) return res.status(400).json({ error: "No image file uploaded" });
+
+    const saved = await saveMerchantImage({
+      merchantId,
+      buffer: req.file.buffer,
+      mimeType: req.file.mimetype,
+      originalName: req.file.originalname,
+    });
+
+    res.status(201).json({
+      success: true,
+      url: saved.url,
+      mimeType: saved.mimeType,
+      size: saved.size,
+    });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Upload failed" });
   }
 });
 
