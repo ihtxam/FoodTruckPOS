@@ -73,6 +73,7 @@ export class MerchantSettingsService {
       shopEnabled: merchant.shopEnabled,
       acceptingOrders: merchant.acceptingOrders !== false,
       acceptingReservations: merchant.acceptingReservations !== false,
+      reservationsEnabled: !!merchant.reservationsEnabled,
       pickupEnabled: merchant.pickupEnabled,
       dineInEnabled: merchant.dineInEnabled,
       deliveryEnabled: merchant.deliveryEnabled,
