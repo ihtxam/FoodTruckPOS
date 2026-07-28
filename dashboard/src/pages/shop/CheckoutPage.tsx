@@ -497,7 +497,7 @@ export default function CheckoutPage() {
     draft.channel === 'delivery' ? t('shopDelivery') : draft.channel === 'dine_in' ? t('shopDineIn') : t('shopPickup');
 
   return (
-    <div className="min-h-screen bg-[#f6f5f2] text-stone-900">
+    <div className="min-h-dvh bg-[#f6f5f2] text-stone-900">
       <ShopVacationPopup vacation={merchant?.vacation} shopKey={shopKey} />
       <header className="bg-white border-b border-stone-200">
         <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between gap-3">
@@ -511,8 +511,8 @@ export default function CheckoutPage() {
         </div>
       </header>
 
-      <div className="max-w-5xl mx-auto px-4 py-6 grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
-        <div className="space-y-4">
+      <div className="max-w-5xl mx-auto px-4 py-6 grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 items-start">
+        <div className="space-y-4 min-w-0">
           <div className="flex flex-wrap gap-2">
             {steps.map((s, idx) => (
               <button
@@ -534,6 +534,18 @@ export default function CheckoutPage() {
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3">{error}</div>
           )}
+
+          <div className="lg:hidden bg-white border border-stone-200 px-4 py-3 text-sm flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="font-semibold truncate">{t('shopYourOrder')}</p>
+              <p className="text-stone-500 text-xs">
+                {draft.items.reduce((n, i) => n + (i.quantity || 1), 0)} · CHF {total.toFixed(2)}
+              </p>
+            </div>
+            <Link to={`${shopBasePath(shopKey)}/menu`} className="text-xs font-semibold underline shrink-0">
+              {t('shopAddMore')}
+            </Link>
+          </div>
 
           {step === 'details' && (
             <section className="bg-white border border-stone-200 p-5 space-y-4">
@@ -1176,7 +1188,7 @@ export default function CheckoutPage() {
           )}
         </div>
 
-        <aside className="bg-white border border-stone-200 p-5 h-fit sticky top-4 space-y-3">
+        <aside className="hidden lg:block bg-white border border-stone-200 p-5 h-fit sticky top-4 space-y-3">
           <div className="flex items-center justify-between gap-2">
             <h2 className="font-bold text-lg">{t('shopYourOrder')}</h2>
             <Link

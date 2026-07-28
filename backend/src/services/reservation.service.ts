@@ -156,10 +156,13 @@ function addDaysYmd(ymd: string, days: number): string {
 }
 
 function dayKeyForYmd(ymd: string): DayKey {
-  const [y, m, d] = ymd.split("-").map(Number);
-  // Use noon UTC to avoid DST edge for weekday
-  const weekday = new Date(Date.UTC(y, m - 1, d, 12, 0, 0)).getUTCDay();
-  return DAY_KEYS[weekday];
+  const noon = zurichLocalToDate(ymd, "12:00");
+  const short = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Europe/Zurich",
+    weekday: "short",
+  }).format(noon);
+  const map: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  return DAY_KEYS[map[short] ?? 0];
 }
 
 function rangesOverlap(
@@ -342,7 +345,7 @@ export class ReservationService {
         if (close < parseHm(range.open)) {
           // overnight: still generate until midnight then skip (rare for restaurants)
         }
-        if (slotStart < minStart) {
+        if (slotStart.getTime() <= now.getTime() || slotStart < minStart) {
           cursor += interval;
           continue;
         }

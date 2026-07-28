@@ -6,6 +6,7 @@ import {
   Globe2,
   Languages,
   LayoutGrid,
+  Mail,
   Percent,
 } from 'lucide-react';
 import api from '@/lib/api';
@@ -42,6 +43,22 @@ interface SettingsData {
   status?: string | null;
   onlineCardFeeFixed?: string | null;
   onlineCardFeePercent?: string | null;
+  emailSmtpSettings?: {
+    enabled?: boolean;
+    host?: string | null;
+    port?: number | null;
+    secure?: boolean;
+    user?: string | null;
+    passwordSet?: boolean;
+    fromEmail?: string | null;
+    fromName?: string | null;
+  } | null;
+  marketingSettings?: {
+    reorderReminderEnabled?: boolean;
+    reorderReminderDays?: number;
+    reorderReminderSubject?: string | null;
+    reorderReminderBody?: string | null;
+  } | null;
   vacationSettings?: {
     enabled?: boolean;
     manualActive?: boolean;
@@ -74,7 +91,7 @@ interface TerminalRow {
   status: string;
 }
 
-type TabId = 'business' | 'taxes' | 'shop' | 'operations' | 'payments' | 'language';
+type TabId = 'business' | 'taxes' | 'shop' | 'operations' | 'payments' | 'email' | 'language';
 
 function Field({
   label,
@@ -169,6 +186,9 @@ export default function Settings() {
   const [apiKey, setApiKey] = useState('');
   const [cardFeeFixed, setCardFeeFixed] = useState('0');
   const [cardFeePercent, setCardFeePercent] = useState('0');
+  const [smtpPassword, setSmtpPassword] = useState('');
+  const [testEmailTo, setTestEmailTo] = useState('');
+  const [testingEmail, setTestingEmail] = useState(false);
   const [terminals, setTerminals] = useState<TerminalRow[]>([]);
   const [terminalId, setTerminalId] = useState('');
   const [terminalName, setTerminalName] = useState('');
@@ -196,6 +216,7 @@ export default function Settings() {
         { id: 'shop' as const, label: t('shop'), icon: Globe2 },
         { id: 'operations' as const, label: t('settingsOperations'), icon: LayoutGrid },
         { id: 'payments' as const, label: t('settingsPayments'), icon: CreditCard },
+        { id: 'email' as const, label: t('settingsEmail'), icon: Mail },
         { id: 'language' as const, label: t('language'), icon: Languages },
       ] as const,
     [t]
@@ -265,6 +286,22 @@ export default function Settings() {
         floorPlanEnabled: !!settings.floorPlanEnabled,
         paxOrderingEnabled: !!settings.paxOrderingEnabled,
         panelLanguage: settings.panelLanguage || locale,
+        emailSmtpSettings: {
+          enabled: !!settings.emailSmtpSettings?.enabled,
+          host: settings.emailSmtpSettings?.host || '',
+          port: Number(settings.emailSmtpSettings?.port) || 587,
+          secure: !!settings.emailSmtpSettings?.secure,
+          user: settings.emailSmtpSettings?.user || '',
+          password: smtpPassword || undefined,
+          fromEmail: settings.emailSmtpSettings?.fromEmail || '',
+          fromName: settings.emailSmtpSettings?.fromName || '',
+        },
+        marketingSettings: {
+          reorderReminderEnabled: !!settings.marketingSettings?.reorderReminderEnabled,
+          reorderReminderDays: Number(settings.marketingSettings?.reorderReminderDays) || 5,
+          reorderReminderSubject: settings.marketingSettings?.reorderReminderSubject || '',
+          reorderReminderBody: settings.marketingSettings?.reorderReminderBody || '',
+        },
         vacationSettings: settings.vacationSettings || {
           enabled: false,
           popupImageUrl: null,
@@ -1114,6 +1151,268 @@ export default function Settings() {
                 </Section>
               </div>
             </div>
+          )}
+
+          {tab === 'email' && (
+            <form onSubmit={onSave} className="space-y-5">
+              <Section title={t('settingsSmtp')} description={t('settingsSmtpHint')}>
+                <label className="flex items-start gap-2.5 rounded-md border border-[var(--border)] px-3 py-2.5 text-sm">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={!!settings.emailSmtpSettings?.enabled}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        emailSmtpSettings: {
+                          ...(settings.emailSmtpSettings || {}),
+                          enabled: e.target.checked,
+                        },
+                      })
+                    }
+                  />
+                  <span>
+                    <span className="font-medium block">{t('smtpEnabled')}</span>
+                    <span className="text-xs muted">{t('smtpEnabledHint')}</span>
+                  </span>
+                </label>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <Field label={t('smtpHost')}>
+                    <input
+                      className="input"
+                      value={settings.emailSmtpSettings?.host || ''}
+                      onChange={(e) =>
+                        setSettings({
+                          ...settings,
+                          emailSmtpSettings: {
+                            ...(settings.emailSmtpSettings || {}),
+                            host: e.target.value,
+                          },
+                        })
+                      }
+                      placeholder="smtp.example.com"
+                    />
+                  </Field>
+                  <Field label={t('smtpPort')}>
+                    <input
+                      className="input"
+                      type="number"
+                      value={settings.emailSmtpSettings?.port ?? 587}
+                      onChange={(e) =>
+                        setSettings({
+                          ...settings,
+                          emailSmtpSettings: {
+                            ...(settings.emailSmtpSettings || {}),
+                            port: Number(e.target.value) || 587,
+                          },
+                        })
+                      }
+                    />
+                  </Field>
+                  <Field label={t('smtpUser')}>
+                    <input
+                      className="input"
+                      value={settings.emailSmtpSettings?.user || ''}
+                      onChange={(e) =>
+                        setSettings({
+                          ...settings,
+                          emailSmtpSettings: {
+                            ...(settings.emailSmtpSettings || {}),
+                            user: e.target.value,
+                          },
+                        })
+                      }
+                    />
+                  </Field>
+                  <Field
+                    label={t('smtpPassword')}
+                    hint={
+                      settings.emailSmtpSettings?.passwordSet
+                        ? t('smtpPasswordSetHint')
+                        : undefined
+                    }
+                  >
+                    <input
+                      className="input"
+                      type="password"
+                      value={smtpPassword}
+                      onChange={(e) => setSmtpPassword(e.target.value)}
+                      placeholder={settings.emailSmtpSettings?.passwordSet ? '••••••••' : ''}
+                      autoComplete="new-password"
+                    />
+                  </Field>
+                  <Field label={t('smtpFromEmail')}>
+                    <input
+                      className="input"
+                      type="email"
+                      value={settings.emailSmtpSettings?.fromEmail || ''}
+                      onChange={(e) =>
+                        setSettings({
+                          ...settings,
+                          emailSmtpSettings: {
+                            ...(settings.emailSmtpSettings || {}),
+                            fromEmail: e.target.value,
+                          },
+                        })
+                      }
+                    />
+                  </Field>
+                  <Field label={t('smtpFromName')}>
+                    <input
+                      className="input"
+                      value={settings.emailSmtpSettings?.fromName || ''}
+                      onChange={(e) =>
+                        setSettings({
+                          ...settings,
+                          emailSmtpSettings: {
+                            ...(settings.emailSmtpSettings || {}),
+                            fromName: e.target.value,
+                          },
+                        })
+                      }
+                    />
+                  </Field>
+                </div>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={!!settings.emailSmtpSettings?.secure}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        emailSmtpSettings: {
+                          ...(settings.emailSmtpSettings || {}),
+                          secure: e.target.checked,
+                        },
+                      })
+                    }
+                  />
+                  {t('smtpSecure')}
+                </label>
+                <div className="flex flex-wrap gap-2 items-end">
+                  <Field label={t('smtpTestTo')}>
+                    <input
+                      className="input"
+                      type="email"
+                      value={testEmailTo}
+                      onChange={(e) => setTestEmailTo(e.target.value)}
+                      placeholder={settings.email || 'you@example.com'}
+                    />
+                  </Field>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    disabled={testingEmail}
+                    onClick={async () => {
+                      setTestingEmail(true);
+                      try {
+                        await api.put('/merchant/settings', {
+                          emailSmtpSettings: {
+                            enabled: !!settings.emailSmtpSettings?.enabled,
+                            host: settings.emailSmtpSettings?.host || '',
+                            port: Number(settings.emailSmtpSettings?.port) || 587,
+                            secure: !!settings.emailSmtpSettings?.secure,
+                            user: settings.emailSmtpSettings?.user || '',
+                            password: smtpPassword || undefined,
+                            fromEmail: settings.emailSmtpSettings?.fromEmail || '',
+                            fromName: settings.emailSmtpSettings?.fromName || '',
+                          },
+                        });
+                        await api.post('/merchant/marketing/test-email', {
+                          to: testEmailTo || settings.email,
+                        });
+                        toast.success(t('smtpTestSent'));
+                        setSmtpPassword('');
+                      } catch (error: any) {
+                        toast.error(error.response?.data?.error || t('smtpTestFailed'));
+                      } finally {
+                        setTestingEmail(false);
+                      }
+                    }}
+                  >
+                    {testingEmail ? t('saving') : t('smtpSendTest')}
+                  </button>
+                </div>
+              </Section>
+
+              <Section title={t('reorderReminder')} description={t('reorderReminderHint')}>
+                <label className="flex items-start gap-2.5 rounded-md border border-[var(--border)] px-3 py-2.5 text-sm">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={!!settings.marketingSettings?.reorderReminderEnabled}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        marketingSettings: {
+                          ...(settings.marketingSettings || {}),
+                          reorderReminderEnabled: e.target.checked,
+                        },
+                      })
+                    }
+                  />
+                  <span>
+                    <span className="font-medium block">{t('reorderReminderEnable')}</span>
+                    <span className="text-xs muted">{t('reorderReminderEnableHint')}</span>
+                  </span>
+                </label>
+                <Field label={t('reorderReminderDays')}>
+                  <input
+                    className="input"
+                    type="number"
+                    min={1}
+                    max={90}
+                    value={settings.marketingSettings?.reorderReminderDays ?? 5}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        marketingSettings: {
+                          ...(settings.marketingSettings || {}),
+                          reorderReminderDays: Number(e.target.value) || 5,
+                        },
+                      })
+                    }
+                  />
+                </Field>
+                <Field label={t('reorderReminderSubject')}>
+                  <input
+                    className="input"
+                    value={settings.marketingSettings?.reorderReminderSubject || ''}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        marketingSettings: {
+                          ...(settings.marketingSettings || {}),
+                          reorderReminderSubject: e.target.value,
+                        },
+                      })
+                    }
+                    placeholder="We miss you — order again from {{businessName}}"
+                  />
+                </Field>
+                <Field label={t('reorderReminderBody')} hint={t('newsletterPlaceholders')}>
+                  <textarea
+                    className="input min-h-[10rem] font-mono text-xs"
+                    value={settings.marketingSettings?.reorderReminderBody || ''}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        marketingSettings: {
+                          ...(settings.marketingSettings || {}),
+                          reorderReminderBody: e.target.value,
+                        },
+                      })
+                    }
+                  />
+                </Field>
+              </Section>
+
+              <div className="flex justify-end border-t border-[var(--border)] pt-4">
+                <button type="submit" className="btn-primary" disabled={saving}>
+                  {saving ? t('saving') : t('save')}
+                </button>
+              </div>
+            </form>
           )}
 
           {tab === 'language' && (
