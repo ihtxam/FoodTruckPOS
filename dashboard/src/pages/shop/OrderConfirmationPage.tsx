@@ -263,55 +263,50 @@ export default function OrderConfirmationPage() {
     <div className="min-h-screen bg-[#f6f5f2] text-stone-900">
       <header className="bg-white border-b border-stone-200">
         <div className="max-w-2xl mx-auto px-4 py-4 space-y-3">
-          <div className="flex items-center justify-between gap-3">
-            <Link
-              to={shopBasePath(shopKey) || '/'}
-              className="flex items-center gap-2.5 min-w-0"
-              aria-label={order.store?.name || t('shopHome')}
-            >
-              {order.store?.shopLogoUrl ? (
-                <img
-                  src={order.store.shopLogoUrl}
-                  alt=""
-                  className="h-10 w-auto max-w-[8rem] object-contain"
-                />
-              ) : (
-                <div className="h-10 w-10 bg-stone-900 text-white flex items-center justify-center font-bold text-xs shrink-0">
-                  {(order.store?.name || 'M').slice(0, 2).toUpperCase()}
-                </div>
-              )}
-              <span className="font-bold tracking-tight truncate hidden sm:inline">
-                {order.store?.name}
-              </span>
-            </Link>
-            <ShopLangSwitcher className="shrink-0" />
-          </div>
-          <div className="flex items-end justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-xs uppercase tracking-wide text-stone-400">
-                {t('shopOrderConfirmation')}
-              </p>
-              <h1
-                className="min-w-0 text-base sm:text-lg font-bold leading-snug break-all"
-                title={order.orderNumber}
-              >
-                #{order.orderNumber}
-              </h1>
-            </div>
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0">
+          <div className="flex items-center justify-between gap-2 sm:gap-3">
+            <div className="flex items-center gap-2 min-w-0">
               <Link
                 to={shopBasePath(shopKey) || '/'}
-                className="inline-flex items-center justify-center bg-stone-900 text-white px-3 py-2 text-sm font-semibold"
+                className="flex items-center shrink-0"
+                aria-label={order.store?.name || t('shopHome')}
+              >
+                {order.store?.shopLogoUrl ? (
+                  <img
+                    src={order.store.shopLogoUrl}
+                    alt=""
+                    className="h-10 w-auto max-w-[6rem] object-contain"
+                  />
+                ) : (
+                  <div className="h-10 w-10 bg-stone-900 text-white flex items-center justify-center font-bold text-xs shrink-0">
+                    {(order.store?.name || 'M').slice(0, 2).toUpperCase()}
+                  </div>
+                )}
+              </Link>
+              <Link
+                to={shopBasePath(shopKey) || '/'}
+                className="inline-flex items-center justify-center bg-stone-900 text-white px-2.5 sm:px-3 py-2 text-xs sm:text-sm font-semibold shrink-0"
               >
                 {t('shopHome')}
               </Link>
               <Link
                 to={`${shopBasePath(shopKey)}/menu`}
-                className="inline-flex items-center justify-center border border-stone-300 bg-white px-3 py-2 text-sm font-semibold"
+                className="inline-flex items-center justify-center border border-stone-300 bg-white px-2.5 sm:px-3 py-2 text-xs sm:text-sm font-semibold shrink-0"
               >
                 {t('shopOrderAgain')}
               </Link>
             </div>
+            <ShopLangSwitcher className="shrink-0" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs uppercase tracking-wide text-stone-400">
+              {t('shopOrderConfirmation')}
+            </p>
+            <h1
+              className="min-w-0 text-base sm:text-lg font-bold leading-snug break-all"
+              title={order.orderNumber}
+            >
+              #{order.orderNumber}
+            </h1>
           </div>
         </div>
       </header>
@@ -346,12 +341,6 @@ export default function OrderConfirmationPage() {
               })}
             </p>
           )}
-          <Link
-            to={shopBasePath(shopKey) || '/'}
-            className="inline-flex w-full sm:w-auto items-center justify-center bg-stone-900 text-white px-4 py-2.5 text-sm font-semibold"
-          >
-            {t('shopBackHome')}
-          </Link>
         </section>
 
         {needsPayment && (
