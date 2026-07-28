@@ -90,6 +90,7 @@ export class MerchantSettingsService {
       channelSelectMode: normalizeChannelSelectMode(merchant.channelSelectMode),
       menuShowProductImages: merchant.menuShowProductImages !== false,
       menuShowCategoryBanners: merchant.menuShowCategoryBanners !== false,
+      scheduledOrdersEnabled: merchant.scheduledOrdersEnabled !== false,
       floorPlanEnabled: merchant.floorPlanEnabled,
       paxOrderingEnabled: merchant.paxOrderingEnabled,
       storeHours: merchant.storeHours || {},
@@ -146,6 +147,7 @@ export class MerchantSettingsService {
       channelSelectMode?: ChannelSelectMode | string;
       menuShowProductImages?: boolean;
       menuShowCategoryBanners?: boolean;
+      scheduledOrdersEnabled?: boolean;
       floorPlanEnabled?: boolean;
       paxOrderingEnabled?: boolean;
       storeHours?: Record<string, unknown>;
@@ -203,6 +205,9 @@ export class MerchantSettingsService {
     }
     if (updates.menuShowCategoryBanners !== undefined) {
       patch.menuShowCategoryBanners = !!updates.menuShowCategoryBanners;
+    }
+    if (updates.scheduledOrdersEnabled !== undefined) {
+      patch.scheduledOrdersEnabled = !!updates.scheduledOrdersEnabled;
     }
     if (updates.floorPlanEnabled !== undefined) patch.floorPlanEnabled = !!updates.floorPlanEnabled;
     if (updates.paxOrderingEnabled !== undefined) patch.paxOrderingEnabled = !!updates.paxOrderingEnabled;

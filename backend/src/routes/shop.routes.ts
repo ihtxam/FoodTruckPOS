@@ -564,6 +564,7 @@ router.get("/:slug", async (req: Request, res: Response) => {
         })(),
         menuShowProductImages: merchant.menuShowProductImages !== false,
         menuShowCategoryBanners: merchant.menuShowCategoryBanners !== false,
+        scheduledOrdersEnabled: merchant.scheduledOrdersEnabled !== false,
         payment: {
           cash: true,
           card: true,
@@ -1272,13 +1273,21 @@ router.post("/:slug/orders", async (req: Request, res: Response) => {
 
     // ASAP orders must be within open hours; scheduled orders must fall inside opening hours
     const isScheduled = !!scheduledFor;
+    const allowScheduled = merchant.scheduledOrdersEnabled !== false;
     const channelKey = mapChannelKey(channel);
     const hours = (merchant.storeHours || {}) as StoreHours;
+    if (isScheduled && !allowScheduled) {
+      return res.status(400).json({
+        error: "Scheduled orders are not available. Please order during opening hours.",
+      });
+    }
     if (!isScheduled) {
       const openState = isChannelOpenNow(hours, channelKey);
       if (!openState.open) {
         return res.status(400).json({
-          error: `Store is closed for ${channel.replace("_", " ")} (${openState.todayLabel}). Please schedule for later.`,
+          error: allowScheduled
+            ? `Store is closed for ${channel.replace("_", " ")} (${openState.todayLabel}). Please schedule for later.`
+            : `Store is closed for ${channel.replace("_", " ")} (${openState.todayLabel}). Orders are only accepted during opening hours.`,
         });
       }
     } else {

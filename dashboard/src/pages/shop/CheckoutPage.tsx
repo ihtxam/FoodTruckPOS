@@ -218,9 +218,16 @@ export default function CheckoutPage() {
     );
   }, [scheduleDays, scheduleDayOffset]);
 
-  // When closed (or ASAP unavailable), force "later" and auto-pick first slot.
+  // When closed (or ASAP unavailable), force "later" and auto-pick first slot — only if scheduled orders are allowed.
   useEffect(() => {
-    if (!merchant || !scheduleDays.length) return;
+    if (!merchant) return;
+    const allowScheduled = merchant.scheduledOrdersEnabled !== false;
+    if (!allowScheduled) {
+      if (whenMode !== 'asap') setWhenMode('asap');
+      if (draft.scheduledFor) setDraft((d) => ({ ...d, scheduledFor: '' }));
+      return;
+    }
+    if (!scheduleDays.length) return;
     if (!channelOpen && whenMode === 'asap') {
       setWhenMode('later');
     }
@@ -417,7 +424,15 @@ export default function CheckoutPage() {
       patch({ authMode: 'guest' });
     }
     if (whenMode === 'asap' && !channelOpen) {
-      setError(t('shopClosedChooseLater'));
+      setError(
+        merchant?.scheduledOrdersEnabled === false
+          ? t('shopOrdersOnlyWhenOpen')
+          : t('shopClosedChooseLater')
+      );
+      return;
+    }
+    if (whenMode === 'later' && merchant?.scheduledOrdersEnabled === false) {
+      setError(t('shopOrdersOnlyWhenOpen'));
       return;
     }
     if (whenMode === 'later' && !draft.scheduledFor) {
@@ -826,9 +841,20 @@ export default function CheckoutPage() {
                     {merchant?.channels?.[draft.channel]?.todayLabel
                       ? ` · ${merchant.channels[draft.channel].todayLabel}`
                       : ''}
-                    . {t('shopChooseLaterSlot')}
+                    .{' '}
+                    {merchant?.scheduledOrdersEnabled === false
+                      ? t('shopOrdersOnlyWhenOpen')
+                      : t('shopChooseLaterSlot')}
                   </p>
                 )}
+                {merchant?.scheduledOrdersEnabled === false ? (
+                  channelOpen ? (
+                    <p className="text-sm text-stone-600">{t('shopAsap')}</p>
+                  ) : (
+                    <p className="text-sm text-red-600 font-medium">{t('shopComeBackWhenOpen')}</p>
+                  )
+                ) : (
+                  <>
                 <div className="flex flex-wrap gap-2">
                   {channelOpen && (
                     <button
@@ -912,6 +938,8 @@ export default function CheckoutPage() {
                     )}
                   </div>
                 )}
+                  </>
+                )}
 
                 <textarea
                   className="w-full border border-stone-300 px-3 py-2 text-sm"
@@ -924,7 +952,8 @@ export default function CheckoutPage() {
 
               <button
                 type="button"
-                className="w-full bg-stone-900 text-white py-3 font-semibold"
+                className="w-full bg-stone-900 text-white py-3 font-semibold disabled:opacity-40"
+                disabled={!channelOpen && merchant?.scheduledOrdersEnabled === false}
                 onClick={goPayment}
               >
                 {t('shopContinuePayment')}
