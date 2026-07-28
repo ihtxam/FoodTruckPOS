@@ -31,14 +31,14 @@ function SuperadminShell() {
   ];
 
   return (
-    <div className="flex h-screen panel-shell">
+    <div className="flex h-full max-h-full panel-shell">
       <Sidebar
         isOpen={sidebarOpen}
         onToggle={() => setSidebarOpen(!sidebarOpen)}
         menuItems={menuItems}
       />
 
-      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0 min-h-0">
         <Header
           title={t('superadminDashboard')}
           onMenuClick={() => setSidebarOpen(!sidebarOpen)}
@@ -46,7 +46,7 @@ function SuperadminShell() {
           onLanguageChange={changeLanguage}
         />
 
-        <main className="flex-1 overflow-auto p-3 sm:p-4">
+        <main className="panel-main flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 min-h-0">
           <Routes>
             <Route index element={<Overview />} />
             <Route path="merchants" element={<Merchants />} />

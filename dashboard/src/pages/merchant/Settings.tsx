@@ -374,8 +374,8 @@ export default function Settings() {
         </p>
       </div>
 
-      <div className="card !p-0 overflow-hidden">
-        <div className="border-b border-[var(--border)] overflow-x-auto">
+      <div className="card !p-0 overflow-x-hidden">
+        <div className="border-b border-[var(--border)] overflow-x-auto overscroll-x-contain touch-pan-x [-webkit-overflow-scrolling:touch]">
           <nav className="flex min-w-max gap-0.5 px-2 py-2" aria-label={t('settings')}>
             {tabs.map((item) => {
               const Icon = item.icon;
@@ -399,7 +399,7 @@ export default function Settings() {
           </nav>
         </div>
 
-        <div className="p-4 sm:p-5">
+        <div className="p-4 sm:p-5 pb-24 sm:pb-5">
           {tab === 'business' && (
             <form onSubmit={onSave} className="space-y-5">
               <Section title={t('businessSettings')} description={t('businessSettingsHint')}>
@@ -485,12 +485,12 @@ export default function Settings() {
                     <img
                       src={settings.vacationSettings.popupImageUrl}
                       alt=""
-                      className="max-h-44 w-auto max-w-full border border-[var(--border)] object-contain bg-[var(--bg-elevated)]"
+                      className="max-h-36 sm:max-h-44 w-auto max-w-full border border-[var(--border)] object-contain bg-[var(--bg-elevated)]"
                     />
                   ) : (
                     <button
                       type="button"
-                      className="w-full min-h-[7rem] rounded-md border border-dashed border-[var(--border)] bg-[var(--bg-elevated)] text-sm text-[var(--text-muted)] hover:border-[var(--text)] hover:text-[var(--text)] transition-colors"
+                      className="w-full min-h-[5.5rem] sm:min-h-[7rem] rounded-md border border-dashed border-[var(--border)] bg-[var(--bg-elevated)] text-sm text-[var(--text-muted)] hover:border-[var(--text)] hover:text-[var(--text)] transition-colors"
                       onClick={() => vacationImageInputRef.current?.click()}
                     >
                       {t('vacationUploadImage')}
