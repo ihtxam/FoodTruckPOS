@@ -103,7 +103,10 @@ export default function WebsiteCms() {
         });
       }
       setMenuPreview(Array.from(byCat.values()));
-      if (!nextPages.length) setCreateOpen(true);
+      if (!nextPages.length) {
+        setCreateOpen(true);
+        setAsHomepage(true);
+      }
     } catch (error: any) {
       toast.error(error.response?.data?.error || t('cmsLoadFailed'));
     } finally {
@@ -338,7 +341,14 @@ export default function WebsiteCms() {
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-sm font-semibold">{t('cmsPages')}</h2>
-        <button type="button" className="btn-primary" onClick={() => setCreateOpen(true)}>
+        <button
+          type="button"
+          className="btn-primary"
+          onClick={() => {
+            setCreateOpen(true);
+            setAsHomepage(pages.length === 0);
+          }}
+        >
           {t('cmsNewPage')}
         </button>
       </div>
@@ -346,15 +356,17 @@ export default function WebsiteCms() {
       {createOpen && (
         <form
           onSubmit={createPage}
-          className="rounded-md border border-[var(--border)] bg-[var(--bg-muted)] p-4 space-y-3"
+          className="rounded-md border-2 border-[var(--accent)] bg-[var(--bg)] p-4 space-y-3 shadow-sm"
         >
+          <h3 className="text-sm font-semibold">{t('cmsCreatePageTitle')}</h3>
+          <p className="text-xs muted">{t('cmsCreatePageHint')}</p>
           {!pages.length && (
             <p className="text-xs rounded-md border border-amber-200 bg-amber-50 text-amber-900 px-3 py-2">
               {t('cmsNoPages')}
             </p>
           )}
           <label className="text-xs font-medium block">{t('title')}</label>
-          <input className="input" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} />
+          <input className="input" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} autoFocus />
           <label className="text-xs font-medium block">{t('cmsTemplate')}</label>
           <select className="input" value={newTemplate} onChange={(e) => setNewTemplate(e.target.value)}>
             {templates.map((tpl) => (
@@ -368,16 +380,13 @@ export default function WebsiteCms() {
             {t('cmsIsHomepage')}
           </label>
           <div className="flex gap-2 justify-end">
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={() => setCreateOpen(false)}
-              disabled={!pages.length}
-            >
-              {t('cancel')}
-            </button>
+            {pages.length > 0 && (
+              <button type="button" className="btn-secondary" onClick={() => setCreateOpen(false)}>
+                {t('cancel')}
+              </button>
+            )}
             <button type="submit" className="btn-primary">
-              {t('create')}
+              {t('cmsCreateAndEdit')}
             </button>
           </div>
         </form>
@@ -385,9 +394,12 @@ export default function WebsiteCms() {
 
       <div className="space-y-2">
         {pages.length === 0 && !createOpen && (
-          <p className="text-sm muted border border-dashed border-[var(--border)] rounded-md p-6 text-center">
-            {t('cmsNoPages')}
-          </p>
+          <div className="border border-dashed border-[var(--border)] rounded-md p-6 text-center space-y-3">
+            <p className="text-sm muted">{t('cmsNoPages')}</p>
+            <button type="button" className="btn-primary" onClick={() => setCreateOpen(true)}>
+              {t('cmsCreateHomepage')}
+            </button>
+          </div>
         )}
         {pages.map((page) => (
           <div
