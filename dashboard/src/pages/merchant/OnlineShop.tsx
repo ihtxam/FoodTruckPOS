@@ -43,45 +43,27 @@ const ORDER_CHANNELS: { key: Exclude<HoursChannelKey, 'display'>; label: string 
 
 const ALL_CHANNELS: HoursChannelKey[] = ['takeaway', 'dine_in', 'delivery', 'display'];
 
-/** Where a quick schedule should be written. */
-type ApplyTarget =
-  | 'all'
-  | 'ordering'
-  | 'takeaway'
-  | 'delivery'
-  | 'dine_in'
-  | 'homepage';
-
-const APPLY_TARGETS: { key: ApplyTarget; label: string; hint: string }[] = [
-  {
-    key: 'all',
-    label: 'All order types',
-    hint: 'Pickup, dine-in, delivery + homepage banner',
-  },
-  {
-    key: 'ordering',
-    label: 'Pickup + delivery',
-    hint: 'Both main order types (+ homepage)',
-  },
+/** Channels a quick schedule can be applied to (multi-select). */
+const APPLY_CHANNELS: { key: HoursChannelKey; label: string; hint: string }[] = [
   {
     key: 'takeaway',
-    label: 'Pickup only',
+    label: 'Pickup',
     hint: 'Take away / pickup checkout hours',
   },
   {
-    key: 'delivery',
-    label: 'Delivery only',
-    hint: 'Home delivery checkout hours',
-  },
-  {
     key: 'dine_in',
-    label: 'Dine in only',
+    label: 'Dine in',
     hint: 'Eat-in checkout hours',
   },
   {
-    key: 'homepage',
-    label: 'Homepage only',
-    hint: 'Banner hours on the shop page — does not gate ordering',
+    key: 'delivery',
+    label: 'Delivery',
+    hint: 'Home delivery checkout hours',
+  },
+  {
+    key: 'display',
+    label: 'Homepage banner',
+    hint: 'Hours shown on the shop page — does not gate ordering',
   },
 ];
 
@@ -150,25 +132,6 @@ function mkWeekFromChannel(ch: ChannelHours): ChannelHours {
   return Object.fromEntries(DAYS.map((d) => [d.key, cloneSlots(ch[d.key] || [])]));
 }
 
-function targetsFor(apply: ApplyTarget): HoursChannelKey[] {
-  switch (apply) {
-    case 'all':
-      return ['takeaway', 'dine_in', 'delivery', 'display'];
-    case 'ordering':
-      return ['takeaway', 'delivery', 'display'];
-    case 'takeaway':
-      return ['takeaway'];
-    case 'delivery':
-      return ['delivery'];
-    case 'dine_in':
-      return ['dine_in'];
-    case 'homepage':
-      return ['display'];
-    default:
-      return ['takeaway', 'delivery', 'display'];
-  }
-}
-
 function formatDaySlots(slots: Slot[] | undefined): string {
   if (!slots?.length) return 'Closed';
   return slots.map((s) => `${s.open}–${s.close}`).join(', ');
@@ -215,7 +178,7 @@ export default function OnlineShop() {
     { open: '11:00', close: '14:00' },
     { open: '17:00', close: '23:00' },
   ]);
-  const [applyTarget, setApplyTarget] = useState<ApplyTarget>('all');
+  const [applyChannels, setApplyChannels] = useState<HoursChannelKey[]>([...ALL_CHANNELS]);
   const [markClosed, setMarkClosed] = useState(false);
   const [showFineTune, setShowFineTune] = useState(false);
   const [fineTuneChannel, setFineTuneChannel] = useState<HoursChannelKey>('takeaway');
@@ -349,9 +312,19 @@ export default function OnlineShop() {
     });
   };
 
+  const toggleApplyChannel = (key: HoursChannelKey) => {
+    setApplyChannels((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+    );
+  };
+
   const applyQuickSchedule = () => {
     if (!selectedDays.length) {
       toast.error('Select at least one day');
+      return;
+    }
+    if (!applyChannels.length) {
+      toast.error('Select at least one mode (pickup, delivery, dine-in, or homepage)');
       return;
     }
     const slots = markClosed
@@ -361,7 +334,7 @@ export default function OnlineShop() {
       toast.error('Add at least one open–close time');
       return;
     }
-    const channels = targetsFor(applyTarget);
+    const channels = [...applyChannels];
     setHours((prev) => {
       const next: StoreHours = { ...prev };
       for (const ch of channels) {
@@ -377,7 +350,12 @@ export default function OnlineShop() {
       selectedDays.length === 7
         ? 'every day'
         : selectedDays.map((k) => DAYS.find((d) => d.key === k)?.label || k).join(', ');
-    const targetLabel = APPLY_TARGETS.find((t) => t.key === applyTarget)?.label || applyTarget;
+    const targetLabel =
+      channels.length === ALL_CHANNELS.length
+        ? 'all modes'
+        : channels
+            .map((k) => APPLY_CHANNELS.find((c) => c.key === k)?.label || k)
+            .join(', ');
     toast.success(
       markClosed
         ? `Closed ${dayLabel} → ${targetLabel}`
@@ -763,21 +741,53 @@ export default function OnlineShop() {
             </div>
 
             <div>
-              <span className="text-sm font-medium block mb-2">Applies to</span>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                {APPLY_TARGETS.map((opt) => {
-                  const on = applyTarget === opt.key;
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                <span className="text-sm font-medium">Applies to</span>
+                <div className="flex flex-wrap gap-2 text-xs">
+                  <button
+                    type="button"
+                    className="font-medium text-teal-700 hover:underline"
+                    onClick={() => setApplyChannels([...ALL_CHANNELS])}
+                  >
+                    Select all
+                  </button>
+                  <button
+                    type="button"
+                    className="font-medium text-stone-500 hover:underline"
+                    onClick={() => setApplyChannels([])}
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+              <p className="text-[11px] text-stone-500 mb-2 leading-snug">
+                Choose one or more modes. Same times for several modes, or apply once per mode for different hours.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {APPLY_CHANNELS.map((opt) => {
+                  const on = applyChannels.includes(opt.key);
                   return (
                     <button
                       key={opt.key}
                       type="button"
-                      onClick={() => setApplyTarget(opt.key)}
-                      className={`text-left rounded-lg border px-3 py-2.5 transition ${
+                      onClick={() => toggleApplyChannel(opt.key)}
+                      aria-pressed={on}
+                      className={`text-left rounded-lg border px-3 py-2.5 transition flex gap-2.5 items-start ${
                         on ? 'border-stone-900 bg-white shadow-sm' : 'border-stone-200 bg-white/70 hover:border-stone-400'
                       }`}
                     >
-                      <span className="block text-sm font-semibold">{opt.label}</span>
-                      <span className="block text-[11px] text-stone-500 mt-0.5 leading-snug">{opt.hint}</span>
+                      <span
+                        className={`mt-0.5 h-4 w-4 shrink-0 rounded border flex items-center justify-center text-[10px] font-bold ${
+                          on ? 'bg-stone-900 border-stone-900 text-white' : 'border-stone-300 bg-white'
+                        }`}
+                        aria-hidden
+                      >
+                        {on ? '✓' : ''}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block text-sm font-semibold">{opt.label}</span>
+                        <span className="block text-[11px] text-stone-500 mt-0.5 leading-snug">{opt.hint}</span>
+                      </span>
                     </button>
                   );
                 })}

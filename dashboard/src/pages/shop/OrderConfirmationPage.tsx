@@ -48,7 +48,14 @@ type OrderView = {
   total: string;
   createdAt: string;
   items: OrderItem[];
-  store?: { name: string; address?: string | null; city?: string | null; phone?: string | null };
+  store?: {
+    name: string;
+    address?: string | null;
+    city?: string | null;
+    phone?: string | null;
+    shopLogoUrl?: string | null;
+    cmsHomepageEnabled?: boolean;
+  };
 };
 
 type PaymentSession = {
@@ -256,25 +263,55 @@ export default function OrderConfirmationPage() {
     <div className="min-h-screen bg-[#f6f5f2] text-stone-900">
       <header className="bg-white border-b border-stone-200">
         <div className="max-w-2xl mx-auto px-4 py-4 space-y-3">
-          <div className="flex items-start justify-between gap-3">
-            <p className="text-xs uppercase tracking-wide text-stone-400 pt-1">
-              {t('shopOrderConfirmation')}
-            </p>
+          <div className="flex items-center justify-between gap-3">
+            <Link
+              to={shopBasePath(shopKey) || '/'}
+              className="flex items-center gap-2.5 min-w-0"
+              aria-label={order.store?.name || t('shopHome')}
+            >
+              {order.store?.shopLogoUrl ? (
+                <img
+                  src={order.store.shopLogoUrl}
+                  alt=""
+                  className="h-10 w-auto max-w-[8rem] object-contain"
+                />
+              ) : (
+                <div className="h-10 w-10 bg-stone-900 text-white flex items-center justify-center font-bold text-xs shrink-0">
+                  {(order.store?.name || 'M').slice(0, 2).toUpperCase()}
+                </div>
+              )}
+              <span className="font-bold tracking-tight truncate hidden sm:inline">
+                {order.store?.name}
+              </span>
+            </Link>
             <ShopLangSwitcher className="shrink-0" />
           </div>
           <div className="flex items-end justify-between gap-3">
-            <h1
-              className="min-w-0 flex-1 text-base sm:text-lg font-bold leading-snug break-all"
-              title={order.orderNumber}
-            >
-              #{order.orderNumber}
-            </h1>
-            <Link
-              to={`${shopBasePath(shopKey) || '/'}`}
-              className="shrink-0 text-sm font-semibold text-stone-900 underline underline-offset-2"
-            >
-              {t('shopOrderAgain')}
-            </Link>
+            <div className="min-w-0">
+              <p className="text-xs uppercase tracking-wide text-stone-400">
+                {t('shopOrderConfirmation')}
+              </p>
+              <h1
+                className="min-w-0 text-base sm:text-lg font-bold leading-snug break-all"
+                title={order.orderNumber}
+              >
+                #{order.orderNumber}
+              </h1>
+            </div>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0">
+              <Link
+                to={shopBasePath(shopKey) || '/'}
+                className="inline-flex items-center justify-center bg-stone-900 text-white px-3 py-2 text-sm font-semibold"
+              >
+                {t('shopHome')}
+              </Link>
+              <Link
+                to={`${shopBasePath(shopKey)}/menu`}
+                className="inline-flex items-center justify-center border border-stone-300 bg-white px-3 py-2 text-sm font-semibold"
+              >
+                {t('shopOrderAgain')}
+              </Link>
+            </div>
           </div>
         </div>
       </header>
@@ -309,6 +346,12 @@ export default function OrderConfirmationPage() {
               })}
             </p>
           )}
+          <Link
+            to={shopBasePath(shopKey) || '/'}
+            className="inline-flex w-full sm:w-auto items-center justify-center bg-stone-900 text-white px-4 py-2.5 text-sm font-semibold"
+          >
+            {t('shopBackHome')}
+          </Link>
         </section>
 
         {needsPayment && (

@@ -1790,6 +1790,8 @@ router.get("/:slug/orders/:orderId", async (req: Request, res: Response) => {
           address: merchant.address,
           city: merchant.city,
           phone: merchant.phone,
+          shopLogoUrl: merchant.shopLogoUrl || null,
+          cmsHomepageEnabled: !!merchant.cmsHomepageEnabled,
         },
       },
     });
