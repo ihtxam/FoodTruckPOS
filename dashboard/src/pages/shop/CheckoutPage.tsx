@@ -732,21 +732,12 @@ export default function CheckoutPage() {
                 {!channelOpen && (
                   <p className="text-sm text-amber-700 bg-amber-50 border border-amber-100 px-3 py-2">
                     {t('shopStoreClosedNow')}
-                    {merchant?.channels?.[draft.channel]?.todayLabel
-                      ? ` · ${merchant.channels[draft.channel].todayLabel}`
-                      : ''}
-                    .{' '}
-                    {merchant?.scheduledOrdersEnabled === false
-                      ? t('shopOrdersOnlyWhenOpen')
-                      : t('shopChooseLaterSlot')}
                   </p>
                 )}
                 {merchant?.scheduledOrdersEnabled === false ? (
                   channelOpen ? (
                     <p className="text-sm text-stone-600">{t('shopAsap')}</p>
-                  ) : (
-                    <p className="text-sm text-red-600 font-medium">{t('shopComeBackWhenOpen')}</p>
-                  )
+                  ) : null
                 ) : (
                   <>
                     <div className="flex flex-wrap gap-2">
