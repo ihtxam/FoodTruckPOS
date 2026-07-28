@@ -32,6 +32,7 @@ services:
       MERCHANT_DASHBOARD_URL: ${PUBLIC_APP_URL:-https://manupos.webprintmedia.swiss}
       WEB_SHOP_URL: ${PUBLIC_APP_URL:-https://manupos.webprintmedia.swiss}
       CORS_ALLOW_ALL: ${CORS_ALLOW_ALL:-true}
+      UPLOAD_DIR: /app/uploads
       ADYEN_API_KEY: ${ADYEN_API_KEY:-}
       ADYEN_MERCHANT_ACCOUNT: ${ADYEN_MERCHANT_ACCOUNT:-}
       # Brevo (preferred) — EmailService also accepts SENDINBLUE_*/SIB_*/FROM_EMAIL aliases
@@ -49,6 +50,8 @@ services:
       SEED_SUPERADMIN_EMAIL: ${SEED_SUPERADMIN_EMAIL:-admin@manupos.webprintmedia.swiss}
       SEED_SUPERADMIN_PASSWORD: ${SEED_SUPERADMIN_PASSWORD:-}
       SEED_SUPERADMIN_NAME: ${SEED_SUPERADMIN_NAME:-ManuPOS Admin}
+    volumes:
+      - uploads_data:/app/uploads
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 10s
@@ -94,7 +97,7 @@ services:
       DOMAIN: ${DOMAIN:?set DOMAIN}
       ACME_EMAIL: ${ACME_EMAIL:-admin@${DOMAIN}}
     volumes:
-      - ./deploy/Caddyfile.chaslay:/etc/caddy/Caddyfile:ro
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
@@ -105,3 +108,5 @@ volumes:
   postgres_data:
   caddy_data:
   caddy_config:
+  uploads_data:
+  uploads_data:

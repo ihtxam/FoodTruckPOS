@@ -19,6 +19,7 @@ import reservationsRoutes from "@/routes/reservations.routes";
 import receiptsRoutes from "@/routes/receipts.routes";
 import chaslayRoutes from "@/routes/chaslay";
 import webhooksRoutes from "@/routes/webhooks.routes";
+import { ensureUploadsRoot } from "@/services/media-upload.service";
 
 // Load environment variables
 dotenv.config();
@@ -71,6 +72,19 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
   console.log(`${new Date().toISOString()} ${req.method} ${req.path}`);
   next();
 });
+
+// Public uploaded media (vacation popup images, etc.)
+const uploadsRoot = ensureUploadsRoot();
+app.use(
+  "/api/uploads",
+  express.static(uploadsRoot, {
+    fallthrough: false,
+    maxAge: "7d",
+    setHeaders(res) {
+      res.setHeader("Cache-Control", "public, max-age=604800");
+    },
+  })
+);
 
 // ============================================================================
 // ROUTES

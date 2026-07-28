@@ -499,20 +499,82 @@ export default function Settings() {
                   }
                 />
                 <Field label={t('vacationPopupImage')} hint={t('vacationPopupImageHint')}>
-                  <input
-                    className="input"
-                    value={settings.vacationSettings?.popupImageUrl || ''}
-                    onChange={(e) =>
-                      setSettings({
-                        ...settings,
-                        vacationSettings: {
-                          ...(settings.vacationSettings || { periods: [] }),
-                          popupImageUrl: e.target.value,
-                        },
-                      })
-                    }
-                    placeholder="https://…"
-                  />
+                  <div className="space-y-2">
+                    {settings.vacationSettings?.popupImageUrl ? (
+                      <img
+                        src={settings.vacationSettings.popupImageUrl}
+                        alt=""
+                        className="max-h-40 w-auto max-w-full border border-[var(--border)] object-contain bg-[var(--bg-muted)]"
+                      />
+                    ) : null}
+                    <input
+                      className="input"
+                      value={settings.vacationSettings?.popupImageUrl || ''}
+                      onChange={(e) =>
+                        setSettings({
+                          ...settings,
+                          vacationSettings: {
+                            ...(settings.vacationSettings || { periods: [] }),
+                            popupImageUrl: e.target.value,
+                          },
+                        })
+                      }
+                      placeholder="https://… or /api/uploads/…"
+                    />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="btn-secondary cursor-pointer text-xs inline-flex items-center">
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp,image/gif"
+                          className="sr-only"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            e.target.value = '';
+                            if (!file) return;
+                            try {
+                              const form = new FormData();
+                              form.append('file', file);
+                              const res = await api.post('/merchant/media', form, {
+                                headers: { 'Content-Type': 'multipart/form-data' },
+                              });
+                              const url = res.data?.url;
+                              if (!url) throw new Error('No URL returned');
+                              setSettings({
+                                ...settings,
+                                vacationSettings: {
+                                  ...(settings.vacationSettings || { periods: [] }),
+                                  popupImageUrl: url,
+                                },
+                              });
+                              toast.success(t('vacationImageUploaded'));
+                            } catch (error: any) {
+                              toast.error(
+                                error.response?.data?.error || t('vacationImageUploadFailed')
+                              );
+                            }
+                          }}
+                        />
+                        {t('vacationUploadImage')}
+                      </label>
+                      {settings.vacationSettings?.popupImageUrl ? (
+                        <button
+                          type="button"
+                          className="text-xs text-red-700 underline"
+                          onClick={() =>
+                            setSettings({
+                              ...settings,
+                              vacationSettings: {
+                                ...(settings.vacationSettings || { periods: [] }),
+                                popupImageUrl: '',
+                              },
+                            })
+                          }
+                        >
+                          {t('vacationClearImage')}
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
                 </Field>
                 <div className="space-y-2">
                   <div className="flex items-center justify-between gap-2">
