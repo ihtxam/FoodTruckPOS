@@ -676,7 +676,15 @@ export default function CheckoutPage() {
               {showChannelPicker ? (
                 <div className="space-y-2">
                   <p className="text-sm font-semibold">{t('shopFulfillment')}</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div
+                    className={`grid gap-2 ${
+                      channelOptions.length >= 3
+                        ? 'grid-cols-3'
+                        : channelOptions.length === 2
+                          ? 'grid-cols-2'
+                          : 'grid-cols-1'
+                    }`}
+                  >
                     {channelOptions.map((c) => {
                       const meta = merchant?.channels?.[c.id];
                       const on = draft.channel === c.id;
@@ -685,14 +693,18 @@ export default function CheckoutPage() {
                           key={c.id}
                           type="button"
                           onClick={() => patchChannel(c.id)}
-                          className={`rounded-xl border px-3 py-3 text-left transition ${
+                          className={`rounded-xl border px-2 sm:px-3 py-2.5 sm:py-3 text-center sm:text-left transition min-w-0 ${
                             on
                               ? 'border-stone-900 bg-stone-900 text-white'
                               : 'border-stone-200 bg-stone-50 text-stone-800 hover:border-stone-400'
                           }`}
                         >
-                          <span className="block text-sm font-semibold">{c.label}</span>
-                          <span className={`block text-[11px] mt-0.5 ${on ? 'text-white/70' : 'text-stone-500'}`}>
+                          <span className="block text-xs sm:text-sm font-semibold truncate">{c.label}</span>
+                          <span
+                            className={`block text-[10px] sm:text-[11px] mt-0.5 truncate ${
+                              on ? 'text-white/70' : 'text-stone-500'
+                            }`}
+                          >
                             {meta?.etaMinutes || 30}–{(meta?.etaMinutes || 30) + 10} {t('shopMins')}
                             {meta && !meta.open ? ` · ${t('shopClosed')}` : ''}
                           </span>
