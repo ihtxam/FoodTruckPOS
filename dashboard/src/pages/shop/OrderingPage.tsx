@@ -439,6 +439,11 @@ export default function OrderingPage() {
       setError(t('shopVacationOrdersBlocked'));
       return;
     }
+    const allowScheduled = merchant?.scheduledOrdersEnabled !== false;
+    if (!channelMeta?.open && !allowScheduled) {
+      setError(t('shopOrdersOnlyWhenOpen'));
+      return;
+    }
     if (channel === 'delivery' && deliveryInfo && !deliveryInfo.deliverable) {
       setError(t('shopOutsideDeliverySwitch'));
       return;
@@ -447,14 +452,12 @@ export default function OrderingPage() {
       setError(deliveryInfo.message || t('shopMinOrderNotMet'));
       return;
     }
-    // Closed now is OK — checkout will offer schedule for later (ASAP hidden when closed).
+    // Closed now is OK when scheduled orders are enabled — checkout offers later slots.
     const next = {
       ...draft,
-      // Clear ASAP when closed so checkout forces a later slot
       scheduledFor: channelMeta?.open ? draft.scheduledFor : draft.scheduledFor || '',
     };
     if (!channelMeta?.open) {
-      // Leave scheduledFor empty; checkout auto-picks first later slot
       next.scheduledFor = '';
     }
     saveCart(shopKey, next);
@@ -546,6 +549,7 @@ export default function OrderingPage() {
 
   const showProductImages = merchant?.menuShowProductImages !== false;
   const showCategoryBanners = merchant?.menuShowCategoryBanners !== false;
+  const allowScheduledOrders = merchant?.scheduledOrdersEnabled !== false;
   const toggleCategory = (id: string) => {
     setExpandedCategoryId((prev) => (prev === id ? null : id));
   };
@@ -696,13 +700,21 @@ export default function OrderingPage() {
         {error && <p className="text-red-600 text-sm">{error}</p>}
         {!channelMeta?.open && (
           <p className="text-amber-700 text-sm">
-            {t('shopClosedNow')} · {channelMeta?.todayLabel || '—'} — {t('shopContinueScheduleLater')}
+            {t('shopClosedNow')} · {channelMeta?.todayLabel || '—'}
+            {allowScheduledOrders
+              ? ` — ${t('shopContinueScheduleLater')}`
+              : ` — ${t('shopOrdersOnlyWhenOpen')}`}
           </p>
         )}
 
         <button
           type="button"
-          disabled={!cart.length || vacationActive || ordersPaused}
+          disabled={
+            !cart.length ||
+            vacationActive ||
+            ordersPaused ||
+            (!channelMeta?.open && !allowScheduledOrders)
+          }
           onClick={goCheckout}
           className="w-full bg-stone-900 text-white py-3 font-semibold disabled:opacity-40"
         >
@@ -710,9 +722,11 @@ export default function OrderingPage() {
             ? t('shopNotAcceptingOrders')
             : vacationActive
             ? t('shopVacationTitle')
-            : channelMeta?.open
-              ? t('shopGoCheckout')
-              : t('shopScheduleCheckout')}
+            : !channelMeta?.open && !allowScheduledOrders
+              ? t('shopComeBackWhenOpen')
+              : channelMeta?.open
+                ? t('shopGoCheckout')
+                : t('shopScheduleCheckout')}
         </button>
         <p className="text-[11px] text-stone-400 text-center">
           {vacationActive ? t('shopVacationOrdersBlocked') : t('shopCheckoutHint')}
@@ -1190,7 +1204,7 @@ export default function OrderingPage() {
         selected={channel}
         confirmLabel={t('shopContinue')}
         dismissible={channelSelectMode !== 'popup_start'}
-        withSchedule={channelSelectMode === 'popup_start'}
+        withSchedule={channelSelectMode === 'popup_start' && allowScheduledOrders}
         storeHours={merchant?.storeHours}
         scheduledFor={draft.scheduledFor || null}
         onSelect={(id) => {

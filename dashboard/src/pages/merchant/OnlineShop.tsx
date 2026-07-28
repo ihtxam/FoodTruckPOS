@@ -404,6 +404,7 @@ export default function OnlineShop() {
         channelSelectMode: settings.channelSelectMode || 'checkout',
         menuShowProductImages: settings.menuShowProductImages !== false,
         menuShowCategoryBanners: settings.menuShowCategoryBanners !== false,
+        scheduledOrdersEnabled: settings.scheduledOrdersEnabled !== false,
         storeHours: hours,
         latitude: settings.latitude,
         longitude: settings.longitude,
@@ -589,6 +590,23 @@ export default function OnlineShop() {
               <option value="popup_start">Popup when opening the menu</option>
               <option value="menu">Buttons on the menu page</option>
             </select>
+          </div>
+
+          <div className="rounded-lg border border-stone-200 bg-white p-3 space-y-2">
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={settings.scheduledOrdersEnabled !== false}
+                onChange={(e) => setSettings({ ...settings, scheduledOrdersEnabled: e.target.checked })}
+              />
+              <span>
+                <span className="font-medium block">Allow programmed / scheduled orders</span>
+                <span className="text-xs text-stone-500 leading-snug block mt-0.5">
+                  When off, customers can only order during opening hours (no “order for later”).
+                </span>
+              </span>
+            </label>
           </div>
 
           <div className="rounded-lg border border-stone-200 bg-white p-3 space-y-2">

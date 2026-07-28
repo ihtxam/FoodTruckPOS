@@ -87,6 +87,11 @@ export const merchants = pgTable(
     menuShowProductImages: boolean("menu_show_product_images").default(true).notNull(),
     /** Show category banner images on the public menu */
     menuShowCategoryBanners: boolean("menu_show_category_banners").default(true).notNull(),
+    /**
+     * Allow customers to schedule / program orders for later.
+     * When false, orders can only be placed during opening hours (ASAP only).
+     */
+    scheduledOrdersEnabled: boolean("scheduled_orders_enabled").default(true).notNull(),
     // Per-channel weekly hours (+ optional display for homepage banner):
     // { takeaway: { mon: [{ open, close }] }, delivery, dine_in, display }
     storeHours: json("store_hours").$type<Record<string, Record<string, Array<{ open: string; close: string }>>>>().default({}),
