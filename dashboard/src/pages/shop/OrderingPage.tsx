@@ -461,6 +461,30 @@ export default function OrderingPage() {
     navigate(`${shopBasePath(shopKey)}/checkout`);
   };
 
+  const nextOpen = useMemo(() => {
+    if (!merchant || channelMeta?.open) return null;
+    return findNextOpen(merchant.storeHours as StoreHours, channel);
+  }, [merchant, channelMeta?.open, channel]);
+
+  const statusLine = useMemo(() => {
+    if (channelMeta?.open) return t('shopOpenNow');
+    if (nextOpen) {
+      if (nextOpen.dayOffset === 0) {
+        return t('shopOpensAt').replace('{time}', nextOpen.labelHm);
+      }
+      if (nextOpen.dayOffset === 1) {
+        return t('shopOpensTomorrow').replace('{time}', nextOpen.labelHm);
+      }
+      return t('shopOpensLater').replace('{time}', nextOpen.labelHm);
+    }
+    return t('shopClosed');
+  }, [channelMeta?.open, nextOpen, t]);
+
+  const categoriesToRender = useMemo(() => {
+    if (selectedCategory === 'all') return menu;
+    return menu.filter((c) => c.id === selectedCategory);
+  }, [menu, selectedCategory]);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-stone-50 text-stone-600">
@@ -520,33 +544,8 @@ export default function OrderingPage() {
     setError(null);
   };
 
-  const nextOpen = useMemo(() => {
-    if (!merchant || channelMeta?.open) return null;
-    return findNextOpen(merchant.storeHours as StoreHours, channel);
-  }, [merchant, channelMeta?.open, channel]);
-
-  const statusLine = useMemo(() => {
-    if (channelMeta?.open) return t('shopOpenNow');
-    if (nextOpen) {
-      if (nextOpen.dayOffset === 0) {
-        return t('shopOpensAt').replace('{time}', nextOpen.labelHm);
-      }
-      if (nextOpen.dayOffset === 1) {
-        return t('shopOpensTomorrow').replace('{time}', nextOpen.labelHm);
-      }
-      return t('shopOpensLater').replace('{time}', nextOpen.labelHm);
-    }
-    return t('shopClosed');
-  }, [channelMeta?.open, nextOpen, t]);
-
   const showProductImages = merchant?.menuShowProductImages !== false;
   const showCategoryBanners = merchant?.menuShowCategoryBanners !== false;
-
-  const categoriesToRender = useMemo(() => {
-    if (selectedCategory === 'all') return menu;
-    return menu.filter((c) => c.id === selectedCategory);
-  }, [menu, selectedCategory]);
-
   const toggleCategory = (id: string) => {
     setExpandedCategoryId((prev) => (prev === id ? null : id));
   };

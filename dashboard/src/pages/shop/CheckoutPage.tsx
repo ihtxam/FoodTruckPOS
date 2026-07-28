@@ -516,6 +516,16 @@ export default function CheckoutPage() {
     }
   };
 
+  const channelOptions = useMemo(() => {
+    const channels = merchant?.channels || {};
+    const all: { id: ShopChannel; label: string }[] = [
+      { id: 'takeaway', label: t('shopPickup') },
+      { id: 'delivery', label: t('shopDelivery') },
+      { id: 'dine_in', label: t('shopDineIn') },
+    ];
+    return all.filter((c) => channels[c.id]?.enabled);
+  }, [merchant, t]);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#f6f5f2] text-stone-600">
@@ -532,16 +542,6 @@ export default function CheckoutPage() {
 
   const channelLabel =
     draft.channel === 'delivery' ? t('shopDelivery') : draft.channel === 'dine_in' ? t('shopDineIn') : t('shopPickup');
-
-  const channelOptions = useMemo(() => {
-    const channels = merchant?.channels || {};
-    const all: { id: ShopChannel; label: string }[] = [
-      { id: 'takeaway', label: t('shopPickup') },
-      { id: 'delivery', label: t('shopDelivery') },
-      { id: 'dine_in', label: t('shopDineIn') },
-    ];
-    return all.filter((c) => channels[c.id]?.enabled);
-  }, [merchant, t]);
 
   const showChannelPicker =
     channelOptions.length > 1 &&
