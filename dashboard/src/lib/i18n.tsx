@@ -34,7 +34,9 @@ const en: Dict = {
   newsletterEmailReady: 'Email ready',
   newsletterTitle: 'Internal title',
   newsletterSubject: 'Email subject',
-  newsletterBody: 'Email body (HTML or text)',
+  newsletterBody: 'Email body',
+  newsletterBuilderHint:
+    'Drag blocks to reorder. Add headings, text, buttons, images, dividers. Switch to HTML anytime.',
   newsletterPlaceholders: 'Placeholders: {{name}} {{shopUrl}} {{businessName}}',
   newsletterAudience: 'Audience',
   newsletterAllCustomers: 'All customers with email',
@@ -426,7 +428,9 @@ const fr: Dict = {
   newsletterEmailReady: 'Email prêt',
   newsletterTitle: 'Titre interne',
   newsletterSubject: 'Objet',
-  newsletterBody: 'Corps (HTML ou texte)',
+  newsletterBody: 'Corps de l’email',
+  newsletterBuilderHint:
+    'Glissez les blocs pour réordonner. Ajoutez titres, texte, boutons, images, séparateurs. Passez en HTML à tout moment.',
   newsletterPlaceholders: 'Variables : {{name}} {{shopUrl}} {{businessName}}',
   newsletterAudience: 'Audience',
   newsletterAllCustomers: 'Tous les clients avec email',
@@ -817,7 +821,9 @@ const de: Dict = {
   newsletterEmailReady: 'E-Mail bereit',
   newsletterTitle: 'Interner Titel',
   newsletterSubject: 'Betreff',
-  newsletterBody: 'Inhalt (HTML oder Text)',
+  newsletterBody: 'E-Mail-Inhalt',
+  newsletterBuilderHint:
+    'Blöcke per Drag & Drop sortieren. Überschriften, Text, Buttons, Bilder, Trennlinien. HTML jederzeit möglich.',
   newsletterPlaceholders: 'Platzhalter: {{name}} {{shopUrl}} {{businessName}}',
   newsletterAudience: 'Empfänger',
   newsletterAllCustomers: 'Alle Kunden mit E-Mail',

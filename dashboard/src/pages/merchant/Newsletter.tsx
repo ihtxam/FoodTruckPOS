@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
+import EmailBlockBuilder from '@/components/EmailBlockBuilder';
 import { useI18n } from '@/lib/i18n';
 
 type AudienceRow = {
@@ -194,16 +195,15 @@ export default function Newsletter() {
             />
           </label>
         </div>
-        <label className="block space-y-1 text-sm">
-          <span className="font-medium">{t('newsletterBody')}</span>
-          <textarea
-            className="input min-h-[12rem] font-mono text-xs"
-            value={bodyHtml}
-            onChange={(e) => setBodyHtml(e.target.value)}
-            required
+        <div className="space-y-1">
+          <span className="text-sm font-medium block">{t('newsletterBody')}</span>
+          <p className="text-[11px] muted">{t('newsletterBuilderHint')}</p>
+          <EmailBlockBuilder
+            key={campaignId || 'new'}
+            valueHtml={bodyHtml}
+            onChangeHtml={setBodyHtml}
           />
-          <span className="text-[11px] muted block">{t('newsletterPlaceholders')}</span>
-        </label>
+        </div>
 
         <div className="space-y-2">
           <p className="text-sm font-medium">{t('newsletterAudience')}</p>
