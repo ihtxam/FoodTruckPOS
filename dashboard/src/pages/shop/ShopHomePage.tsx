@@ -36,7 +36,7 @@ function themeToCss(theme: Record<string, unknown> | null): string {
 }
 
 export default function ShopHomePage() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { merchantSlug } = useParams<{ merchantSlug?: string }>();
   const shopKey = useMemo(() => resolveShopKey(merchantSlug), [merchantSlug]);
   const base = shopBasePath(shopKey);
@@ -90,6 +90,10 @@ export default function ShopHomePage() {
     [data, merchant?.reservationsEnabled],
   );
   const hasContent = Array.isArray(data.content) && data.content.length > 0;
+
+  useEffect(() => {
+    document.documentElement.lang = locale;
+  }, [locale]);
 
   if (loading) {
     return (

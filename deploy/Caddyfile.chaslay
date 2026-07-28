@@ -1,5 +1,8 @@
 {
 	email admin@chaslay.com
+	on_demand_tls {
+		ask http://api:3000/api/shop/tls-ask
+	}
 }
 
 # Chaslay production — ManuPOS stack + Android /v1 API
@@ -68,6 +71,40 @@ pay.chaslay.com {
 
 	handle /receipt/* {
 		reverse_proxy dashboard:80
+	}
+
+	handle {
+		reverse_proxy dashboard:80
+	}
+}
+
+# Merchant subdomains: https://{subdomain}.chaslay.com
+*.chaslay.com {
+	tls {
+		on_demand
+	}
+
+	encode gzip zstd
+
+	handle /api/* {
+		reverse_proxy api:3000
+	}
+
+	handle {
+		reverse_proxy dashboard:80
+	}
+}
+
+# Custom domains: CNAME Host → shop.chaslay.com (Host header = merchant domain)
+https:// {
+	tls {
+		on_demand
+	}
+
+	encode gzip zstd
+
+	handle /api/* {
+		reverse_proxy api:3000
 	}
 
 	handle {

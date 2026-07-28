@@ -232,3 +232,24 @@ Orders appear in POS **Ongoing Orders** when the tablet is online and `SYNC_API_
 - Full admin UI at `admin.chaslay.com`
 - POS menu push to server
 - Waiter / kiosk apps
+
+## Custom domain (merchant shop)
+
+Shop **slug** is enough: `https://shop.chaslay.com/{slug}` (also `/shop/{slug}` on admin).
+
+Shop **subdomain** (`https://{sub}.chaslay.com`) is optional — it is **not** required for custom domains.
+
+### DNS for a custom domain
+
+Create a **CNAME** at your DNS provider:
+
+| Field | Value |
+|-------|--------|
+| **Type** | `CNAME` |
+| **Host / Name** | `www` (or `order`, `shop`, … — the hostname customers will use) |
+| **Target / Value / Points to** | `shop.chaslay.com` |
+
+Then in Merchant → Settings (or Website CMS), enter the full hostname, e.g. `www.mycafe.ch`.
+
+TLS certificates are issued automatically via on-demand TLS once DNS points at the platform and the domain is saved on the merchant.
+

@@ -301,6 +301,21 @@ export default function WebsiteCms() {
       <form onSubmit={saveSite} className="rounded-md border border-[var(--border)] bg-[var(--bg)] p-4 space-y-3">
         <h2 className="text-sm font-semibold">{t('cmsCustomDomain')}</h2>
         <p className="text-xs muted">{t('cmsCustomDomainHint')}</p>
+        <div className="rounded-md border border-[var(--border)] bg-[var(--bg-muted)] px-3 py-2 text-xs space-y-1 max-w-md">
+          <p className="font-semibold">{t('cmsDnsRecordTitle')}</p>
+          <p>
+            <span className="font-medium">Type:</span> CNAME
+          </p>
+          <p>
+            <span className="font-medium">Host / Name:</span> www{' '}
+            <span className="muted">({t('cmsDnsHostExample')})</span>
+          </p>
+          <p>
+            <span className="font-medium">Target / Value / Points to:</span>{' '}
+            <code className="font-mono">shop.chaslay.com</code>
+          </p>
+          <p className="muted pt-1">{t('cmsDnsThenEnter')}</p>
+        </div>
         <input
           className="input max-w-md"
           value={customDomain}
