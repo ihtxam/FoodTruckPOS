@@ -19,9 +19,11 @@ import reservationsRoutes from "@/routes/reservations.routes";
 import receiptsRoutes from "@/routes/receipts.routes";
 import chaslayRoutes from "@/routes/chaslay";
 import webhooksRoutes from "@/routes/webhooks.routes";
+import offersRoutes from "@/routes/offers.routes";
 import marketingRoutes from "@/routes/marketing.routes";
 import { ensureUploadsRoot } from "@/services/media-upload.service";
 import { MarketingService } from "@/services/marketing.service";
+import { ReservationService } from "@/services/reservation.service";
 
 // Load environment variables
 dotenv.config();
@@ -115,6 +117,7 @@ app.use("/api/rfid-readers", rfidReadersRoutes);
 app.use("/api/delivery-zones", deliveryZonesRoutes);
 app.use("/api/merchant/floor-plans", floorPlansRoutes);
 app.use("/api/merchant/reservations", reservationsRoutes);
+app.use("/api/merchant/offers", offersRoutes);
 app.use("/api/merchant/marketing", marketingRoutes);
 app.use("/api/receipts", receiptsRoutes);
 app.use("/api/webhooks", webhooksRoutes);
@@ -143,7 +146,7 @@ app.listen(PORT, () => {
   console.log(`🏥 Health check: /health`);
   console.log(`🔧 Environment: ${process.env.NODE_ENV || "development"}`);
 
-  // Reorder-reminder sweep (~hourly). Lightweight; skips merchants without SMTP/Brevo.
+  // Reminder sweeps (~hourly). Lightweight; skips merchants without email.
   const tick = async () => {
     try {
       const result = await MarketingService.processReorderReminders();
@@ -152,6 +155,14 @@ app.listen(PORT, () => {
       }
     } catch (error) {
       console.error("[marketing] reorder reminder job failed", error);
+    }
+    try {
+      const result = await ReservationService.processReminders();
+      if (result.sent > 0) {
+        console.log(`[reservations] reminders sent: ${result.sent}`);
+      }
+    } catch (error) {
+      console.error("[reservations] reminder job failed", error);
     }
   };
   setTimeout(() => void tick(), 45_000);

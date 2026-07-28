@@ -381,6 +381,8 @@ export const categories = pgTable(
     description: text("description"),
     color: varchar("color", { length: 7 }), // hex color
     imageUrl: varchar("image_url", { length: 500 }),
+    /** Special shelf for promotional / offer products */
+    isOffersCategory: boolean("is_offers_category").default(false).notNull(),
     sortOrder: integer("sort_order").default(0).notNull(),
     clientId: varchar("client_id", { length: 64 }), // offline sync id from POS device
     createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -771,6 +773,25 @@ export type ReservationSettings = {
   /** Soft capacity per slot (covers). Null/0 = sum of table seats or unlimited */
   maxCoversPerSlot?: number | null;
   policiesText?: string | null;
+  /** Email reminder before the reservation (hours ahead) */
+  reminderEnabled?: boolean;
+  reminderHoursBefore?: number;
+  sendReminderEmail?: boolean;
+  /**
+   * Off-peak / happy-hour discounts shown on bookable slots.
+   * scheduleMode: specific_days = only daysOfWeek; whole_week = every day.
+   * Empty timeStart/timeEnd = all open hours that day.
+   */
+  slotDiscounts?: Array<{
+    id: string;
+    name: string;
+    percentOff: number;
+    scheduleMode?: "specific_days" | "whole_week";
+    daysOfWeek?: string[]; // mon..sun
+    timeStart?: string | null; // HH:mm
+    timeEnd?: string | null;
+    enabled?: boolean;
+  }>;
 };
 
 export type ReservationStatus =
@@ -863,6 +884,7 @@ export const reservations = pgTable(
     internalNotes: text("internal_notes"),
     source: varchar("source", { length: 30 }).notNull().default("web"), // web | phone | pos | dashboard
     confirmationSentAt: timestamp("confirmation_sent_at", { withTimezone: true }),
+    reminderSentAt: timestamp("reminder_sent_at", { withTimezone: true }),
     acceptedAt: timestamp("accepted_at", { withTimezone: true }),
     seatedAt: timestamp("seated_at", { withTimezone: true }),
     cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
@@ -1177,6 +1199,67 @@ export const loyaltyPointEvents = pgTable(
   (table) => ({
     customerIdx: index("loyalty_point_events_customer_idx").on(table.customerId),
     merchantIdx: index("loyalty_point_events_merchant_idx").on(table.merchantId),
+  })
+);
+
+// ============================================================================
+// OFFERS / PROMOTIONS (online shop + dine-in)
+// ============================================================================
+
+export type OfferType =
+  | "percent_category"
+  | "percent_order"
+  | "fixed_off"
+  | "bogo"
+  | "pay_n_get_m"
+  | "combo_deal";
+
+export type OfferRules = {
+  percentOff?: number;
+  fixedOff?: number;
+  buyQty?: number;
+  getQty?: number;
+  getDiscountPercent?: number;
+  payQty?: number;
+  receiveQty?: number;
+  minOrderAmount?: number;
+  comboProductIds?: string[];
+  comboPercentOff?: number;
+  comboFixedOff?: number;
+};
+
+export const offers = pgTable(
+  "offers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    merchantId: uuid("merchant_id")
+      .notNull()
+      .references(() => merchants.id, { onDelete: "cascade" }),
+    name: varchar("name", { length: 255 }).notNull(),
+    description: text("description"),
+    offerType: varchar("offer_type", { length: 40 }).notNull(),
+    rules: json("rules").$type<OfferRules>().default({}).notNull(),
+    channels: json("channels").$type<string[]>().default([]).notNull(),
+    categoryIds: json("category_ids").$type<string[]>().default([]).notNull(),
+    productIds: json("product_ids").$type<string[]>().default([]).notNull(),
+    scheduleMode: varchar("schedule_mode", { length: 20 }).default("always").notNull(),
+    daysOfWeek: json("days_of_week").$type<string[]>().default([]).notNull(),
+    timeStart: varchar("time_start", { length: 5 }),
+    timeEnd: varchar("time_end", { length: 5 }),
+    validFrom: timestamp("valid_from", { withTimezone: true }),
+    validTo: timestamp("valid_to", { withTimezone: true }),
+    isActive: boolean("is_active").default(true).notNull(),
+    featured: boolean("featured").default(true).notNull(),
+    badgeLabel: varchar("badge_label", { length: 40 }),
+    priority: integer("priority").default(0).notNull(),
+    stackable: boolean("stackable").default(false).notNull(),
+    sortOrder: integer("sort_order").default(0).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    merchantIdx: index("offers_merchant_id_idx").on(table.merchantId),
+    activeIdx: index("offers_merchant_active_idx").on(table.merchantId, table.isActive),
   })
 );
 

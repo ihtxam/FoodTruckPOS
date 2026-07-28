@@ -10,6 +10,7 @@ import Categories from './Categories';
 import Modifiers from './Modifiers';
 import Customers from './Customers';
 import Loyalty from './Loyalty';
+import Offers from './Offers';
 import Terminals from './Terminals';
 import Settings from './Settings';
 import Billing from './Billing';
@@ -70,6 +71,7 @@ function MerchantShell() {
     { label: t('categories'), path: '/merchant/categories', icon: '🏷️' },
     { label: t('customers'), path: '/merchant/customers', icon: '👥' },
     { label: t('loyalty'), path: '/merchant/loyalty', icon: '🎁' },
+    { label: t('offers'), path: '/merchant/offers', icon: '🏷️' },
     { label: t('newsletter'), path: '/merchant/newsletter', icon: '✉️' },
     { label: t('shop'), path: '/merchant/online-shop', icon: '🌐' },
     { label: t('cmsWebsite'), path: '/merchant/website', icon: '✏️' },
@@ -112,6 +114,7 @@ function MerchantShell() {
             <Route path="categories" element={<Categories />} />
             <Route path="customers" element={<Customers />} />
             <Route path="loyalty" element={<Loyalty />} />
+            <Route path="offers" element={<Offers />} />
             <Route path="newsletter" element={<Newsletter />} />
             <Route path="online-shop" element={<OnlineShop />} />
             <Route

@@ -19,6 +19,7 @@ import { CmsService } from "@/services/cms.service";
 import { normalizeComboSlots } from "@/lib/combo";
 import { isVacationActive, isDateInVacationPeriods, vacationPublicPayload, VACATION_BLOCK_MESSAGE, NOT_ACCEPTING_ORDERS_MESSAGE, NOT_ACCEPTING_RESERVATIONS_MESSAGE } from "@/lib/vacation";
 import { geocodeQuery } from "@/lib/geocode";
+import { OffersService } from "@/services/offers.service";
 import { v4 as uuidv4 } from "uuid";
 
 const router = Router();
@@ -793,6 +794,7 @@ router.get("/:slug/menu", async (req: Request, res: Response) => {
       id: cat.id,
       name: cat.name,
       image: (cat as { imageUrl?: string | null }).imageUrl || null,
+      isOffersCategory: !!(cat as { isOffersCategory?: boolean }).isOffersCategory,
       items: products.filter((p) => p.categoryId === cat.id).map(toItem),
     }));
 
@@ -802,11 +804,34 @@ router.get("/:slug/menu", async (req: Request, res: Response) => {
         id: "uncategorized",
         name: "Other",
         image: null,
+        isOffersCategory: false,
         items: uncategorized.map(toItem),
       });
     }
 
-    res.json({ success: true, data: menu.filter((c) => c.items.length > 0) });
+    // Active featured offers for the Offers shelf badges
+    const activeOffers = await OffersService.listActivePublic(merchant.id);
+    const featured = activeOffers
+      .filter((o) => o.featured)
+      .map((o) => ({
+        id: o.id,
+        name: o.name,
+        description: o.description,
+        badgeLabel: o.badgeLabel,
+        offerType: o.offerType,
+        rules: o.rules,
+        channels: o.channels,
+        daysOfWeek: o.daysOfWeek,
+        timeStart: o.timeStart,
+        timeEnd: o.timeEnd,
+        scheduleMode: o.scheduleMode,
+      }));
+
+    res.json({
+      success: true,
+      data: menu.filter((c) => c.items.length > 0 || c.isOffersCategory),
+      offers: featured,
+    });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : "Failed to load menu" });
   }
@@ -1156,6 +1181,53 @@ router.post("/:slug/reservations", async (req: Request, res: Response) => {
 });
 
 /**
+ * POST /api/shop/:slug/offers/preview
+ * Estimate promotional discount for the current cart.
+ */
+router.post("/:slug/offers/preview", async (req: Request, res: Response) => {
+  try {
+    const merchant = await resolveMerchant(req.params.slug);
+    if (!merchant?.shopEnabled) return res.status(404).json({ error: "Shop not found" });
+    const channel = String(req.body?.channel || "takeaway");
+    const at = req.body?.scheduledFor ? new Date(req.body.scheduledFor) : new Date();
+    const lines = Array.isArray(req.body?.items) ? req.body.items : [];
+    const offers = await OffersService.list(merchant.id);
+    const result = OffersService.evaluateCart(
+      offers,
+      lines.map((l: any) => ({
+        productId: String(l.productId || ""),
+        categoryId: l.categoryId || null,
+        name: String(l.name || ""),
+        unitPrice: Number(l.unitPrice || l.price || 0),
+        quantity: Math.max(1, Math.floor(Number(l.quantity) || 1)),
+        loyaltyReward: !!l.loyaltyReward,
+      })),
+      Number.isNaN(at.getTime()) ? new Date() : at,
+      channel
+    );
+    const publicOffers = await OffersService.listActivePublic(
+      merchant.id,
+      Number.isNaN(at.getTime()) ? new Date() : at,
+      channel
+    );
+    res.json({
+      success: true,
+      discount: result.discount,
+      applied: result.applied,
+      activeOffers: publicOffers.map((o) => ({
+        id: o.id,
+        name: o.name,
+        badgeLabel: o.badgeLabel,
+        offerType: o.offerType,
+        description: o.description,
+      })),
+    });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Failed" });
+  }
+});
+
+/**
  * GET /api/shop/:slug/payment-options
  */
 router.get("/:slug/payment-options", async (req: Request, res: Response) => {
@@ -1332,6 +1404,7 @@ router.post("/:slug/orders", async (req: Request, res: Response) => {
     const rewardLines: Array<{ productId: string; points: number; quantity: number }> = [];
     const lineItems: Array<{
       productId: string;
+      categoryId?: string | null;
       productName: string;
       quantity: number;
       unitPrice: number;
@@ -1444,6 +1517,7 @@ router.post("/:slug/orders", async (req: Request, res: Response) => {
 
       lineItems.push({
         productId: product.id,
+        categoryId: product.categoryId,
         productName: product.name,
         quantity: qty,
         unitPrice,
@@ -1459,6 +1533,24 @@ router.post("/:slug/orders", async (req: Request, res: Response) => {
     if (!lineItems.length) {
       return res.status(400).json({ error: "No valid items" });
     }
+
+    // Promotional offers (before loyalty points)
+    const offerAt = scheduledFor ? new Date(scheduledFor as string) : new Date();
+    const activeOffers = await OffersService.list(merchant.id);
+    const offerEval = OffersService.evaluateCart(
+      activeOffers,
+      lineItems.map((l) => ({
+        productId: l.productId,
+        categoryId: l.categoryId,
+        name: l.productName,
+        unitPrice: l.unitPrice,
+        quantity: l.quantity,
+        loyaltyReward: l.loyaltyReward,
+      })),
+      Number.isNaN(offerAt.getTime()) ? new Date() : offerAt,
+      channel
+    );
+    let offerDiscount = roundMoney2(offerEval.discount);
 
     let deliveryFee = 0;
     let deliveryZoneId: string | undefined;
@@ -1482,10 +1574,12 @@ router.post("/:slug/orders", async (req: Request, res: Response) => {
       deliveryZoneId = zone.id;
     }
 
-    // Points can cover food + delivery + tax (not tip / card fee)
+    // Points can cover food + delivery + tax after offer discount (not tip / card fee)
     const feeTaxPreview = roundMoney2((deliveryFee * taxRate) / 100);
     const taxPreview = roundMoney2(taxAmount + feeTaxPreview);
-    const redeemableBase = roundMoney2(subtotal + deliveryFee + taxPreview);
+    const redeemableBase = roundMoney2(
+      Math.max(0, subtotal - offerDiscount) + deliveryFee + taxPreview
+    );
 
     let pointsDiscount = 0;
     let cashPointsUsed = 0;
@@ -1559,10 +1653,14 @@ router.post("/:slug/orders", async (req: Request, res: Response) => {
     taxAmount = roundMoney2(taxAmount + feeTax);
     subtotal = roundMoney2(subtotal);
     deliveryFee = roundMoney2(deliveryFee);
-    pointsDiscount = roundMoney2(Math.min(pointsDiscount, subtotal + deliveryFee + taxAmount));
+    offerDiscount = roundMoney2(Math.min(offerDiscount, subtotal));
+    pointsDiscount = roundMoney2(
+      Math.min(pointsDiscount, Math.max(0, subtotal - offerDiscount) + deliveryFee + taxAmount)
+    );
     const orderNumber = `WEB-${Date.now()}-${uuidv4().substring(0, 6).toUpperCase()}`;
-    // Points discount applies to food + delivery + tax; tip and card fee remain payable
-    const preCardTotal = Math.max(0, subtotal + deliveryFee + taxAmount - pointsDiscount) + tip;
+    // Offer + points discount apply to food (+ delivery/tax for points); tip and card fee remain payable
+    const preCardTotal =
+      Math.max(0, subtotal + deliveryFee + taxAmount - offerDiscount - pointsDiscount) + tip;
     const cardFeeFixed = Number(merchant.onlineCardFeeFixed || 0) || 0;
     const cardFeePercent = Number(merchant.onlineCardFeePercent || 0) || 0;
     const cardFee =
@@ -1573,9 +1671,15 @@ router.post("/:slug/orders", async (req: Request, res: Response) => {
     const roundAdj = roundingAdjustment(rawTotal);
     const total = roundTo005(rawTotal);
     const notesWithRounding =
-      roundAdj !== 0
-        ? `${notes ? `${notes}\n` : ""}[Rounding ${roundAdj > 0 ? "+" : ""}${roundAdj.toFixed(2)}]`
-        : notes;
+      [
+        notes || "",
+        offerEval.applied.length
+          ? `[Offers: ${offerEval.applied.map((a) => `${a.name} −CHF ${a.discount.toFixed(2)}`).join("; ")}]`
+          : "",
+        roundAdj !== 0 ? `[Rounding ${roundAdj > 0 ? "+" : ""}${roundAdj.toFixed(2)}]` : "",
+      ]
+        .filter(Boolean)
+        .join("\n") || null;
     const addressText =
       typeof shippingAddress === "string"
         ? [shippingAddress, zipCode, city].filter(Boolean).join(", ")
@@ -1603,7 +1707,7 @@ router.post("/:slug/orders", async (req: Request, res: Response) => {
         status: "pending_approval",
         subtotal: subtotal.toFixed(2),
         taxAmount: taxAmount.toFixed(2),
-        discountAmount: pointsDiscount.toFixed(2),
+        discountAmount: roundMoney2(offerDiscount + pointsDiscount).toFixed(2),
         deliveryFee: deliveryFee.toFixed(2),
         tipAmount: tip.toFixed(2),
         cardFee: cardFee.toFixed(2),

@@ -19,8 +19,21 @@ type ResSettings = {
   autoAccept: boolean;
   sendConfirmationEmail: boolean;
   sendStatusEmails: boolean;
+  reminderEnabled: boolean;
+  reminderHoursBefore: number;
+  sendReminderEmail: boolean;
   maxCoversPerSlot: number | null;
   policiesText: string | null;
+  slotDiscounts: Array<{
+    id: string;
+    name: string;
+    percentOff: number;
+    scheduleMode: 'specific_days' | 'whole_week';
+    daysOfWeek: string[];
+    timeStart?: string | null;
+    timeEnd?: string | null;
+    enabled?: boolean;
+  }>;
 };
 
 type Reservation = {
@@ -390,6 +403,181 @@ export default function Reservations() {
               />
               {t('reservationsSendStatusEmails')}
             </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={settings.reminderEnabled !== false}
+                onChange={(e) => setSettings({ ...settings, reminderEnabled: e.target.checked })}
+              />
+              Send reservation reminders by email
+            </label>
+            {settings.reminderEnabled !== false ? (
+              <label className="text-sm flex items-center gap-2 flex-wrap">
+                <span className="muted">Remind</span>
+                <input
+                  className="input !w-20"
+                  type="number"
+                  min={1}
+                  max={168}
+                  value={settings.reminderHoursBefore ?? 24}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      reminderHoursBefore: Number(e.target.value) || 24,
+                    })
+                  }
+                />
+                <span className="muted">hours before the booking</span>
+              </label>
+            ) : null}
+          </div>
+
+          <div className="space-y-3 border-t border-[var(--border)] pt-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-semibold">Off-peak / slot discounts</h3>
+                <p className="text-xs muted">
+                  Show “20% off” on reservation time slots (specific days or whole week, optional hours).
+                </p>
+              </div>
+              <button
+                type="button"
+                className="btn-secondary text-sm"
+                onClick={() =>
+                  setSettings({
+                    ...settings,
+                    slotDiscounts: [
+                      ...(settings.slotDiscounts || []),
+                      {
+                        id: `disc-${Date.now()}`,
+                        name: 'Off-peak 20%',
+                        percentOff: 20,
+                        scheduleMode: 'whole_week',
+                        daysOfWeek: [],
+                        timeStart: '13:00',
+                        timeEnd: '17:00',
+                        enabled: true,
+                      },
+                    ],
+                  })
+                }
+              >
+                Add discount
+              </button>
+            </div>
+            {(settings.slotDiscounts || []).map((d, idx) => (
+              <div
+                key={d.id}
+                className="rounded-lg border border-[var(--border)] p-3 space-y-2 bg-[var(--bg-muted)]/40"
+              >
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+                  <input
+                    className="input"
+                    value={d.name}
+                    onChange={(e) => {
+                      const next = [...(settings.slotDiscounts || [])];
+                      next[idx] = { ...d, name: e.target.value };
+                      setSettings({ ...settings, slotDiscounts: next });
+                    }}
+                    placeholder="Name"
+                  />
+                  <label className="text-sm flex items-center gap-1">
+                    <input
+                      className="input !w-20"
+                      type="number"
+                      min={1}
+                      max={90}
+                      value={d.percentOff}
+                      onChange={(e) => {
+                        const next = [...(settings.slotDiscounts || [])];
+                        next[idx] = { ...d, percentOff: Number(e.target.value) || 0 };
+                        setSettings({ ...settings, slotDiscounts: next });
+                      }}
+                    />
+                    % off
+                  </label>
+                  <select
+                    className="input"
+                    value={d.scheduleMode || 'specific_days'}
+                    onChange={(e) => {
+                      const next = [...(settings.slotDiscounts || [])];
+                      next[idx] = {
+                        ...d,
+                        scheduleMode: e.target.value as 'specific_days' | 'whole_week',
+                      };
+                      setSettings({ ...settings, slotDiscounts: next });
+                    }}
+                  >
+                    <option value="whole_week">Whole week</option>
+                    <option value="specific_days">Certain days</option>
+                  </select>
+                  <button
+                    type="button"
+                    className="btn-secondary text-sm"
+                    onClick={() =>
+                      setSettings({
+                        ...settings,
+                        slotDiscounts: (settings.slotDiscounts || []).filter((_, i) => i !== idx),
+                      })
+                    }
+                  >
+                    Remove
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-2 items-center">
+                  <input
+                    type="time"
+                    className="input !w-auto"
+                    value={d.timeStart || ''}
+                    onChange={(e) => {
+                      const next = [...(settings.slotDiscounts || [])];
+                      next[idx] = { ...d, timeStart: e.target.value || null };
+                      setSettings({ ...settings, slotDiscounts: next });
+                    }}
+                  />
+                  <span>–</span>
+                  <input
+                    type="time"
+                    className="input !w-auto"
+                    value={d.timeEnd || ''}
+                    onChange={(e) => {
+                      const next = [...(settings.slotDiscounts || [])];
+                      next[idx] = { ...d, timeEnd: e.target.value || null };
+                      setSettings({ ...settings, slotDiscounts: next });
+                    }}
+                  />
+                  <span className="text-xs muted">Empty times = all open hours</span>
+                </div>
+                {d.scheduleMode !== 'whole_week' ? (
+                  <div className="flex flex-wrap gap-1">
+                    {DAYS.map((day) => {
+                      const on = (d.daysOfWeek || []).includes(day.key);
+                      return (
+                        <button
+                          key={day.key}
+                          type="button"
+                          className={`rounded-full px-2 py-0.5 text-[11px] border ${
+                            on
+                              ? 'bg-amber-700 text-white border-amber-700'
+                              : 'bg-white border-[var(--border)]'
+                          }`}
+                          onClick={() => {
+                            const days = new Set(d.daysOfWeek || []);
+                            if (on) days.delete(day.key);
+                            else days.add(day.key);
+                            const next = [...(settings.slotDiscounts || [])];
+                            next[idx] = { ...d, daysOfWeek: [...days] };
+                            setSettings({ ...settings, slotDiscounts: next });
+                          }}
+                        >
+                          {day.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
+            ))}
           </div>
 
           <label className="text-sm block">
