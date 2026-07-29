@@ -917,6 +917,9 @@ export const reservations = pgTable(
     status: varchar("status", { length: 30 }).notNull().default("pending"),
     tableId: uuid("table_id").references(() => diningTables.id, { onDelete: "set null" }),
     tableLabel: varchar("table_label", { length: 50 }),
+    /** Slot promotion captured at booking time (e.g. 20) */
+    discountPercent: integer("discount_percent"),
+    discountLabel: varchar("discount_label", { length: 80 }),
     notes: text("notes"),
     internalNotes: text("internal_notes"),
     source: varchar("source", { length: 30 }).notNull().default("web"), // web | phone | pos | dashboard

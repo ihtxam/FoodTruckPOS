@@ -821,11 +821,15 @@ router.get("/:slug/menu", async (req: Request, res: Response) => {
         badgeLabel: o.badgeLabel,
         offerType: o.offerType,
         rules: o.rules,
+        productIds: o.productIds || [],
+        categoryIds: o.categoryIds || [],
         channels: o.channels,
         daysOfWeek: o.daysOfWeek,
         timeStart: o.timeStart,
         timeEnd: o.timeEnd,
         scheduleMode: o.scheduleMode,
+        validFrom: o.validFrom,
+        validTo: o.validTo,
       }));
 
     res.json({
@@ -1295,6 +1299,8 @@ router.post("/:slug/offers/preview", async (req: Request, res: Response) => {
           unitPrice: Number(l.unitPrice || l.price || 0),
           quantity: Math.max(1, Math.floor(Number(l.quantity) || 1)),
           loyaltyReward: !!l.loyaltyReward,
+          // When client already baked this offer into line prices, skip re-applying it
+          offerId: l.offerId ? String(l.offerId) : null,
         };
       }),
       Number.isNaN(at.getTime()) ? new Date() : at,

@@ -35,7 +35,12 @@ import ShopVacationPopup from '@/components/shop/ShopVacationPopup';
 import ShopNotAcceptingBanner from '@/components/shop/ShopNotAcceptingBanner';
 import ShopChannelPrompt from '@/components/shop/ShopChannelPrompt';
 import ShopInfoSheet from '@/components/shop/ShopInfoSheet';
+import ShopOfferPicker, {
+  type ShopOfferForPicker,
+  type ShopOfferProduct,
+} from '@/components/shop/ShopOfferPicker';
 import { findNextOpen, type StoreHours } from '@/lib/shop-hours';
+import { applyPercent, isPickableDeal, matchingPercentOffer } from '@/lib/shop-offers';
 
 interface Product {
   id: string;
@@ -84,9 +89,7 @@ export default function OrderingPage() {
 
   const [merchant, setMerchant] = useState<any>(null);
   const [menu, setMenu] = useState<Category[]>([]);
-  const [shopOffers, setShopOffers] = useState<
-    Array<{ id: string; name: string; description?: string | null; badgeLabel?: string | null }>
-  >([]);
+  const [shopOffers, setShopOffers] = useState<ShopOfferForPicker[]>([]);
   const [draft, setDraft] = useState<ShopCheckoutDraft>(emptyDraft());
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [loading, setLoading] = useState(true);
@@ -96,6 +99,7 @@ export default function OrderingPage() {
   const [deliveryInfo, setDeliveryInfo] = useState<any>(null);
   const [pendingProduct, setPendingProduct] = useState<ShopProductForModifiers | null>(null);
   const [pendingCombo, setPendingCombo] = useState<ShopComboProduct | null>(null);
+  const [pendingOffer, setPendingOffer] = useState<ShopOfferForPicker | null>(null);
   const [customer, setCustomer] = useState<any>(null);
   const [loyaltyBalance, setLoyaltyBalance] = useState(0);
   const [loyaltyRewards, setLoyaltyRewards] = useState<LoyaltyReward[]>([]);
@@ -270,8 +274,47 @@ export default function OrderingPage() {
         const base =
           typeof item.basePrice === 'number' && Number.isFinite(item.basePrice)
             ? item.basePrice
-            : roundMoney2(Number(item.price || 0) - extrasTotal);
-        const nextPrice = roundMoney2(base + markup + extrasTotal);
+            : roundMoney2(Number(item.catalogPrice ?? item.price ?? 0) - extrasTotal);
+        const catalogUnit = roundMoney2(base + markup + extrasTotal);
+
+        // Offer already baked (2+1 free / package / % off) — keep relative deal, refresh catalog
+        if (item.offerId) {
+          const wasFree = (item.catalogPrice != null && item.price === 0) || item.offerBadge?.toLowerCase().includes('free');
+          if (wasFree || item.price === 0) {
+            if (item.catalogPrice !== catalogUnit || item.price !== 0) {
+              changed = true;
+              return { ...item, basePrice: base, catalogPrice: catalogUnit, price: 0 };
+            }
+            return item;
+          }
+          // % off: re-apply from badge/catalog ratio if we know percent from matching offer
+          const pctMatch = matchingPercentOffer(shopOffers, item, prev.channel);
+          if (pctMatch && item.offerId === pctMatch.offer.id) {
+            const nextPrice = applyPercent(catalogUnit, pctMatch.percent);
+            if (nextPrice !== item.price || item.catalogPrice !== catalogUnit || item.basePrice !== base) {
+              changed = true;
+              return {
+                ...item,
+                basePrice: base,
+                catalogPrice: catalogUnit,
+                price: nextPrice,
+              };
+            }
+            return item;
+          }
+          // Package paid share: keep same fraction of catalog if possible
+          if (item.catalogPrice && item.catalogPrice > 0 && item.price > 0) {
+            const ratio = item.price / item.catalogPrice;
+            const nextPrice = roundMoney2(catalogUnit * ratio);
+            if (nextPrice !== item.price || item.catalogPrice !== catalogUnit || item.basePrice !== base) {
+              changed = true;
+              return { ...item, basePrice: base, catalogPrice: catalogUnit, price: nextPrice };
+            }
+            return item;
+          }
+        }
+
+        const nextPrice = catalogUnit;
         if (!Number.isFinite(nextPrice)) return item;
         if (nextPrice !== item.price || item.basePrice !== base) {
           changed = true;
@@ -282,7 +325,7 @@ export default function OrderingPage() {
       if (!changed) return prev;
       return { ...prev, items };
     });
-  }, [channel, deliveryMenuMarkup, merchant]);
+  }, [channel, deliveryMenuMarkup, merchant, shopOffers]);
 
   const cartTotal = roundMoney2(cart.reduce((sum, item) => sum + item.price * item.quantity, 0));
   const deliveryFee = roundMoney2(
@@ -351,13 +394,23 @@ export default function OrderingPage() {
       0
     );
     // Always recompute from catalog base so delivery markup is applied (modal unitPrice is takeaway-based).
-    const price = roundMoney2(catalogUnitPrice(product.price) + extrasTotal + comboTotal);
+    const catalogUnit = roundMoney2(catalogUnitPrice(product.price) + extrasTotal + comboTotal);
+    const pctMatch = matchingPercentOffer(
+      shopOffers,
+      {
+        id: product.id,
+        categoryId: 'categoryId' in product ? product.categoryId ?? null : null,
+      },
+      channel
+    );
+    const price = pctMatch ? applyPercent(catalogUnit, pctMatch.percent) : catalogUnit;
     const sig = lineSignature(extras, comboSelections);
     setDraft((prev) => {
       const existing = prev.items.find(
         (item) =>
           item.id === product.id &&
           !item.loyaltyReward &&
+          !item.offerId &&
           lineSignature(item.selectedExtras, item.comboSelections) === sig
       );
       const items: ShopCartItem[] = existing
@@ -378,10 +431,65 @@ export default function OrderingPage() {
               image: product.image,
               selectedExtras: extras,
               comboSelections,
+              ...(pctMatch
+                ? {
+                    offerId: pctMatch.offer.id,
+                    catalogPrice: catalogUnit,
+                    offerBadge: pctMatch.offer.badgeLabel || `${pctMatch.percent}% off`,
+                  }
+                : {}),
             },
           ];
       return { ...prev, items };
     });
+  };
+
+  const allMenuProducts = useMemo((): ShopOfferProduct[] => {
+    const out: ShopOfferProduct[] = [];
+    for (const cat of menu) {
+      for (const p of cat.items || []) {
+        out.push({
+          id: p.id,
+          name: p.name,
+          price: p.price,
+          image: p.image,
+          categoryId: p.categoryId ?? cat.id,
+          description: p.description,
+        });
+      }
+    }
+    return out;
+  }, [menu]);
+
+  const addOfferDealToCart = (result: {
+    offerId: string;
+    offerBadge: string;
+    lines: Array<{
+      product: ShopOfferProduct;
+      role: 'paid' | 'free';
+      price: number;
+      catalogPrice: number;
+    }>;
+  }) => {
+    setDraft((prev) => {
+      const nextLines: ShopCartItem[] = result.lines.map((line) => ({
+        lineId: newCartLineId(),
+        id: line.product.id,
+        name: line.product.name,
+        categoryId: line.product.categoryId ?? null,
+        price: line.price,
+        basePrice: line.product.price,
+        quantity: 1,
+        description: line.product.description,
+        image: line.product.image || undefined,
+        offerId: result.offerId,
+        catalogPrice: line.catalogPrice,
+        offerBadge: line.role === 'free' ? 'Free' : result.offerBadge,
+      }));
+      return { ...prev, items: [...prev.items, ...nextLines] };
+    });
+    setPendingOffer(null);
+    setMobileBasket(true);
   };
 
   const handleProductClick = (product: Product) => {
@@ -611,7 +719,23 @@ export default function OrderingPage() {
                   <div className="text-stone-500">
                     {item.loyaltyReward
                       ? t('shopPtsBadge').replace('{n}', String(item.rewardPointsCost || 0))
-                      : `CHF ${item.price.toFixed(2)}`}
+                      : item.catalogPrice != null && item.catalogPrice > item.price ? (
+                          <span className="tabular-nums">
+                            <span className="line-through text-stone-400 mr-1">
+                              CHF {item.catalogPrice.toFixed(2)}
+                            </span>
+                            <span className="text-amber-800 font-semibold">
+                              {item.price === 0 ? 'Free' : `CHF ${item.price.toFixed(2)}`}
+                            </span>
+                            {item.offerBadge ? (
+                              <span className="ml-1 text-[10px] font-bold uppercase text-amber-700">
+                                {item.offerBadge}
+                              </span>
+                            ) : null}
+                          </span>
+                        ) : (
+                          `CHF ${item.price.toFixed(2)}`
+                        )}
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
@@ -926,22 +1050,44 @@ export default function OrderingPage() {
             <div className="mb-5 space-y-2">
               <h2 className="text-sm font-bold uppercase tracking-wide text-amber-800">Offers</h2>
               <div className="flex gap-2 overflow-x-auto pb-1">
-                {shopOffers.map((o) => (
-                  <div
-                    key={o.id}
-                    className="min-w-[200px] max-w-[260px] shrink-0 rounded-xl border border-amber-200 bg-amber-50 p-3"
-                  >
-                    {o.badgeLabel ? (
-                      <span className="inline-block rounded-full bg-amber-700 px-2 py-0.5 text-[10px] font-bold uppercase text-white">
-                        {o.badgeLabel}
-                      </span>
-                    ) : null}
-                    <p className="mt-1.5 font-semibold text-stone-900 text-sm">{o.name}</p>
-                    {o.description ? (
-                      <p className="mt-0.5 text-xs text-stone-600 line-clamp-3">{o.description}</p>
-                    ) : null}
-                  </div>
-                ))}
+                {shopOffers.map((o) => {
+                  const clickable = isPickableDeal(o.offerType);
+                  const pct =
+                    o.offerType === 'percent_category' || o.offerType === 'percent_order'
+                      ? Number(o.rules?.percentOff) || 0
+                      : 0;
+                  return (
+                    <button
+                      key={o.id}
+                      type="button"
+                      onClick={() => {
+                        if (clickable) setPendingOffer(o);
+                      }}
+                      className={`min-w-[200px] max-w-[260px] shrink-0 rounded-xl border border-amber-200 bg-amber-50 p-3 text-left ${
+                        clickable ? 'hover:border-amber-500 active:scale-[0.99]' : ''
+                      }`}
+                    >
+                      {o.badgeLabel ? (
+                        <span className="inline-block rounded-full bg-amber-700 px-2 py-0.5 text-[10px] font-bold uppercase text-white">
+                          {o.badgeLabel}
+                        </span>
+                      ) : null}
+                      <p className="mt-1.5 font-semibold text-stone-900 text-sm">{o.name}</p>
+                      {o.description ? (
+                        <p className="mt-0.5 text-xs text-stone-600 line-clamp-3">{o.description}</p>
+                      ) : null}
+                      {clickable ? (
+                        <p className="mt-2 text-[11px] font-semibold text-amber-800">
+                          Tap to pick products →
+                        </p>
+                      ) : pct > 0 ? (
+                        <p className="mt-2 text-[11px] font-semibold text-amber-800">
+                          {pct}% off applied in cart
+                        </p>
+                      ) : null}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           ) : null}
@@ -1081,13 +1227,27 @@ export default function OrderingPage() {
                       ) : null}
                       {gridCols === 2 ? (
                         <div className="grid grid-cols-2 gap-3">
-                          {items.map((product) => (
+                          {items.map((product) => {
+                            const catalog = catalogUnitPrice(product.price);
+                            const pctMatch = matchingPercentOffer(
+                              shopOffers,
+                              { id: product.id, categoryId: product.categoryId ?? cat.id },
+                              channel
+                            );
+                            const sale = pctMatch ? applyPercent(catalog, pctMatch.percent) : null;
+                            return (
                             <ProductCard
                               key={product.id}
                               product={product}
                               layout="grid"
                               showImage={showProductImages}
-                              price={catalogUnitPrice(product.price)}
+                              price={catalog}
+                              salePrice={sale}
+                              offerBadge={
+                                pctMatch
+                                  ? pctMatch.offer.badgeLabel || `${pctMatch.percent}% off`
+                                  : null
+                              }
                               onAdd={() => handleProductClick(product)}
                               rewardPts={
                                 product.loyaltyRewardPoints != null &&
@@ -1105,17 +1265,32 @@ export default function OrderingPage() {
                               onAddFree={() => addConfiguredItem(product, [], 0, [], true)}
                               t={t}
                             />
-                          ))}
+                            );
+                          })}
                         </div>
                       ) : (
                         <div className="divide-y divide-stone-100">
-                          {items.map((product) => (
+                          {items.map((product) => {
+                            const catalog = catalogUnitPrice(product.price);
+                            const pctMatch = matchingPercentOffer(
+                              shopOffers,
+                              { id: product.id, categoryId: product.categoryId ?? cat.id },
+                              channel
+                            );
+                            const sale = pctMatch ? applyPercent(catalog, pctMatch.percent) : null;
+                            return (
                             <ProductCard
                               key={product.id}
                               product={product}
                               layout="list"
                               showImage={showProductImages}
-                              price={catalogUnitPrice(product.price)}
+                              price={catalog}
+                              salePrice={sale}
+                              offerBadge={
+                                pctMatch
+                                  ? pctMatch.offer.badgeLabel || `${pctMatch.percent}% off`
+                                  : null
+                              }
                               onAdd={() => handleProductClick(product)}
                               rewardPts={
                                 product.loyaltyRewardPoints != null &&
@@ -1133,7 +1308,8 @@ export default function OrderingPage() {
                               onAddFree={() => addConfiguredItem(product, [], 0, [], true)}
                               t={t}
                             />
-                          ))}
+                            );
+                          })}
                         </div>
                       )}
                       {items.length === 0 ? (
@@ -1193,6 +1369,16 @@ export default function OrderingPage() {
         />
       )}
 
+      {pendingOffer && (
+        <ShopOfferPicker
+          offer={pendingOffer}
+          products={allMenuProducts}
+          priceOf={(p) => catalogUnitPrice(p.price)}
+          onClose={() => setPendingOffer(null)}
+          onConfirm={addOfferDealToCart}
+        />
+      )}
+
       <ShopChannelPrompt
         open={channelPromptOpen}
         title={t('shopChooseHow')}
@@ -1238,6 +1424,8 @@ function ProductCard({
   layout,
   showImage,
   price,
+  salePrice,
+  offerBadge,
   onAdd,
   rewardPts,
   unlocked,
@@ -1248,12 +1436,27 @@ function ProductCard({
   layout: 'grid' | 'list';
   showImage: boolean;
   price: number;
+  salePrice?: number | null;
+  offerBadge?: string | null;
   onAdd: () => void;
   rewardPts: number | null;
   unlocked: boolean;
   onAddFree: () => void;
   t: (k: string) => string;
 }) {
+  const priceNode =
+    salePrice != null && salePrice < price ? (
+      <span className="tabular-nums">
+        <span className="line-through text-stone-400 mr-1.5">CHF {price.toFixed(2)}</span>
+        <span className="text-amber-800 font-semibold">CHF {salePrice.toFixed(2)}</span>
+        {offerBadge ? (
+          <span className="ml-1.5 text-[10px] font-bold uppercase text-amber-700">{offerBadge}</span>
+        ) : null}
+      </span>
+    ) : (
+      <span className="tabular-nums">CHF {price.toFixed(2)}</span>
+    );
+
   if (layout === 'list') {
     return (
       <div className="relative flex gap-3 py-3 px-1">
@@ -1277,7 +1480,7 @@ function ProductCard({
           {product.description ? (
             <p className="mt-0.5 text-xs text-stone-500 line-clamp-2">{product.description}</p>
           ) : null}
-          <p className="mt-1 text-sm font-medium tabular-nums">CHF {price.toFixed(2)}</p>
+          <p className="mt-1 text-sm font-medium">{priceNode}</p>
           {rewardPts != null ? (
             <p className="text-[11px] text-amber-800">{t('shopPtsBadge').replace('{n}', String(rewardPts))}</p>
           ) : null}
@@ -1317,6 +1520,11 @@ function ProductCard({
             {(product.name || '?').slice(0, 1).toUpperCase()}
           </div>
         )}
+        {offerBadge ? (
+          <span className="absolute left-2 top-2 rounded-full bg-amber-700 px-2 py-0.5 text-[10px] font-bold uppercase text-white">
+            {offerBadge}
+          </span>
+        ) : null}
         <button
           type="button"
           onClick={onAdd}
@@ -1339,7 +1547,7 @@ function ProductCard({
         <p className="font-semibold text-stone-900 text-sm leading-snug line-clamp-2 uppercase tracking-wide">
           {product.name}
         </p>
-        <p className="mt-0.5 text-sm text-stone-700 tabular-nums">CHF {price.toFixed(2)}</p>
+        <p className="mt-0.5 text-sm text-stone-700">{priceNode}</p>
       </button>
     </article>
   );

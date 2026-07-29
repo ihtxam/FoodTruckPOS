@@ -53,6 +53,8 @@ type Reservation = {
   notes: string | null;
   internalNotes: string | null;
   source: string;
+  discountPercent?: number | null;
+  discountLabel?: string | null;
 };
 
 type Table = { id: string; label: string; capacity: number; status: string; floorPlanName?: string };
@@ -812,11 +814,22 @@ export default function Reservations() {
                         {r.status}
                       </span>
                       <span className="text-xs muted">{r.code}</span>
+                      {r.discountPercent ? (
+                        <span className="text-xs px-2 py-0.5 rounded bg-amber-100 text-amber-900 font-semibold border border-amber-300">
+                          {r.discountLabel || `${r.discountPercent}% off`}
+                        </span>
+                      ) : null}
                     </div>
                     <p className="text-sm muted mt-0.5">
                       {new Date(r.reservedAt).toLocaleString()} · {r.partySize} {t('reservationsGuests')} ·{' '}
                       {r.guestPhone}
-                      {r.tableLabel ? ` · ${t('reservationsTable')} ${r.tableLabel}` : ''}
+                      {r.tableLabel
+                        ? ` · ${t('reservationsTable')} ${r.tableLabel}${
+                            r.discountPercent
+                              ? ` · ${r.discountLabel || `${r.discountPercent}% off`}`
+                              : ''
+                          }`
+                        : ''}
                     </p>
                     {r.notes && <p className="text-xs mt-1">{r.notes}</p>}
                   </div>
@@ -893,9 +906,17 @@ export default function Reservations() {
                       {tables.map((tb) => (
                         <option key={tb.id} value={tb.id}>
                           {tb.label} ({tb.capacity}) — {tb.status}
+                          {r.discountPercent && r.tableId === tb.id
+                            ? ` · ${r.discountLabel || `${r.discountPercent}% off`}`
+                            : ''}
                         </option>
                       ))}
                     </select>
+                    {r.tableLabel && r.discountPercent ? (
+                      <span className="text-xs font-semibold text-amber-900 bg-amber-50 border border-amber-200 px-2 py-1 rounded">
+                        Table {r.tableLabel} · {r.discountLabel || `${r.discountPercent}% off`}
+                      </span>
+                    ) : null}
                   </div>
                 )}
               </div>

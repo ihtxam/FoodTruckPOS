@@ -10,6 +10,8 @@ export type CartLineForOffer = {
   unitPrice: number;
   quantity: number;
   loyaltyReward?: boolean;
+  /** Already baked into unitPrice — skip this offer in evaluateCart */
+  offerId?: string | null;
 };
 
 export type AppliedOffer = {
@@ -476,8 +478,11 @@ export class OffersService {
     at: Date,
     channel: string
   ): { discount: number; applied: AppliedOffer[] } {
+    const bakedOfferIds = new Set(
+      lines.map((l) => l.offerId).filter((id): id is string => !!id)
+    );
     const active = offers
-      .filter((o) => this.isOfferActiveAt(o, at, channel))
+      .filter((o) => this.isOfferActiveAt(o, at, channel) && !bakedOfferIds.has(o.id))
       .sort((a, b) => (b.priority || 0) - (a.priority || 0));
 
     const foodTotal = roundMoney2(
