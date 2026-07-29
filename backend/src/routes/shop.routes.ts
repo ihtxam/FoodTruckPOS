@@ -262,14 +262,16 @@ async function resolveShopComboSelections(
       return {
         selections: [],
         surcharge: 0,
-        error: `Please choose ${slot.minPick === 1 ? "an option" : `${slot.minPick} options`} for "${slot.name}"`,
+        error: `For "${comboProduct.name}": please choose ${
+          slot.minPick === 1 ? "an option" : `${slot.minPick} options`
+        } for "${slot.name}"`,
       };
     }
     if (slotPicks.length > slot.maxPick) {
       return {
         selections: [],
         surcharge: 0,
-        error: `Too many options selected for "${slot.name}"`,
+        error: `For "${comboProduct.name}": too many options selected for "${slot.name}"`,
       };
     }
 
@@ -280,7 +282,7 @@ async function resolveShopComboSelections(
         return {
           selections: [],
           surcharge: 0,
-          error: `Invalid choice for "${slot.name}"`,
+          error: `For "${comboProduct.name}": invalid choice for "${slot.name}"`,
         };
       }
       const child = childById.get(pick.productId);
@@ -288,7 +290,7 @@ async function resolveShopComboSelections(
         return {
           selections: [],
           surcharge: 0,
-          error: `Product unavailable in "${slot.name}"`,
+          error: `For "${comboProduct.name}": product unavailable in "${slot.name}"`,
         };
       }
       const extrasResolved = await resolveShopLineExtras(merchantId, child, pick.selectedExtras, {

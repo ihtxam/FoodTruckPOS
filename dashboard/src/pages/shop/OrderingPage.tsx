@@ -100,6 +100,24 @@ export default function OrderingPage() {
   const [pendingProduct, setPendingProduct] = useState<ShopProductForModifiers | null>(null);
   const [pendingCombo, setPendingCombo] = useState<ShopComboProduct | null>(null);
   const [pendingOffer, setPendingOffer] = useState<ShopOfferForPicker | null>(null);
+  /** After picking a 2+1 deal, configure combo/modifier products one-by-one */
+  const [offerConfigQueue, setOfferConfigQueue] = useState<
+    Array<{
+      productId: string;
+      role: 'paid' | 'free';
+      dealPrice: number;
+      catalogPrice: number;
+      offerId: string;
+      offerBadge: string;
+    }>
+  >([]);
+  const [offerConfigMeta, setOfferConfigMeta] = useState<{
+    offerId: string;
+    offerBadge: string;
+    dealPrice: number;
+    catalogPrice: number;
+    role: 'paid' | 'free';
+  } | null>(null);
   const [customer, setCustomer] = useState<any>(null);
   const [loyaltyBalance, setLoyaltyBalance] = useState(0);
   const [loyaltyRewards, setLoyaltyRewards] = useState<LoyaltyReward[]>([]);
@@ -354,7 +372,14 @@ export default function OrderingPage() {
     extras: ShopSelectedExtra[] = [],
     unitPrice?: number,
     comboSelections: ShopComboSelection[] = [],
-    asReward = false
+    asReward = false,
+    offerMeta?: {
+      offerId: string;
+      offerBadge: string;
+      /** Precomputed deal unit price (before extras); free lines use 0 */
+      dealPrice?: number;
+      catalogPrice?: number;
+    }
   ) => {
     const rewardCost =
       'loyaltyRewardPoints' in product && product.loyaltyRewardPoints != null
@@ -395,24 +420,55 @@ export default function OrderingPage() {
     );
     // Always recompute from catalog base so delivery markup is applied (modal unitPrice is takeaway-based).
     const catalogUnit = roundMoney2(catalogUnitPrice(product.price) + extrasTotal + comboTotal);
-    const pctMatch = matchingPercentOffer(
-      shopOffers,
-      {
-        id: product.id,
-        categoryId: 'categoryId' in product ? product.categoryId ?? null : null,
-      },
-      channel
-    );
-    const price = pctMatch ? applyPercent(catalogUnit, pctMatch.percent) : catalogUnit;
+    const pctMatch = !offerMeta
+      ? matchingPercentOffer(
+          shopOffers,
+          {
+            id: product.id,
+            categoryId: 'categoryId' in product ? product.categoryId ?? null : null,
+          },
+          channel
+        )
+      : null;
+
+    let price: number;
+    let catalogPrice: number | undefined;
+    let offerId: string | undefined;
+    let offerBadge: string | undefined;
+
+    if (offerMeta) {
+      offerId = offerMeta.offerId;
+      offerBadge = offerMeta.offerBadge;
+      const dealBase =
+        typeof offerMeta.dealPrice === 'number' ? offerMeta.dealPrice : catalogUnitPrice(product.price);
+      // Free deal lines stay 0; paid deal price + option surcharges
+      price =
+        dealBase <= 0
+          ? 0
+          : roundMoney2(dealBase + extrasTotal + comboTotal);
+      catalogPrice = typeof offerMeta.catalogPrice === 'number' ? offerMeta.catalogPrice : catalogUnit;
+      if (catalogPrice < price) catalogPrice = catalogUnit;
+    } else if (pctMatch) {
+      price = applyPercent(catalogUnit, pctMatch.percent);
+      catalogPrice = catalogUnit;
+      offerId = pctMatch.offer.id;
+      offerBadge = pctMatch.offer.badgeLabel || `${pctMatch.percent}% off`;
+    } else {
+      price = catalogUnit;
+    }
+
     const sig = lineSignature(extras, comboSelections);
     setDraft((prev) => {
-      const existing = prev.items.find(
-        (item) =>
-          item.id === product.id &&
-          !item.loyaltyReward &&
-          !item.offerId &&
-          lineSignature(item.selectedExtras, item.comboSelections) === sig
-      );
+      const existing =
+        offerMeta
+          ? null
+          : prev.items.find(
+              (item) =>
+                item.id === product.id &&
+                !item.loyaltyReward &&
+                !item.offerId &&
+                lineSignature(item.selectedExtras, item.comboSelections) === sig
+            );
       const items: ShopCartItem[] = existing
         ? prev.items.map((item) =>
             item.lineId === existing.lineId ? { ...item, quantity: item.quantity + 1 } : item
@@ -431,11 +487,11 @@ export default function OrderingPage() {
               image: product.image,
               selectedExtras: extras,
               comboSelections,
-              ...(pctMatch
+              ...(offerId
                 ? {
-                    offerId: pctMatch.offer.id,
-                    catalogPrice: catalogUnit,
-                    offerBadge: pctMatch.offer.badgeLabel || `${pctMatch.percent}% off`,
+                    offerId,
+                    catalogPrice: catalogPrice ?? catalogUnit,
+                    offerBadge,
                   }
                 : {}),
             },
@@ -455,11 +511,65 @@ export default function OrderingPage() {
           image: p.image,
           categoryId: p.categoryId ?? cat.id,
           description: p.description,
+          productType: p.productType,
+          isCombo: productHasComboSlots(p),
         });
       }
     }
     return out;
   }, [menu]);
+
+  const findMenuProduct = (id: string): Product | null => {
+    for (const cat of menu) {
+      const p = (cat.items || []).find((x) => x.id === id);
+      if (p) return { ...p, categoryId: p.categoryId ?? cat.id };
+    }
+    return null;
+  };
+
+  const advanceOfferConfigQueue = (
+    queue: typeof offerConfigQueue
+  ) => {
+    if (!queue.length) {
+      setOfferConfigQueue([]);
+      setOfferConfigMeta(null);
+      setPendingCombo(null);
+      setPendingProduct(null);
+      setMobileBasket(true);
+      return;
+    }
+    const [next, ...rest] = queue;
+    const product = findMenuProduct(next.productId);
+    if (!product) {
+      advanceOfferConfigQueue(rest);
+      return;
+    }
+    const meta = {
+      offerId: next.offerId,
+      offerBadge: next.role === 'free' ? 'Free' : next.offerBadge,
+      dealPrice: next.role === 'free' ? 0 : next.dealPrice,
+      catalogPrice: next.catalogPrice,
+      role: next.role,
+    };
+    setOfferConfigQueue(rest);
+    setOfferConfigMeta(meta);
+    if (productHasComboSlots(product)) {
+      setPendingCombo(product as ShopComboProduct);
+      return;
+    }
+    if (productHasModifiers(product)) {
+      setPendingProduct(product);
+      return;
+    }
+    addConfiguredItem(product, [], undefined, [], false, {
+      offerId: meta.offerId,
+      offerBadge: meta.offerBadge,
+      dealPrice: meta.dealPrice,
+      catalogPrice: meta.catalogPrice,
+    });
+    setOfferConfigMeta(null);
+    advanceOfferConfigQueue(rest);
+  };
 
   const addOfferDealToCart = (result: {
     offerId: string;
@@ -471,25 +581,16 @@ export default function OrderingPage() {
       catalogPrice: number;
     }>;
   }) => {
-    setDraft((prev) => {
-      const nextLines: ShopCartItem[] = result.lines.map((line) => ({
-        lineId: newCartLineId(),
-        id: line.product.id,
-        name: line.product.name,
-        categoryId: line.product.categoryId ?? null,
-        price: line.price,
-        basePrice: line.product.price,
-        quantity: 1,
-        description: line.product.description,
-        image: line.product.image || undefined,
-        offerId: result.offerId,
-        catalogPrice: line.catalogPrice,
-        offerBadge: line.role === 'free' ? 'Free' : result.offerBadge,
-      }));
-      return { ...prev, items: [...prev.items, ...nextLines] };
-    });
     setPendingOffer(null);
-    setMobileBasket(true);
+    const queue = result.lines.map((line) => ({
+      productId: line.product.id,
+      role: line.role,
+      dealPrice: line.price,
+      catalogPrice: line.catalogPrice,
+      offerId: result.offerId,
+      offerBadge: result.offerBadge,
+    }));
+    advanceOfferConfigQueue(queue);
   };
 
   const handleProductClick = (product: Product) => {
@@ -711,6 +812,21 @@ export default function OrderingPage() {
                         .join(' · ')}
                     </p>
                   )}
+                  {(() => {
+                    const mp = findMenuProduct(item.id);
+                    if (
+                      mp &&
+                      productHasComboSlots(mp) &&
+                      !(item.comboSelections && item.comboSelections.length)
+                    ) {
+                      return (
+                        <p className="text-xs text-red-700 mt-0.5 font-medium">
+                          Missing choices (e.g. Main) — remove and add again
+                        </p>
+                      );
+                    }
+                    return null;
+                  })()}
                   {!!item.selectedExtras?.length && (
                     <p className="text-xs text-stone-500 mt-0.5 leading-snug">
                       {item.selectedExtras.map((e) => e.name).join(', ')}
@@ -1350,10 +1466,33 @@ export default function OrderingPage() {
       {pendingProduct && (
         <ShopProductModifiersModal
           product={{ ...pendingProduct, price: catalogUnitPrice(pendingProduct.price) }}
-          onClose={() => setPendingProduct(null)}
-          onConfirm={(extras) => {
-            addConfiguredItem(pendingProduct, extras);
+          onClose={() => {
             setPendingProduct(null);
+            if (offerConfigMeta) {
+              setOfferConfigQueue([]);
+              setOfferConfigMeta(null);
+            }
+          }}
+          onConfirm={(extras) => {
+            const meta = offerConfigMeta;
+            addConfiguredItem(
+              pendingProduct,
+              extras,
+              undefined,
+              [],
+              false,
+              meta
+                ? {
+                    offerId: meta.offerId,
+                    offerBadge: meta.offerBadge,
+                    dealPrice: meta.dealPrice,
+                    catalogPrice: meta.catalogPrice,
+                  }
+                : undefined
+            );
+            setPendingProduct(null);
+            setOfferConfigMeta(null);
+            if (meta) advanceOfferConfigQueue(offerConfigQueue);
           }}
         />
       )}
@@ -1361,10 +1500,36 @@ export default function OrderingPage() {
       {pendingCombo && (
         <ShopComboWizard
           product={{ ...pendingCombo, price: catalogUnitPrice(pendingCombo.price) }}
-          onClose={() => setPendingCombo(null)}
-          onConfirm={({ comboSelections, selectedExtras }) => {
-            addConfiguredItem(pendingCombo, selectedExtras, undefined, comboSelections);
+          onClose={() => {
             setPendingCombo(null);
+            if (offerConfigMeta) {
+              setOfferConfigQueue([]);
+              setOfferConfigMeta(null);
+              setError(
+                `Cancelled — "${pendingCombo.name}" needs choices like Main before it can be ordered.`
+              );
+            }
+          }}
+          onConfirm={({ comboSelections, selectedExtras }) => {
+            const meta = offerConfigMeta;
+            addConfiguredItem(
+              pendingCombo,
+              selectedExtras,
+              undefined,
+              comboSelections,
+              false,
+              meta
+                ? {
+                    offerId: meta.offerId,
+                    offerBadge: meta.offerBadge,
+                    dealPrice: meta.dealPrice,
+                    catalogPrice: meta.catalogPrice,
+                  }
+                : undefined
+            );
+            setPendingCombo(null);
+            setOfferConfigMeta(null);
+            if (meta) advanceOfferConfigQueue(offerConfigQueue);
           }}
         />
       )}
