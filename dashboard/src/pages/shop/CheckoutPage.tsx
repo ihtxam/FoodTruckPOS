@@ -5,15 +5,17 @@ import {
   cartSubtotal,
   clearCart,
   clearCustomerToken,
+  emptyDraft,
+  groupCartForDisplay,
   loadCart,
   loadCustomerToken,
+  removeOfferInstance,
   resolveShopKey,
   saveCart,
   saveCustomerToken,
   shopBasePath,
   type ShopCheckoutDraft,
   type ShopChannel,
-  emptyDraft,
 } from '@/lib/shop-cart';
 import {
   buildScheduleDays,
@@ -403,12 +405,20 @@ export default function CheckoutPage() {
 
   const setLineQty = (lineId: string, quantity: number) => {
     setDraft((d) => {
-      const items =
-        quantity <= 0
-          ? d.items.filter((i) => (i.lineId || i.id) !== lineId)
-          : d.items.map((i) =>
-              (i.lineId || i.id) === lineId ? { ...i, quantity } : i
-            );
+      const target = d.items.find((i) => (i.lineId || i.id) === lineId);
+      let items = d.items;
+      if (target?.offerInstanceId) {
+        // Locked deal: only whole-offer removal
+        if (quantity > 0) return d;
+        items = removeOfferInstance(d.items, target.offerInstanceId);
+      } else {
+        items =
+          quantity <= 0
+            ? d.items.filter((i) => (i.lineId || i.id) !== lineId)
+            : d.items.map((i) =>
+                (i.lineId || i.id) === lineId ? { ...i, quantity } : i
+              );
+      }
       const next = { ...d, items };
       if (shopKey) saveCart(shopKey, next);
       if (!items.length) {
@@ -420,6 +430,19 @@ export default function CheckoutPage() {
   };
 
   const removeLine = (lineId: string) => setLineQty(lineId, 0);
+
+  const removeOfferBlock = (offerInstanceId: string) => {
+    setDraft((d) => {
+      const items = removeOfferInstance(d.items, offerInstanceId);
+      const next = { ...d, items };
+      if (shopKey) saveCart(shopKey, next);
+      if (!items.length) {
+        clearCart(shopKey);
+        navigate(`${shopBasePath(shopKey) || '/'}`, { replace: true });
+      }
+      return next;
+    });
+  };
 
   const checkDelivery = async () => {
     if (draft.channel !== 'delivery') return true;
@@ -1512,7 +1535,63 @@ export default function CheckoutPage() {
               </dl>
 
               <ul className="border-t border-stone-100 pt-3 space-y-3 text-sm">
-                {draft.items.map((i) => {
+                {groupCartForDisplay(draft.items).map((block) => {
+                  if (block.kind === 'offer') {
+                    return (
+                      <li
+                        key={block.offerInstanceId}
+                        className="rounded-lg border border-amber-200 bg-amber-50/50 p-3 space-y-2"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <span className="inline-block rounded-full bg-amber-700 px-2 py-0.5 text-[10px] font-bold uppercase text-white">
+                              {block.offerBadge || 'Offer'}
+                            </span>
+                            <p className="mt-1 font-semibold">{block.offerName}</p>
+                            <p className="text-[11px] text-stone-500">Deal locked — remove as a set</p>
+                          </div>
+                          <button
+                            type="button"
+                            className="text-xs text-stone-500 underline"
+                            onClick={() => removeOfferBlock(block.offerInstanceId)}
+                          >
+                            {t('delete')}
+                          </button>
+                        </div>
+                        <ul className="space-y-1 border-t border-amber-100 pt-2">
+                          {block.lines.map((i) => (
+                            <li key={i.lineId || i.id} className="flex justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="font-medium">
+                                  {i.name}
+                                  {i.price === 0 ? (
+                                    <span className="ml-1 text-[10px] font-bold uppercase text-amber-800">
+                                      Free
+                                    </span>
+                                  ) : null}
+                                </p>
+                                {!!i.comboSelections?.length && (
+                                  <p className="text-xs text-stone-500 mt-0.5">
+                                    {i.comboSelections
+                                      .map((c) => `${c.slotName}: ${c.productName}`)
+                                      .join(' · ')}
+                                  </p>
+                                )}
+                              </div>
+                              <span className="shrink-0">
+                                {i.price === 0 ? 'Free' : `CHF ${(i.price * i.quantity).toFixed(2)}`}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                        <div className="flex justify-between font-semibold border-t border-amber-100 pt-1">
+                          <span>Deal total</span>
+                          <span>CHF {block.total.toFixed(2)}</span>
+                        </div>
+                      </li>
+                    );
+                  }
+                  const i = block.item;
                   const lineKey = i.lineId || i.id;
                   return (
                     <li key={lineKey} className="flex justify-between gap-3 items-start">
@@ -1524,6 +1603,11 @@ export default function CheckoutPage() {
                               {t('shopFree')}
                             </span>
                           )}
+                          {i.offerBadge ? (
+                            <span className="ml-1 text-[10px] font-bold uppercase text-amber-700">
+                              {i.offerBadge}
+                            </span>
+                          ) : null}
                         </p>
                         {!!i.comboSelections?.length && (
                           <p className="text-xs text-stone-500 mt-0.5">
@@ -1607,7 +1691,47 @@ export default function CheckoutPage() {
             </Link>
           </div>
           <ul className="text-sm space-y-3">
-            {draft.items.map((i) => {
+            {groupCartForDisplay(draft.items).map((block) => {
+              if (block.kind === 'offer') {
+                return (
+                  <li
+                    key={block.offerInstanceId}
+                    className="rounded-lg border border-amber-200 bg-amber-50/50 p-2.5 space-y-1.5"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <span className="inline-block rounded-full bg-amber-700 px-2 py-0.5 text-[10px] font-bold uppercase text-white">
+                          {block.offerBadge || 'Offer'}
+                        </span>
+                        <p className="mt-1 font-semibold text-sm">{block.offerName}</p>
+                      </div>
+                      <button
+                        type="button"
+                        className="text-xs text-stone-500 underline"
+                        onClick={() => removeOfferBlock(block.offerInstanceId)}
+                      >
+                        {t('delete')}
+                      </button>
+                    </div>
+                    {block.lines.map((i) => (
+                      <div key={i.lineId || i.id} className="flex justify-between gap-2 text-xs">
+                        <span className="min-w-0 truncate">
+                          {i.name}
+                          {i.price === 0 ? ' · Free' : ''}
+                        </span>
+                        <span className="shrink-0">
+                          {i.price === 0 ? 'Free' : `CHF ${(i.price * i.quantity).toFixed(2)}`}
+                        </span>
+                      </div>
+                    ))}
+                    <div className="flex justify-between font-semibold border-t border-amber-100 pt-1">
+                      <span>Deal total</span>
+                      <span>CHF {block.total.toFixed(2)}</span>
+                    </div>
+                  </li>
+                );
+              }
+              const i = block.item;
               const lineKey = i.lineId || i.id;
               return (
                 <li key={lineKey} className="flex justify-between gap-2 items-start">
@@ -1617,6 +1741,11 @@ export default function CheckoutPage() {
                       {i.loyaltyReward && (
                         <span className="ml-1 text-xs font-semibold text-teal-800">{t('shopFree')}</span>
                       )}
+                      {i.offerBadge ? (
+                        <span className="ml-1 text-[10px] font-bold uppercase text-amber-700">
+                          {i.offerBadge}
+                        </span>
+                      ) : null}
                     </p>
                     {!!i.comboSelections?.length && (
                       <p className="text-xs text-stone-500 mt-0.5">

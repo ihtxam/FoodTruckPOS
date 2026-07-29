@@ -45,6 +45,13 @@ export interface ShopCartItem {
   catalogPrice?: number;
   /** Short label e.g. "2+1 free", "20% off" */
   offerBadge?: string;
+  /**
+   * Groups lines from one deal add (2+1 / package). Same id = one locked offer block
+   * that can only be removed as a whole — no per-line qty edits.
+   */
+  offerInstanceId?: string;
+  /** Offer title shown on the locked cart block */
+  offerName?: string;
 }
 
 export interface ShopCheckoutDraft {
@@ -104,6 +111,11 @@ function normalizeCartItem(item: Partial<ShopCartItem> & { id: string; name: str
         ? item.catalogPrice
         : undefined,
     offerBadge: typeof item.offerBadge === 'string' && item.offerBadge ? item.offerBadge : undefined,
+    offerInstanceId:
+      typeof item.offerInstanceId === 'string' && item.offerInstanceId
+        ? item.offerInstanceId
+        : undefined,
+    offerName: typeof item.offerName === 'string' && item.offerName ? item.offerName : undefined,
   };
 }
 
@@ -185,6 +197,69 @@ export function newCartLineId() {
     return crypto.randomUUID();
   }
   return `line-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+/** Unique id for one deal add (groups locked lines in the cart). */
+export function newOfferInstanceId() {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return `offer-${crypto.randomUUID()}`;
+  }
+  return `offer-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+export function isLockedOfferLine(item: ShopCartItem) {
+  return !!item.offerInstanceId;
+}
+
+export type CartDisplayBlock =
+  | { kind: 'line'; item: ShopCartItem }
+  | {
+      kind: 'offer';
+      offerInstanceId: string;
+      offerId?: string;
+      offerName: string;
+      offerBadge?: string;
+      lines: ShopCartItem[];
+      total: number;
+      catalogTotal: number;
+    };
+
+/** Group consecutive/any locked offer lines into one cart block. */
+export function groupCartForDisplay(items: ShopCartItem[]): CartDisplayBlock[] {
+  const blocks: CartDisplayBlock[] = [];
+  const seenOffer = new Set<string>();
+  for (const item of items) {
+    if (item.offerInstanceId) {
+      if (seenOffer.has(item.offerInstanceId)) continue;
+      seenOffer.add(item.offerInstanceId);
+      const lines = items.filter((i) => i.offerInstanceId === item.offerInstanceId);
+      const total = lines.reduce((s, l) => s + l.price * l.quantity, 0);
+      const catalogTotal = lines.reduce(
+        (s, l) => s + (l.catalogPrice != null ? l.catalogPrice : l.price) * l.quantity,
+        0
+      );
+      const badge =
+        lines.find((l) => l.offerBadge && l.offerBadge.toLowerCase() !== 'free')?.offerBadge ||
+        lines[0]?.offerBadge;
+      blocks.push({
+        kind: 'offer',
+        offerInstanceId: item.offerInstanceId,
+        offerId: item.offerId,
+        offerName: item.offerName || badge || 'Offer',
+        offerBadge: badge,
+        lines,
+        total,
+        catalogTotal,
+      });
+      continue;
+    }
+    blocks.push({ kind: 'line', item });
+  }
+  return blocks;
+}
+
+export function removeOfferInstance(items: ShopCartItem[], offerInstanceId: string) {
+  return items.filter((i) => i.offerInstanceId !== offerInstanceId);
 }
 
 const RESERVED_SUBDOMAINS = new Set(['admin', 'api', 'pay', 'www', 'app', 'panel', 'shop']);

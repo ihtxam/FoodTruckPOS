@@ -3,10 +3,13 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import axios from 'axios';
 import {
   emptyDraft,
+  groupCartForDisplay,
   lineSignature,
   loadCart,
   loadCustomerToken,
   newCartLineId,
+  newOfferInstanceId,
+  removeOfferInstance,
   resolveShopKey,
   saveCart,
   shopBasePath,
@@ -109,6 +112,8 @@ export default function OrderingPage() {
       catalogPrice: number;
       offerId: string;
       offerBadge: string;
+      offerInstanceId: string;
+      offerName: string;
     }>
   >([]);
   const [offerConfigMeta, setOfferConfigMeta] = useState<{
@@ -117,6 +122,8 @@ export default function OrderingPage() {
     dealPrice: number;
     catalogPrice: number;
     role: 'paid' | 'free';
+    offerInstanceId: string;
+    offerName: string;
   } | null>(null);
   const [customer, setCustomer] = useState<any>(null);
   const [loyaltyBalance, setLoyaltyBalance] = useState(0);
@@ -379,6 +386,8 @@ export default function OrderingPage() {
       /** Precomputed deal unit price (before extras); free lines use 0 */
       dealPrice?: number;
       catalogPrice?: number;
+      offerInstanceId?: string;
+      offerName?: string;
     }
   ) => {
     const rewardCost =
@@ -435,10 +444,14 @@ export default function OrderingPage() {
     let catalogPrice: number | undefined;
     let offerId: string | undefined;
     let offerBadge: string | undefined;
+    let offerInstanceId: string | undefined;
+    let offerName: string | undefined;
 
     if (offerMeta) {
       offerId = offerMeta.offerId;
       offerBadge = offerMeta.offerBadge;
+      offerInstanceId = offerMeta.offerInstanceId;
+      offerName = offerMeta.offerName;
       const dealBase =
         typeof offerMeta.dealPrice === 'number' ? offerMeta.dealPrice : catalogUnitPrice(product.price);
       // Free deal lines stay 0; paid deal price + option surcharges
@@ -492,6 +505,9 @@ export default function OrderingPage() {
                     offerId,
                     catalogPrice: catalogPrice ?? catalogUnit,
                     offerBadge,
+                    ...(offerInstanceId
+                      ? { offerInstanceId, offerName: offerName || offerBadge }
+                      : {}),
                   }
                 : {}),
             },
@@ -550,6 +566,8 @@ export default function OrderingPage() {
       dealPrice: next.role === 'free' ? 0 : next.dealPrice,
       catalogPrice: next.catalogPrice,
       role: next.role,
+      offerInstanceId: next.offerInstanceId,
+      offerName: next.offerName,
     };
     setOfferConfigQueue(rest);
     setOfferConfigMeta(meta);
@@ -566,6 +584,8 @@ export default function OrderingPage() {
       offerBadge: meta.offerBadge,
       dealPrice: meta.dealPrice,
       catalogPrice: meta.catalogPrice,
+      offerInstanceId: meta.offerInstanceId,
+      offerName: meta.offerName,
     });
     setOfferConfigMeta(null);
     advanceOfferConfigQueue(rest);
@@ -574,6 +594,7 @@ export default function OrderingPage() {
   const addOfferDealToCart = (result: {
     offerId: string;
     offerBadge: string;
+    offerName?: string;
     lines: Array<{
       product: ShopOfferProduct;
       role: 'paid' | 'free';
@@ -581,7 +602,9 @@ export default function OrderingPage() {
       catalogPrice: number;
     }>;
   }) => {
+    const offerName = result.offerName || pendingOffer?.name || result.offerBadge || 'Offer';
     setPendingOffer(null);
+    const instanceId = newOfferInstanceId();
     const queue = result.lines.map((line) => ({
       productId: line.product.id,
       role: line.role,
@@ -589,6 +612,8 @@ export default function OrderingPage() {
       catalogPrice: line.catalogPrice,
       offerId: result.offerId,
       offerBadge: result.offerBadge,
+      offerInstanceId: instanceId,
+      offerName,
     }));
     advanceOfferConfigQueue(queue);
   };
@@ -606,12 +631,32 @@ export default function OrderingPage() {
   };
 
   const updateQuantity = (lineId: string, quantity: number) => {
+    setDraft((prev) => {
+      const target = prev.items.find((item) => item.lineId === lineId);
+      // Locked deal lines: only whole-offer remove (qty 0 on any line removes the deal)
+      if (target?.offerInstanceId) {
+        if (quantity <= 0) {
+          return {
+            ...prev,
+            items: removeOfferInstance(prev.items, target.offerInstanceId),
+          };
+        }
+        return prev;
+      }
+      return {
+        ...prev,
+        items:
+          quantity <= 0
+            ? prev.items.filter((item) => item.lineId !== lineId)
+            : prev.items.map((item) => (item.lineId === lineId ? { ...item, quantity } : item)),
+      };
+    });
+  };
+
+  const removeOfferFromCart = (offerInstanceId: string) => {
     setDraft((prev) => ({
       ...prev,
-      items:
-        quantity <= 0
-          ? prev.items.filter((item) => item.lineId !== lineId)
-          : prev.items.map((item) => (item.lineId === lineId ? { ...item, quantity } : item)),
+      items: removeOfferInstance(prev.items, offerInstanceId),
     }));
   };
 
@@ -792,87 +837,151 @@ export default function OrderingPage() {
           <p className="text-stone-500 text-sm py-8 text-center">{t('shopNoItems')}</p>
         ) : (
           <ul className="space-y-3">
-            {cart.map((item) => (
-              <li key={item.lineId} className="flex gap-3 text-sm">
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-stone-900">
-                    {item.name}
-                    {item.loyaltyReward && (
-                      <span className="ml-2 text-xs font-semibold text-teal-800">{t('shopFree')}</span>
-                    )}
-                  </div>
-                  {!!item.comboSelections?.length && (
-                    <p className="text-xs text-stone-500 mt-0.5 leading-snug">
-                      {item.comboSelections
-                        .map((c) =>
-                          c.selectedExtras?.length
-                            ? `${c.productName} (${c.selectedExtras.map((e) => e.name).join(', ')})`
-                            : c.productName
-                        )
-                        .join(' · ')}
-                    </p>
-                  )}
-                  {(() => {
-                    const mp = findMenuProduct(item.id);
-                    if (
-                      mp &&
-                      productHasComboSlots(mp) &&
-                      !(item.comboSelections && item.comboSelections.length)
-                    ) {
-                      return (
-                        <p className="text-xs text-red-700 mt-0.5 font-medium">
-                          Missing choices (e.g. Main) — remove and add again
-                        </p>
-                      );
-                    }
-                    return null;
-                  })()}
-                  {!!item.selectedExtras?.length && (
-                    <p className="text-xs text-stone-500 mt-0.5 leading-snug">
-                      {item.selectedExtras.map((e) => e.name).join(', ')}
-                    </p>
-                  )}
-                  <div className="text-stone-500">
-                    {item.loyaltyReward
-                      ? t('shopPtsBadge').replace('{n}', String(item.rewardPointsCost || 0))
-                      : item.catalogPrice != null && item.catalogPrice > item.price ? (
-                          <span className="tabular-nums">
-                            <span className="line-through text-stone-400 mr-1">
-                              CHF {item.catalogPrice.toFixed(2)}
-                            </span>
-                            <span className="text-amber-800 font-semibold">
-                              {item.price === 0 ? 'Free' : `CHF ${item.price.toFixed(2)}`}
-                            </span>
-                            {item.offerBadge ? (
-                              <span className="ml-1 text-[10px] font-bold uppercase text-amber-700">
-                                {item.offerBadge}
-                              </span>
-                            ) : null}
+            {groupCartForDisplay(cart).map((block) => {
+              if (block.kind === 'offer') {
+                return (
+                  <li
+                    key={block.offerInstanceId}
+                    className="rounded-lg border border-amber-200 bg-amber-50/60 p-3 space-y-2"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <span className="inline-block rounded-full bg-amber-700 px-2 py-0.5 text-[10px] font-bold uppercase text-white">
+                          {block.offerBadge || 'Offer'}
+                        </span>
+                        <p className="mt-1 text-sm font-semibold text-stone-900">{block.offerName}</p>
+                        <p className="text-[11px] text-stone-500">Deal locked — remove as a set</p>
+                      </div>
+                      <button
+                        type="button"
+                        className="shrink-0 text-xs font-semibold text-stone-600 underline"
+                        onClick={() => removeOfferFromCart(block.offerInstanceId)}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                    <ul className="space-y-1.5 border-t border-amber-100 pt-2">
+                      {block.lines.map((item) => (
+                        <li key={item.lineId} className="flex justify-between gap-2 text-sm">
+                          <div className="min-w-0">
+                            <p className="font-medium text-stone-900">
+                              {item.name}
+                              {item.offerBadge?.toLowerCase() === 'free' || item.price === 0 ? (
+                                <span className="ml-1.5 text-[10px] font-bold uppercase text-amber-800">
+                                  Free
+                                </span>
+                              ) : null}
+                            </p>
+                            {!!item.comboSelections?.length && (
+                              <p className="text-xs text-stone-500 mt-0.5 leading-snug">
+                                {item.comboSelections
+                                  .map((c) =>
+                                    c.selectedExtras?.length
+                                      ? `${c.productName} (${c.selectedExtras.map((e) => e.name).join(', ')})`
+                                      : c.productName
+                                  )
+                                  .join(' · ')}
+                              </p>
+                            )}
+                            {!!item.selectedExtras?.length && (
+                              <p className="text-xs text-stone-500 mt-0.5">
+                                {item.selectedExtras.map((e) => e.name).join(', ')}
+                              </p>
+                            )}
+                          </div>
+                          <span className="shrink-0 tabular-nums text-stone-700">
+                            {item.price === 0 ? 'Free' : `CHF ${item.price.toFixed(2)}`}
                           </span>
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="flex justify-between text-sm font-semibold tabular-nums pt-1 border-t border-amber-100">
+                      <span>Deal total</span>
+                      <span>
+                        {block.catalogTotal > block.total + 0.001 ? (
+                          <>
+                            <span className="line-through text-stone-400 font-normal mr-1.5">
+                              CHF {block.catalogTotal.toFixed(2)}
+                            </span>
+                            <span className="text-amber-900">CHF {block.total.toFixed(2)}</span>
+                          </>
                         ) : (
-                          `CHF ${item.price.toFixed(2)}`
+                          `CHF ${block.total.toFixed(2)}`
                         )}
+                      </span>
+                    </div>
+                  </li>
+                );
+              }
+
+              const item = block.item;
+              return (
+                <li key={item.lineId} className="flex gap-3 text-sm">
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-stone-900">
+                      {item.name}
+                      {item.loyaltyReward && (
+                        <span className="ml-2 text-xs font-semibold text-teal-800">{t('shopFree')}</span>
+                      )}
+                      {item.offerBadge ? (
+                        <span className="ml-2 text-[10px] font-bold uppercase text-amber-700">
+                          {item.offerBadge}
+                        </span>
+                      ) : null}
+                    </div>
+                    {!!item.comboSelections?.length && (
+                      <p className="text-xs text-stone-500 mt-0.5 leading-snug">
+                        {item.comboSelections
+                          .map((c) =>
+                            c.selectedExtras?.length
+                              ? `${c.productName} (${c.selectedExtras.map((e) => e.name).join(', ')})`
+                              : c.productName
+                          )
+                          .join(' · ')}
+                      </p>
+                    )}
+                    {!!item.selectedExtras?.length && (
+                      <p className="text-xs text-stone-500 mt-0.5 leading-snug">
+                        {item.selectedExtras.map((e) => e.name).join(', ')}
+                      </p>
+                    )}
+                    <div className="text-stone-500">
+                      {item.loyaltyReward
+                        ? t('shopPtsBadge').replace('{n}', String(item.rewardPointsCost || 0))
+                        : item.catalogPrice != null && item.catalogPrice > item.price ? (
+                            <span className="tabular-nums">
+                              <span className="line-through text-stone-400 mr-1">
+                                CHF {item.catalogPrice.toFixed(2)}
+                              </span>
+                              <span className="text-amber-800 font-semibold">
+                                {item.price === 0 ? 'Free' : `CHF ${item.price.toFixed(2)}`}
+                              </span>
+                            </span>
+                          ) : (
+                            `CHF ${item.price.toFixed(2)}`
+                          )}
+                    </div>
                   </div>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    type="button"
-                    className="w-7 h-7 border border-stone-300"
-                    onClick={() => updateQuantity(item.lineId, item.quantity - 1)}
-                  >
-                    −
-                  </button>
-                  <span className="w-5 text-center font-semibold">{item.quantity}</span>
-                  <button
-                    type="button"
-                    className="w-7 h-7 border border-stone-300"
-                    onClick={() => updateQuantity(item.lineId, item.quantity + 1)}
-                  >
-                    +
-                  </button>
-                </div>
-              </li>
-            ))}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      className="w-7 h-7 border border-stone-300"
+                      onClick={() => updateQuantity(item.lineId, item.quantity - 1)}
+                    >
+                      −
+                    </button>
+                    <span className="w-5 text-center font-semibold">{item.quantity}</span>
+                    <button
+                      type="button"
+                      className="w-7 h-7 border border-stone-300"
+                      onClick={() => updateQuantity(item.lineId, item.quantity + 1)}
+                    >
+                      +
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>
@@ -1487,6 +1596,8 @@ export default function OrderingPage() {
                     offerBadge: meta.offerBadge,
                     dealPrice: meta.dealPrice,
                     catalogPrice: meta.catalogPrice,
+                    offerInstanceId: meta.offerInstanceId,
+                    offerName: meta.offerName,
                   }
                 : undefined
             );
@@ -1524,6 +1635,8 @@ export default function OrderingPage() {
                     offerBadge: meta.offerBadge,
                     dealPrice: meta.dealPrice,
                     catalogPrice: meta.catalogPrice,
+                    offerInstanceId: meta.offerInstanceId,
+                    offerName: meta.offerName,
                   }
                 : undefined
             );
