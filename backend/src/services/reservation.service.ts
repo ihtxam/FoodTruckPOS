@@ -206,6 +206,38 @@ function rangesOverlap(
   return aStart < bEnd && bStart < aEnd;
 }
 
+function matchSlotDiscount(
+  settings: ReturnType<typeof resolveSettings>,
+  reservedAt: Date
+): { percentOff: number; name: string; label: string } | null {
+  const dayKey = dayKeyForYmd(formatZurichDate(reservedAt));
+  const hm = formatZurichHm(reservedAt);
+  let best: { percentOff: number; name: string } | null = null;
+  for (const d of settings.slotDiscounts || []) {
+    if (d.enabled === false) continue;
+    const wholeWeek = d.scheduleMode === "whole_week";
+    const days = d.daysOfWeek || [];
+    if (!wholeWeek && days.length && !days.includes(dayKey)) continue;
+    const s = d.timeStart ? parseHm(d.timeStart) : null;
+    const e = d.timeEnd ? parseHm(d.timeEnd) : null;
+    const cur = parseHm(hm);
+    if (cur == null) continue;
+    if (s != null && e != null) {
+      if (!(cur >= s && cur < e)) continue;
+    } else if (s != null && !(cur >= s)) continue;
+    else if (e != null && !(cur < e)) continue;
+    if (!best || d.percentOff > best.percentOff) {
+      best = { percentOff: d.percentOff, name: d.name };
+    }
+  }
+  if (!best) return null;
+  return {
+    percentOff: best.percentOff,
+    name: best.name,
+    label: `${best.percentOff}% off`,
+  };
+}
+
 function makeCode() {
   return `RES-${Date.now().toString(36).toUpperCase().slice(-6)}-${randomUUID().slice(0, 4).toUpperCase()}`;
 }
@@ -377,24 +409,8 @@ export class ReservationService {
 
     const dayKey = day;
     const matchDiscount = (hm: string) => {
-      let best: { percentOff: number; name: string } | null = null;
-      for (const d of settings.slotDiscounts || []) {
-        if (d.enabled === false) continue;
-        const wholeWeek = d.scheduleMode === "whole_week";
-        const days = d.daysOfWeek || [];
-        if (!wholeWeek && days.length && !days.includes(dayKey)) continue;
-        const s = d.timeStart ? parseHm(d.timeStart) : null;
-        const e = d.timeEnd ? parseHm(d.timeEnd) : null;
-        const cur = parseHm(hm);
-        if (s != null && e != null) {
-          if (!(cur >= s && cur < e)) continue;
-        } else if (s != null && !(cur >= s)) continue;
-        else if (e != null && !(cur < e)) continue;
-        if (!best || d.percentOff > best.percentOff) {
-          best = { percentOff: d.percentOff, name: d.name };
-        }
-      }
-      return best;
+      const at = zurichLocalToDate(dateYmd, hm);
+      return matchSlotDiscount(settings, at);
     };
 
     for (const range of daySlots) {
@@ -429,7 +445,7 @@ export class ReservationService {
           available: remaining >= size,
           remainingCovers: remaining,
           discountPercent: disc?.percentOff || undefined,
-          discountLabel: disc ? `${disc.percentOff}% off` : null,
+          discountLabel: disc?.label || null,
         });
         cursor += interval;
       }
@@ -512,6 +528,7 @@ export class ReservationService {
     }
 
     const durationMinutes = settings.seatingDurationMinutes;
+    const slotDeal = matchSlotDiscount(settings, reservedAt);
     const [row] = await db
       .insert(schema.reservations)
       .values({
@@ -527,6 +544,8 @@ export class ReservationService {
         status,
         tableId,
         tableLabel,
+        discountPercent: slotDeal?.percentOff ?? null,
+        discountLabel: slotDeal?.label ?? null,
         notes: input.notes?.trim() || null,
         source: input.source || "web",
         acceptedAt: status === "confirmed" ? new Date() : null,
@@ -731,7 +750,13 @@ export class ReservationService {
       .returning();
 
     const settings = resolveSettings(merchant.reservationSettings);
-    if (emailKind && settings.sendStatusEmails && updated.guestEmail) {
+    if (action === "assign_table" && updated.discountPercent) {
+      await this.sendAdminNotifyEmail(
+        merchant,
+        updated,
+        updated.status === "confirmed" ? "confirmed" : "received"
+      );
+    } else if (emailKind && settings.sendStatusEmails && updated.guestEmail) {
       await this.sendLifecycleEmail(merchant, updated, emailKind);
     } else if (emailKind) {
       await this.sendAdminNotifyEmail(merchant, updated, emailKind);
@@ -792,9 +817,11 @@ export class ReservationService {
           <tr><td style="padding:6px 0;color:#78716c">When</td><td style="padding:6px 0;text-align:right">${when}</td></tr>
           <tr><td style="padding:6px 0;color:#78716c">Guests</td><td style="padding:6px 0;text-align:right">${reservation.partySize}</td></tr>
           <tr><td style="padding:6px 0;color:#78716c">Name</td><td style="padding:6px 0;text-align:right">${reservation.guestName}</td></tr>
-          ${reservation.tableLabel ? `<tr><td style="padding:6px 0;color:#78716c">Table</td><td style="padding:6px 0;text-align:right">${reservation.tableLabel}</td></tr>` : ""}
+          ${reservation.discountPercent ? `<tr><td style="padding:6px 0;color:#b45309">Offer</td><td style="padding:6px 0;text-align:right"><strong style="color:#b45309">${reservation.discountLabel || `${reservation.discountPercent}% off`}</strong></td></tr>` : ""}
+          ${reservation.tableLabel ? `<tr><td style="padding:6px 0;color:#78716c">Table</td><td style="padding:6px 0;text-align:right">${reservation.tableLabel}${reservation.discountPercent ? ` · <strong style="color:#b45309">${reservation.discountLabel || `${reservation.discountPercent}% off`}</strong>` : ""}</td></tr>` : ""}
           ${place ? `<tr><td style="padding:6px 0;color:#78716c">Where</td><td style="padding:6px 0;text-align:right">${place}</td></tr>` : ""}
         </table>
+        ${reservation.discountPercent ? `<p style="background:#fffbeb;border:1px solid #fcd34d;padding:10px 12px;font-size:14px;color:#92400e"><strong>${reservation.discountLabel || `${reservation.discountPercent}% off`}</strong> applies to this reservation.</p>` : ""}
         ${merchant.phone ? `<p style="font-size:13px;color:#78716c">Questions? Call ${merchant.phone}</p>` : ""}
       </div>
     `;
@@ -852,8 +879,12 @@ export class ReservationService {
     });
     const shop = merchant.name || "Restaurant";
     const subjects: Record<typeof kind, string> = {
-      received: `New reservation request — ${reservation.code}`,
-      confirmed: `Reservation confirmed — ${reservation.code}`,
+      received: reservation.discountPercent
+        ? `New reservation ${reservation.discountLabel || `${reservation.discountPercent}% off`} — ${reservation.code}`
+        : `New reservation request — ${reservation.code}`,
+      confirmed: reservation.discountPercent
+        ? `Confirmed ${reservation.discountLabel || `${reservation.discountPercent}% off`} — ${reservation.code}`
+        : `Reservation confirmed — ${reservation.code}`,
       rejected: `Reservation rejected — ${reservation.code}`,
       cancelled: `Reservation cancelled — ${reservation.code}`,
       seated: `Guest seated — ${reservation.code}`,
@@ -863,6 +894,14 @@ export class ReservationService {
       <div style="font-family:system-ui,sans-serif;max-width:560px;margin:0 auto;color:#1c1917">
         <h1 style="font-size:20px">${subjects[kind]}</h1>
         <p style="font-size:14px;color:#57534e">${shop} — reservation update</p>
+        ${
+          reservation.discountPercent
+            ? `<p style="background:#fffbeb;border:1px solid #f59e0b;padding:12px 14px;font-size:15px;color:#92400e;font-weight:700">
+                ★ ${reservation.discountLabel || `${reservation.discountPercent}% off`}
+                ${reservation.tableLabel ? ` · Table ${reservation.tableLabel}` : ""}
+              </p>`
+            : ""
+        }
         <table style="width:100%;border-collapse:collapse;margin:16px 0;font-size:14px">
           <tr><td style="padding:6px 0;color:#78716c">Status</td><td style="padding:6px 0;text-align:right"><strong>${kind}</strong></td></tr>
           <tr><td style="padding:6px 0;color:#78716c">Code</td><td style="padding:6px 0;text-align:right"><strong>${reservation.code}</strong></td></tr>
@@ -871,7 +910,8 @@ export class ReservationService {
           <tr><td style="padding:6px 0;color:#78716c">Name</td><td style="padding:6px 0;text-align:right">${reservation.guestName}</td></tr>
           ${reservation.guestPhone ? `<tr><td style="padding:6px 0;color:#78716c">Phone</td><td style="padding:6px 0;text-align:right">${reservation.guestPhone}</td></tr>` : ""}
           ${reservation.guestEmail ? `<tr><td style="padding:6px 0;color:#78716c">Email</td><td style="padding:6px 0;text-align:right">${reservation.guestEmail}</td></tr>` : ""}
-          ${reservation.tableLabel ? `<tr><td style="padding:6px 0;color:#78716c">Table</td><td style="padding:6px 0;text-align:right">${reservation.tableLabel}</td></tr>` : ""}
+          ${reservation.tableLabel ? `<tr><td style="padding:6px 0;color:#78716c">Table</td><td style="padding:6px 0;text-align:right"><strong>${reservation.tableLabel}</strong>${reservation.discountPercent ? ` · <span style="color:#b45309;font-weight:700">${reservation.discountLabel || `${reservation.discountPercent}% off`}</span>` : ""}</td></tr>` : ""}
+          ${reservation.discountPercent && !reservation.tableLabel ? `<tr><td style="padding:6px 0;color:#b45309">Offer</td><td style="padding:6px 0;text-align:right"><strong style="color:#b45309">${reservation.discountLabel || `${reservation.discountPercent}% off`}</strong></td></tr>` : ""}
           ${reservation.notes ? `<tr><td style="padding:6px 0;color:#78716c">Notes</td><td style="padding:6px 0;text-align:right">${reservation.notes}</td></tr>` : ""}
         </table>
       </div>

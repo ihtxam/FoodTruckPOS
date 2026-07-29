@@ -39,6 +39,12 @@ export interface ShopCartItem {
   loyaltyReward?: boolean;
   /** Points cost per unit when loyaltyReward */
   rewardPointsCost?: number;
+  /** Offer already baked into `price` (skip re-eval at checkout) */
+  offerId?: string;
+  /** Catalog / list price before offer (for strikethrough UI) */
+  catalogPrice?: number;
+  /** Short label e.g. "2+1 free", "20% off" */
+  offerBadge?: string;
 }
 
 export interface ShopCheckoutDraft {
@@ -92,6 +98,12 @@ function normalizeCartItem(item: Partial<ShopCartItem> & { id: string; name: str
     comboSelections: loyaltyReward ? [] : comboSelections,
     loyaltyReward: loyaltyReward || undefined,
     rewardPointsCost,
+    offerId: typeof item.offerId === 'string' && item.offerId ? item.offerId : undefined,
+    catalogPrice:
+      typeof item.catalogPrice === 'number' && Number.isFinite(item.catalogPrice)
+        ? item.catalogPrice
+        : undefined,
+    offerBadge: typeof item.offerBadge === 'string' && item.offerBadge ? item.offerBadge : undefined,
   };
 }
 

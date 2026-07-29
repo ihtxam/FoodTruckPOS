@@ -173,6 +173,7 @@ export default function CheckoutPage() {
     let cancelled = false;
     (async () => {
       try {
+        const hasBaked = draft.items.some((i) => !!i.offerId && !i.loyaltyReward);
         const res = await axios.post(`/api/shop/${shopKey}/offers/preview`, {
           channel: draft.channel,
           scheduledFor:
@@ -183,18 +184,37 @@ export default function CheckoutPage() {
             productId: i.id,
             categoryId: i.categoryId || null,
             name: i.name,
-            unitPrice: i.price,
+            // Use catalog price when offer is already baked into `price`
+            unitPrice: i.offerId && i.catalogPrice != null ? i.catalogPrice : i.price,
             quantity: i.quantity,
             loyaltyReward: !!i.loyaltyReward,
+            offerId: i.offerId || null,
           })),
         });
         if (cancelled) return;
-        setOfferDiscount(Number(res.data.discount) || 0);
-        setOfferLabels(
-          (res.data.applied || []).map(
-            (a: { name: string; badgeLabel?: string }) => a.badgeLabel || a.name
-          )
-        );
+        // Cart lines already include deal prices — don't subtract the same offer again
+        if (hasBaked) {
+          setOfferDiscount(0);
+          const badges = [
+            ...new Set(
+              draft.items.map((i) => i.offerBadge).filter((b): b is string => !!b)
+            ),
+          ];
+          setOfferLabels(
+            badges.length
+              ? badges
+              : (res.data.applied || []).map(
+                  (a: { name: string; badgeLabel?: string }) => a.badgeLabel || a.name
+                )
+          );
+        } else {
+          setOfferDiscount(Number(res.data.discount) || 0);
+          setOfferLabels(
+            (res.data.applied || []).map(
+              (a: { name: string; badgeLabel?: string }) => a.badgeLabel || a.name
+            )
+          );
+        }
       } catch (err) {
         console.warn('[shop] offers preview failed', err);
         if (!cancelled) {
@@ -231,8 +251,27 @@ export default function CheckoutPage() {
         const base =
           typeof item.basePrice === 'number' && Number.isFinite(item.basePrice)
             ? item.basePrice
-            : roundMoney2(Number(item.price || 0) - extrasTotal);
-        const nextPrice = roundMoney2(base + addMarkup + extrasTotal);
+            : roundMoney2(Number(item.catalogPrice ?? item.price ?? 0) - extrasTotal);
+        const catalogUnit = roundMoney2(base + addMarkup + extrasTotal);
+        if (item.offerId) {
+          if (item.price === 0) {
+            if (item.catalogPrice !== catalogUnit) {
+              changed = true;
+              return { ...item, basePrice: base, catalogPrice: catalogUnit, price: 0 };
+            }
+            return item;
+          }
+          if (item.catalogPrice && item.catalogPrice > 0) {
+            const ratio = item.price / item.catalogPrice;
+            const nextPrice = roundMoney2(catalogUnit * Math.min(1, ratio));
+            if (nextPrice !== item.price || item.catalogPrice !== catalogUnit || item.basePrice !== base) {
+              changed = true;
+              return { ...item, basePrice: base, catalogPrice: catalogUnit, price: nextPrice };
+            }
+            return item;
+          }
+        }
+        const nextPrice = catalogUnit;
         if (!Number.isFinite(nextPrice)) return item;
         if (nextPrice !== item.price || item.basePrice !== base) {
           changed = true;

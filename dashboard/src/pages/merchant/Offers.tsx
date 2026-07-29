@@ -25,6 +25,8 @@ type Offer = {
   daysOfWeek: string[];
   timeStart?: string | null;
   timeEnd?: string | null;
+  validFrom?: string | null;
+  validTo?: string | null;
   isActive: boolean;
   featured: boolean;
   badgeLabel?: string | null;
@@ -47,13 +49,39 @@ const DAYS = [
 
 const TYPE_LABELS: Record<string, string> = {
   percent_order: '% off whole order',
-  percent_category: '% off category',
+  percent_category: '% off category or products',
   fixed_off: 'Fixed CHF off',
   package_deal: 'Package (pick N + free, one price)',
   bogo: 'Buy X get Y (same list)',
   pay_n_get_m: 'Pay N get M (e.g. 3+1)',
   combo_deal: 'Combo (legacy)',
 };
+
+function endOfZurichDay(d: Date) {
+  const copy = new Date(d);
+  copy.setHours(23, 59, 59, 999);
+  return copy;
+}
+
+function startOfZurichDay(d: Date) {
+  const copy = new Date(d);
+  copy.setHours(0, 0, 0, 0);
+  return copy;
+}
+
+/** Preset date window for "today / 2 days / week" */
+function validityPreset(kind: 'today' | 'two_days' | 'week'): { validFrom: string; validTo: string } {
+  const from = startOfZurichDay(new Date());
+  const to = new Date(from);
+  if (kind === 'today') {
+    // end of today
+  } else if (kind === 'two_days') {
+    to.setDate(to.getDate() + 1);
+  } else {
+    to.setDate(to.getDate() + 6);
+  }
+  return { validFrom: from.toISOString(), validTo: endOfZurichDay(to).toISOString() };
+}
 
 const emptyForm = () => ({
   name: '',
@@ -72,10 +100,14 @@ const emptyForm = () => ({
   minOrderAmount: '',
   channels: [] as string[],
   categoryIds: [] as string[],
+  productIds: [] as string[],
   scheduleMode: 'always',
   daysOfWeek: [] as string[],
   timeStart: '',
   timeEnd: '',
+  validFrom: '' as string,
+  validTo: '' as string,
+  validityPreset: '' as '' | 'today' | 'two_days' | 'week',
   featured: true,
   isActive: true,
   badgeLabel: '',
@@ -139,10 +171,14 @@ export default function Offers() {
       minOrderAmount: r.minOrderAmount != null ? String(r.minOrderAmount) : '',
       channels: offer.channels || [],
       categoryIds: offer.categoryIds || [],
+      productIds: offer.productIds || [],
       scheduleMode: offer.scheduleMode || 'always',
       daysOfWeek: offer.daysOfWeek || [],
       timeStart: offer.timeStart || '',
       timeEnd: offer.timeEnd || '',
+      validFrom: offer.validFrom ? String(offer.validFrom) : '',
+      validTo: offer.validTo ? String(offer.validTo) : '',
+      validityPreset: '',
       featured: offer.featured !== false,
       isActive: offer.isActive !== false,
       badgeLabel: offer.badgeLabel || '',
@@ -181,11 +217,16 @@ export default function Offers() {
       rules,
       channels: form.channels,
       categoryIds: form.offerType === 'package_deal' ? [] : form.categoryIds,
-      productIds: [],
+      productIds:
+        form.offerType === 'percent_category' || form.offerType === 'bogo' || form.offerType === 'pay_n_get_m'
+          ? form.productIds
+          : [],
       scheduleMode: form.scheduleMode,
       daysOfWeek: form.daysOfWeek,
       timeStart: form.timeStart || null,
       timeEnd: form.timeEnd || null,
+      validFrom: form.validFrom || null,
+      validTo: form.validTo || null,
       featured: form.featured,
       isActive: form.isActive,
       badgeLabel: form.badgeLabel.trim() || null,
@@ -272,6 +313,20 @@ export default function Offers() {
     }));
   };
 
+  const toggleScopedProduct = (id: string) => {
+    setForm((f) => ({
+      ...f,
+      productIds: f.productIds.includes(id)
+        ? f.productIds.filter((p) => p !== id)
+        : [...f.productIds, id],
+    }));
+  };
+
+  const applyValidityPreset = (kind: 'today' | 'two_days' | 'week') => {
+    const { validFrom, validTo } = validityPreset(kind);
+    setForm((f) => ({ ...f, validityPreset: kind, validFrom, validTo }));
+  };
+
   const toggleProduct = (field: 'buyProductIds' | 'getProductIds', id: string) => {
     setForm((f) => {
       const list = f[field];
@@ -291,8 +346,9 @@ export default function Offers() {
           <div>
             <h1 className="page-title mb-1">{t('offers')}</h1>
             <p className="page-sub">
-              % off order/category, package deals (pick 2 + 1 free for one price), BOGO, 3+1.
-              For pickup-only, select the Pickup channel. Featured offers appear on the shop shelf.
+              % off on a category or single products (applied live in the shop cart), package deals
+              (tap 2+1 on the shelf to pick paid + free), BOGO, 3+1. Set validity to today, 2 days,
+              or a full week. Featured offers appear on the shop shelf.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -521,26 +577,55 @@ export default function Offers() {
           {(form.offerType === 'percent_category' ||
             form.offerType === 'bogo' ||
             form.offerType === 'pay_n_get_m') && (
-            <div>
-              <p className="text-xs muted mb-1">Categories (empty = all)</p>
-              <div className="flex flex-wrap gap-2">
-                {categories
-                  .filter((c) => !c.isOffersCategory)
-                  .map((c) => (
-                    <button
-                      key={c.id}
-                      type="button"
-                      className={`rounded-full px-3 py-1 text-xs border ${
-                        form.categoryIds.includes(c.id)
-                          ? 'bg-amber-700 text-white border-amber-700'
-                          : 'bg-white border-[var(--border)]'
-                      }`}
-                      onClick={() => toggleCategory(c.id)}
-                    >
-                      {c.name}
-                    </button>
-                  ))}
+            <div className="space-y-3">
+              <div>
+                <p className="text-xs muted mb-1">
+                  Categories (empty = all
+                  {form.offerType === 'percent_category' ? ', unless you pick products below' : ''})
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {categories
+                    .filter((c) => !c.isOffersCategory)
+                    .map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        className={`rounded-full px-3 py-1 text-xs border ${
+                          form.categoryIds.includes(c.id)
+                            ? 'bg-amber-700 text-white border-amber-700'
+                            : 'bg-white border-[var(--border)]'
+                        }`}
+                        onClick={() => toggleCategory(c.id)}
+                      >
+                        {c.name}
+                      </button>
+                    ))}
+                </div>
               </div>
+              {form.offerType === 'percent_category' ? (
+                <div>
+                  <p className="text-xs muted mb-1">
+                    Or specific products only ({form.productIds.length} selected — overrides
+                    categories when set)
+                  </p>
+                  <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto">
+                    {products.map((p) => (
+                      <button
+                        key={`pct-${p.id}`}
+                        type="button"
+                        className={`rounded-full px-2.5 py-1 text-[11px] border ${
+                          form.productIds.includes(p.id)
+                            ? 'bg-stone-900 text-white border-stone-900'
+                            : 'bg-white border-[var(--border)]'
+                        }`}
+                        onClick={() => toggleScopedProduct(p.id)}
+                      >
+                        {p.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </div>
           )}
 
@@ -654,6 +739,45 @@ export default function Offers() {
                 onChange={(e) => setForm({ ...form, timeEnd: e.target.value })}
               />
             </label>
+          </div>
+
+          <div>
+            <p className="text-xs muted mb-1">Valid for (date range)</p>
+            <div className="flex flex-wrap gap-2 mb-2">
+              {(
+                [
+                  ['today', 'Today only'],
+                  ['two_days', '2 days'],
+                  ['week', 'Full week'],
+                ] as const
+              ).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  className={`rounded-full px-3 py-1 text-xs border ${
+                    form.validityPreset === key
+                      ? 'bg-amber-700 text-white border-amber-700'
+                      : 'bg-white border-[var(--border)]'
+                  }`}
+                  onClick={() => applyValidityPreset(key)}
+                >
+                  {label}
+                </button>
+              ))}
+              <button
+                type="button"
+                className="rounded-full px-3 py-1 text-xs border bg-white border-[var(--border)]"
+                onClick={() => setForm({ ...form, validityPreset: '', validFrom: '', validTo: '' })}
+              >
+                No end date
+              </button>
+            </div>
+            {(form.validFrom || form.validTo) && (
+              <p className="text-[11px] text-stone-500">
+                {form.validFrom ? new Date(form.validFrom).toLocaleString() : '…'} →{' '}
+                {form.validTo ? new Date(form.validTo).toLocaleString() : '…'}
+              </p>
+            )}
           </div>
 
           {form.scheduleMode === 'days' && (
