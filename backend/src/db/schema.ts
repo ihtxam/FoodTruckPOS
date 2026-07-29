@@ -576,6 +576,37 @@ export const customers = pgTable(
   })
 );
 
+/** Saved delivery addresses for logged-in shop customers (Home, Office, …). */
+export const customerAddresses = pgTable(
+  "customer_addresses",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    customerId: uuid("customer_id")
+      .notNull()
+      .references(() => customers.id, { onDelete: "cascade" }),
+    merchantId: uuid("merchant_id")
+      .notNull()
+      .references(() => merchants.id, { onDelete: "cascade" }),
+    /** home | office | other | free-text label */
+    label: varchar("label", { length: 40 }).notNull().default("home"),
+    address: text("address").notNull(),
+    zipCode: varchar("zip_code", { length: 20 }),
+    city: varchar("city", { length: 100 }),
+    latitude: decimal("latitude", { precision: 10, scale: 7 }),
+    longitude: decimal("longitude", { precision: 10, scale: 7 }),
+    isDefault: boolean("is_default").default(false).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    customerIdx: index("customer_addresses_customer_idx").on(table.customerId),
+    merchantCustomerIdx: index("customer_addresses_merchant_customer_idx").on(
+      table.merchantId,
+      table.customerId
+    ),
+  })
+);
+
 // ============================================================================
 // ORDERS
 // ============================================================================
@@ -1447,6 +1478,17 @@ export const ordersRelations = relations(orders, ({ one, many }) => ({
   customer: one(customers, { fields: [orders.customerId], references: [customers.id] }),
   items: many(orderItems),
   paymentTransactions: many(paymentTransactions),
+}));
+
+export const customerAddressesRelations = relations(customerAddresses, ({ one }) => ({
+  customer: one(customers, {
+    fields: [customerAddresses.customerId],
+    references: [customers.id],
+  }),
+  merchant: one(merchants, {
+    fields: [customerAddresses.merchantId],
+    references: [merchants.id],
+  }),
 }));
 
 export const orderItemsRelations = relations(orderItems, ({ one }) => ({
