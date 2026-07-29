@@ -9,6 +9,9 @@ export type ShopOfferProduct = {
   image?: string | null;
   categoryId?: string | null;
   description?: string;
+  productType?: string;
+  /** True when this menu item needs the combo wizard (Main / Side / …) */
+  isCombo?: boolean;
 };
 
 export type ShopOfferForPicker = {
@@ -203,6 +206,9 @@ export default function ShopOfferPicker({ offer, products, priceOf, onClose, onC
             }`}
           >
             <p className="text-xs font-semibold text-stone-900 line-clamp-2">{p.name}</p>
+            {p.isCombo || p.productType === 'combo' ? (
+              <p className="mt-0.5 text-[10px] font-semibold text-amber-800">Combo — you’ll pick Main etc.</p>
+            ) : null}
             <p className="mt-1 text-[11px] text-stone-600 tabular-nums">CHF {price.toFixed(2)}</p>
           </button>
         );
@@ -290,6 +296,9 @@ export default function ShopOfferPicker({ offer, products, priceOf, onClose, onC
               Select {buyQty} paid{getQty > 0 ? ` and ${getQty} free` : ''} to add this deal to your cart.
             </p>
           )}
+          <p className="text-[11px] text-stone-500">
+            Combo meals (e.g. Family-first) need Main / Side / Drink picks — you’ll choose those next.
+          </p>
         </div>
 
         <div className="sticky bottom-0 border-t border-stone-200 bg-white px-4 py-3 flex gap-2">
