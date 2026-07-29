@@ -28,6 +28,7 @@ export type ShopOfferForPicker = {
 export type ShopOfferPickerResult = {
   offerId: string;
   offerBadge: string;
+  offerName: string;
   lines: Array<{
     product: ShopOfferProduct;
     role: 'paid' | 'free';
@@ -172,7 +173,7 @@ export default function ShopOfferPicker({ offer, products, priceOf, onClose, onC
       })),
     ];
 
-    onConfirm({ offerId: offer.id, offerBadge: badge, lines });
+    onConfirm({ offerId: offer.id, offerBadge: badge, offerName: offer.name, lines });
   };
 
   const ProductPick = ({
