@@ -1054,6 +1054,75 @@ router.put("/:slug/auth/me", async (req: Request, res: Response) => {
 });
 
 /**
+ * GET /api/shop/:slug/auth/addresses
+ */
+router.get("/:slug/auth/addresses", async (req: Request, res: Response) => {
+  try {
+    const merchant = await resolveMerchant(req.params.slug);
+    if (!merchant?.shopEnabled) return res.status(404).json({ error: "Shop not found" });
+    const { customerId } = optionalCustomer(req);
+    if (!customerId) return res.status(401).json({ error: "Not logged in" });
+    const addresses = await ShopCustomerService.listAddresses(customerId, merchant.id);
+    res.json({ success: true, addresses });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Failed" });
+  }
+});
+
+/**
+ * POST /api/shop/:slug/auth/addresses
+ */
+router.post("/:slug/auth/addresses", async (req: Request, res: Response) => {
+  try {
+    const merchant = await resolveMerchant(req.params.slug);
+    if (!merchant?.shopEnabled) return res.status(404).json({ error: "Shop not found" });
+    const { customerId } = optionalCustomer(req);
+    if (!customerId) return res.status(401).json({ error: "Not logged in" });
+    const address = await ShopCustomerService.createAddress(customerId, merchant.id, req.body || {});
+    res.status(201).json({ success: true, address });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Save failed" });
+  }
+});
+
+/**
+ * PUT /api/shop/:slug/auth/addresses/:addressId
+ */
+router.put("/:slug/auth/addresses/:addressId", async (req: Request, res: Response) => {
+  try {
+    const merchant = await resolveMerchant(req.params.slug);
+    if (!merchant?.shopEnabled) return res.status(404).json({ error: "Shop not found" });
+    const { customerId } = optionalCustomer(req);
+    if (!customerId) return res.status(401).json({ error: "Not logged in" });
+    const address = await ShopCustomerService.updateAddress(
+      customerId,
+      merchant.id,
+      req.params.addressId,
+      req.body || {}
+    );
+    res.json({ success: true, address });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Update failed" });
+  }
+});
+
+/**
+ * DELETE /api/shop/:slug/auth/addresses/:addressId
+ */
+router.delete("/:slug/auth/addresses/:addressId", async (req: Request, res: Response) => {
+  try {
+    const merchant = await resolveMerchant(req.params.slug);
+    if (!merchant?.shopEnabled) return res.status(404).json({ error: "Shop not found" });
+    const { customerId } = optionalCustomer(req);
+    if (!customerId) return res.status(401).json({ error: "Not logged in" });
+    await ShopCustomerService.deleteAddress(customerId, merchant.id, req.params.addressId);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Delete failed" });
+  }
+});
+
+/**
  * GET /api/shop/:slug/reservations/config
  */
 router.get("/:slug/reservations/config", async (req: Request, res: Response) => {

@@ -30,6 +30,19 @@ import ShopVacationPopup from '@/components/shop/ShopVacationPopup';
 type Step = 'details' | 'payment' | 'review';
 type WhenMode = 'asap' | 'later';
 
+type SavedAddress = {
+  id: string;
+  label: string;
+  address: string;
+  zipCode?: string | null;
+  city?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  isDefault?: boolean;
+};
+
+const ADDRESS_LABELS = ['home', 'office', 'other'] as const;
+
 export default function CheckoutPage() {
   const { t, setLocale, locale } = useI18n();
   const { merchantSlug } = useParams<{ merchantSlug: string }>();
@@ -59,6 +72,10 @@ export default function CheckoutPage() {
   const [payWithPoints, setPayWithPoints] = useState(false);
   const [offerDiscount, setOfferDiscount] = useState(0);
   const [offerLabels, setOfferLabels] = useState<string[]>([]);
+  const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
+  const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
+  const [saveLabel, setSaveLabel] = useState<(typeof ADDRESS_LABELS)[number]>('home');
+  const [savingAddress, setSavingAddress] = useState(false);
 
   useEffect(() => {
     if (!shopKey) return;
@@ -99,6 +116,15 @@ export default function CheckoutPage() {
               }),
             ]);
             setCustomer(me.data.customer);
+            const addrs: SavedAddress[] = Array.isArray(me.data.customer.addresses)
+              ? me.data.customer.addresses
+              : [];
+            setSavedAddresses(addrs);
+            const preferred =
+              addrs.find((a) => a.isDefault) ||
+              addrs[0] ||
+              null;
+            setSelectedAddressId(preferred?.id || null);
             setLoyaltyBalance(Number(loyaltyRes.data.balance) || 0);
             setRedeemRate(Number(loyaltyRes.data.program?.redeemPointsPerChf) || 100);
             setDraft((d) => ({
@@ -107,9 +133,11 @@ export default function CheckoutPage() {
               customerName: me.data.customer.name || d.customerName,
               customerEmail: me.data.customer.email || d.customerEmail,
               customerPhone: me.data.customer.phone || d.customerPhone,
-              address: me.data.customer.defaultAddress || d.address,
-              zipCode: me.data.customer.defaultZip || d.zipCode,
-              city: me.data.customer.defaultCity || d.city,
+              address: preferred?.address || me.data.customer.defaultAddress || d.address,
+              zipCode: preferred?.zipCode || me.data.customer.defaultZip || d.zipCode,
+              city: preferred?.city || me.data.customer.defaultCity || d.city,
+              lat: preferred?.latitude ?? d.lat,
+              lng: preferred?.longitude ?? d.lng,
             }));
             setWantCreateAccount(false);
             setShowLogin(false);
@@ -405,6 +433,72 @@ export default function CheckoutPage() {
     }
   };
 
+  const addressLabelText = (label: string) => {
+    if (label === 'home') return t('shopAddressHome');
+    if (label === 'office') return t('shopAddressOffice');
+    if (label === 'other') return t('shopAddressOther');
+    return label;
+  };
+
+  const applySavedAddress = (a: SavedAddress) => {
+    setSelectedAddressId(a.id);
+    setDeliveryInfo(null);
+    patch({
+      address: a.address || '',
+      zipCode: a.zipCode || '',
+      city: a.city || '',
+      lat: a.latitude ?? undefined,
+      lng: a.longitude ?? undefined,
+    });
+  };
+
+  const saveCurrentAddress = async () => {
+    if (!customer || !draft.address.trim()) return;
+    const token = loadCustomerToken(shopKey);
+    if (!token) return;
+    setSavingAddress(true);
+    setError(null);
+    try {
+      let lat = draft.lat;
+      let lng = draft.lng;
+      if (lat == null || lng == null) {
+        const geo = await axios.post(`/api/shop/${shopKey}/geocode`, {
+          query: `${draft.address}, ${draft.zipCode} ${draft.city} Switzerland`,
+        });
+        if (geo.data.found) {
+          lat = Number(geo.data.lat);
+          lng = Number(geo.data.lng);
+          patch({ lat, lng });
+        }
+      }
+      const res = await axios.post(
+        `/api/shop/${shopKey}/auth/addresses`,
+        {
+          label: saveLabel,
+          address: draft.address.trim(),
+          zipCode: draft.zipCode.trim() || null,
+          city: draft.city.trim() || null,
+          latitude: lat ?? null,
+          longitude: lng ?? null,
+          isDefault: savedAddresses.length === 0,
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const saved = res.data.address as SavedAddress;
+      setSavedAddresses((prev) => {
+        const without = prev.filter((a) => a.id !== saved.id);
+        return saved.isDefault
+          ? [saved, ...without.map((a) => ({ ...a, isDefault: false }))]
+          : [...without, saved];
+      });
+      setSelectedAddressId(saved.id);
+    } catch (e: any) {
+      setError(e.response?.data?.error || 'Could not save address');
+    } finally {
+      setSavingAddress(false);
+    }
+  };
+
   const onLogin = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -415,6 +509,12 @@ export default function CheckoutPage() {
       });
       saveCustomerToken(shopKey, res.data.token);
       setCustomer(res.data.customer);
+      const addrs: SavedAddress[] = Array.isArray(res.data.customer.addresses)
+        ? res.data.customer.addresses
+        : [];
+      setSavedAddresses(addrs);
+      const preferred = addrs.find((a) => a.isDefault) || addrs[0] || null;
+      setSelectedAddressId(preferred?.id || null);
       await refreshLoyalty(res.data.token);
       setWantCreateAccount(false);
       setShowLogin(false);
@@ -424,9 +524,11 @@ export default function CheckoutPage() {
         customerName: res.data.customer.name || '',
         customerEmail: res.data.customer.email || loginEmail,
         customerPhone: res.data.customer.phone || '',
-        address: res.data.customer.defaultAddress || draft.address,
-        zipCode: res.data.customer.defaultZip || draft.zipCode,
-        city: res.data.customer.defaultCity || draft.city,
+        address: preferred?.address || res.data.customer.defaultAddress || draft.address,
+        zipCode: preferred?.zipCode || res.data.customer.defaultZip || draft.zipCode,
+        city: preferred?.city || res.data.customer.defaultCity || draft.city,
+        lat: preferred?.latitude ?? draft.lat,
+        lng: preferred?.longitude ?? draft.lng,
       });
     } catch (err: any) {
       setError(err.response?.data?.error || t('shopLoginFailed'));
@@ -973,18 +1075,64 @@ export default function CheckoutPage() {
 
                 {draft.channel === 'delivery' && (
                   <div className="space-y-3 border-t border-stone-100 pt-4">
+                    {customer ? (
+                      <div className="space-y-2">
+                        <p className="text-sm font-semibold">{t('shopSavedAddresses')}</p>
+                        <div className="flex flex-wrap gap-2">
+                          {savedAddresses.map((a) => (
+                            <button
+                              key={a.id}
+                              type="button"
+                              onClick={() => applySavedAddress(a)}
+                              className={`rounded-full border px-3 py-1.5 text-left text-xs sm:text-sm max-w-full ${
+                                selectedAddressId === a.id
+                                  ? 'border-stone-900 bg-stone-900 text-white'
+                                  : 'border-stone-200 bg-white text-stone-800'
+                              }`}
+                            >
+                              <span className="font-semibold">{addressLabelText(a.label)}</span>
+                              <span className="opacity-80"> · {a.address}</span>
+                            </button>
+                          ))}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedAddressId(null);
+                              setDeliveryInfo(null);
+                            }}
+                            className={`rounded-full border px-3 py-1.5 text-xs sm:text-sm ${
+                              selectedAddressId == null
+                                ? 'border-stone-900 bg-stone-900 text-white'
+                                : 'border-stone-200 bg-white text-stone-800'
+                            }`}
+                          >
+                            {t('shopNewAddress')}
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+
                     <input
                       className="w-full border border-stone-300 px-3 py-2 text-sm"
                       placeholder={t('shopStreetAddressRequired')}
                       value={draft.address}
-                      onChange={(e) => patch({ address: e.target.value })}
+                      onChange={(e) => {
+                        setSelectedAddressId(null);
+                        patch({ address: e.target.value, lat: undefined, lng: undefined });
+                      }}
                     />
                     <ZipCityFields
                       shopKey={shopKey}
                       zipCode={draft.zipCode}
                       city={draft.city}
-                      onZipChange={(zipCode) => patch({ zipCode })}
-                      onCityChange={(city) => patch({ city })}
+                      onZipChange={(zipCode) => {
+                        setSelectedAddressId(null);
+                        patch({ zipCode, lat: undefined, lng: undefined });
+                      }}
+                      onCityChange={(city) => {
+                        setSelectedAddressId(null);
+                        patch({ city, lat: undefined, lng: undefined });
+                      }}
                       zipClassName="border border-stone-300 px-3 py-2 text-sm w-full"
                       cityClassName="border border-stone-300 px-3 py-2 text-sm w-full"
                     />
@@ -1005,6 +1153,34 @@ export default function CheckoutPage() {
                           : ''}
                       </p>
                     )}
+
+                    {customer && draft.address.trim() ? (
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                        <span className="text-xs text-stone-500">{t('shopSelectLabel')}</span>
+                        {ADDRESS_LABELS.map((lab) => (
+                          <button
+                            key={lab}
+                            type="button"
+                            onClick={() => setSaveLabel(lab)}
+                            className={`rounded-full border px-2.5 py-1 text-xs ${
+                              saveLabel === lab
+                                ? 'border-amber-700 bg-amber-700 text-white'
+                                : 'border-stone-200 bg-white'
+                            }`}
+                          >
+                            {addressLabelText(lab)}
+                          </button>
+                        ))}
+                        <button
+                          type="button"
+                          className="ml-auto border border-stone-300 bg-stone-50 px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+                          disabled={savingAddress || !draft.address.trim()}
+                          onClick={() => void saveCurrentAddress()}
+                        >
+                          {savingAddress ? t('shopSavingAddress') : t('shopSaveAddress')}
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
                 )}
 

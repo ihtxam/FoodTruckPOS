@@ -86,9 +86,21 @@ export default function AccountPage() {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [phone, setPhone] = useState('');
-  const [defaultAddress, setDefaultAddress] = useState('');
-  const [defaultZip, setDefaultZip] = useState('');
-  const [defaultCity, setDefaultCity] = useState('');
+  const [addresses, setAddresses] = useState<
+    Array<{
+      id: string;
+      label: string;
+      address: string;
+      zipCode?: string | null;
+      city?: string | null;
+      isDefault?: boolean;
+    }>
+  >([]);
+  const [newLabel, setNewLabel] = useState<'home' | 'office' | 'other'>('home');
+  const [newAddress, setNewAddress] = useState('');
+  const [newZip, setNewZip] = useState('');
+  const [newCity, setNewCity] = useState('');
+  const [savingAddress, setSavingAddress] = useState(false);
 
   const token = shopKey ? loadCustomerToken(shopKey) : '';
 
@@ -106,9 +118,7 @@ export default function AccountPage() {
     setFirstName(c.firstName || '');
     setLastName(c.lastName || '');
     setPhone(c.phone || '');
-    setDefaultAddress(c.defaultAddress || '');
-    setDefaultZip(c.defaultZip || '');
-    setDefaultCity(c.defaultCity || '');
+    setAddresses(Array.isArray(c.addresses) ? c.addresses : []);
     setLoyalty(loyaltyRes.data as LoyaltySummary);
     setOrders(ordersRes.data.orders || []);
 
@@ -173,14 +183,69 @@ export default function AccountPage() {
     try {
       const res = await axios.put(
         `/api/shop/${shopKey}/auth/me`,
-        { firstName, lastName, phone, defaultAddress, defaultZip, defaultCity },
+        { firstName, lastName, phone },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       setCustomer(res.data.customer);
+      if (Array.isArray(res.data.customer.addresses)) {
+        setAddresses(res.data.customer.addresses);
+      }
     } catch (err: any) {
       setError(err.response?.data?.error || 'Update failed');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const addressLabelText = (label: string) => {
+    if (label === 'home') return t('shopAddressHome');
+    if (label === 'office') return t('shopAddressOffice');
+    if (label === 'other') return t('shopAddressOther');
+    return label;
+  };
+
+  const onAddAddress = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!shopKey || !token || !newAddress.trim()) return;
+    setSavingAddress(true);
+    setError('');
+    try {
+      const res = await axios.post(
+        `/api/shop/${shopKey}/auth/addresses`,
+        {
+          label: newLabel,
+          address: newAddress.trim(),
+          zipCode: newZip.trim() || null,
+          city: newCity.trim() || null,
+          isDefault: addresses.length === 0,
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const saved = res.data.address;
+      setAddresses((prev) =>
+        saved.isDefault
+          ? [saved, ...prev.map((a) => ({ ...a, isDefault: false }))]
+          : [...prev, saved]
+      );
+      setNewAddress('');
+      setNewZip('');
+      setNewCity('');
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Could not save address');
+    } finally {
+      setSavingAddress(false);
+    }
+  };
+
+  const onDeleteAddress = async (id: string) => {
+    if (!shopKey || !token) return;
+    try {
+      await axios.delete(`/api/shop/${shopKey}/auth/addresses/${id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setAddresses((prev) => prev.filter((a) => a.id !== id));
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Could not delete address');
     }
   };
 
@@ -189,6 +254,7 @@ export default function AccountPage() {
     setCustomer(null);
     setLoyalty(null);
     setOrders([]);
+    setAddresses([]);
   };
 
   const patchCart = (mutator: (draft: ShopCheckoutDraft) => ShopCheckoutDraft) => {
@@ -486,24 +552,6 @@ export default function AccountPage() {
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                 />
-                <input
-                  className="border border-stone-300 px-3 py-2 text-sm sm:col-span-2"
-                  placeholder={t('shopStreetAddress')}
-                  value={defaultAddress}
-                  onChange={(e) => setDefaultAddress(e.target.value)}
-                />
-                <input
-                  className="border border-stone-300 px-3 py-2 text-sm"
-                  placeholder={t('shopZip')}
-                  value={defaultZip}
-                  onChange={(e) => setDefaultZip(e.target.value)}
-                />
-                <input
-                  className="border border-stone-300 px-3 py-2 text-sm"
-                  placeholder={t('shopCity')}
-                  value={defaultCity}
-                  onChange={(e) => setDefaultCity(e.target.value)}
-                />
                 {error && <p className="text-sm text-red-600 sm:col-span-2">{error}</p>}
                 <button
                   type="submit"
@@ -513,6 +561,87 @@ export default function AccountPage() {
                   {saving ? t('shopLoading') : t('shopSaveProfile')}
                 </button>
               </form>
+
+              <div className="border-t border-stone-100 pt-3 space-y-3">
+                <h3 className="font-semibold text-sm">{t('shopSavedAddresses')}</h3>
+                {addresses.length === 0 ? (
+                  <p className="text-sm text-stone-500">{t('shopNewAddress')}</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {addresses.map((a) => (
+                      <li
+                        key={a.id}
+                        className="flex items-start justify-between gap-3 border border-stone-100 px-3 py-2 text-sm"
+                      >
+                        <div className="min-w-0">
+                          <p className="font-semibold">
+                            {addressLabelText(a.label)}
+                            {a.isDefault ? (
+                              <span className="ml-2 text-[10px] uppercase text-teal-700">default</span>
+                            ) : null}
+                          </p>
+                          <p className="text-stone-600 truncate">
+                            {a.address}
+                            {a.zipCode || a.city ? `, ${a.zipCode || ''} ${a.city || ''}`.trim() : ''}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          className="text-xs font-semibold underline shrink-0"
+                          onClick={() => void onDeleteAddress(a.id)}
+                        >
+                          {t('delete')}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <form onSubmit={onAddAddress} className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div className="sm:col-span-2 flex flex-wrap gap-1.5">
+                    {(['home', 'office', 'other'] as const).map((lab) => (
+                      <button
+                        key={lab}
+                        type="button"
+                        onClick={() => setNewLabel(lab)}
+                        className={`rounded-full border px-2.5 py-1 text-xs ${
+                          newLabel === lab
+                            ? 'border-stone-900 bg-stone-900 text-white'
+                            : 'border-stone-200'
+                        }`}
+                      >
+                        {addressLabelText(lab)}
+                      </button>
+                    ))}
+                  </div>
+                  <input
+                    className="border border-stone-300 px-3 py-2 text-sm sm:col-span-2"
+                    placeholder={t('shopStreetAddress')}
+                    value={newAddress}
+                    onChange={(e) => setNewAddress(e.target.value)}
+                    required
+                  />
+                  <input
+                    className="border border-stone-300 px-3 py-2 text-sm"
+                    placeholder={t('shopZip')}
+                    value={newZip}
+                    onChange={(e) => setNewZip(e.target.value)}
+                  />
+                  <input
+                    className="border border-stone-300 px-3 py-2 text-sm"
+                    placeholder={t('shopCity')}
+                    value={newCity}
+                    onChange={(e) => setNewCity(e.target.value)}
+                  />
+                  <button
+                    type="submit"
+                    disabled={savingAddress}
+                    className="sm:col-span-2 border border-stone-900 px-3 py-2 text-sm font-semibold disabled:opacity-40"
+                  >
+                    {savingAddress ? t('shopSavingAddress') : t('shopSaveAddress')}
+                  </button>
+                </form>
+              </div>
+
               <button
                 type="button"
                 onClick={logout}
