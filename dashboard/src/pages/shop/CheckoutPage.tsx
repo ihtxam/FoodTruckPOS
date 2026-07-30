@@ -560,7 +560,7 @@ export default function CheckoutPage() {
       });
       setSelectedAddressId(saved.id);
     } catch (e: any) {
-      setError(e.response?.data?.error || 't('shopCouldNotSaveAddress')');
+      setError(e.response?.data?.error || t('shopCouldNotSaveAddress'));
     } finally {
       setSavingAddress(false);
     }

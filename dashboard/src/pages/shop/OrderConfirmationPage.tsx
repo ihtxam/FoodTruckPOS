@@ -101,7 +101,7 @@ export default function OrderConfirmationPage() {
         clearCart(shopKey);
       }
     } catch (e: any) {
-      setError(e.response?.data?.error || '{t('shopOrderNotFound')}');
+      setError(e.response?.data?.error || t('shopOrderNotFound'));
     } finally {
       setLoading(false);
     }
@@ -156,10 +156,7 @@ export default function OrderConfirmationPage() {
         setDemoMode(false);
       } catch (e: any) {
         setDemoMode(true);
-        setPayMsg(
-          e.response?.data?.error ||
-            '{t('shopCardNotConfigured')}'
-        );
+        setPayMsg(e.response?.data?.error || t('shopCardNotConfigured'));
       }
     })();
   }, [wantPay, needsPayment, shopKey, orderId, load]);
