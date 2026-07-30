@@ -212,6 +212,9 @@ fun PosScreen(
             discountPresets = state.discountPresets,
             checkoutState = state.checkoutState,
             isProcessing = state.isProcessingPayment,
+            cashEnabled = state.settings.cashEnabled,
+            cardEnabled = state.settings.cardEnabled,
+            terminalEnabled = state.settings.terminalEnabled && state.settings.adyenTerminalEnabled,
             splitBillIndex = if (isSplitCheckout) state.cart.activeSplitCheck else null,
             splitBillCount = if (isSplitCheckout) state.cart.splitCount else null,
             isEqualSplit = isSplitCheckout && !state.cart.splitByItems,
@@ -441,6 +444,9 @@ fun PosScreen(
                         categories = state.categories,
                         currencySymbol = state.currencySymbol,
                         paymentEnabled = state.cart.isEmpty.not() && !state.isProcessingPayment,
+                        expressEnabled = state.settings.expressEnabled,
+                        cashEnabled = state.settings.cashEnabled,
+                        cardEnabled = state.settings.cardEnabled,
                         highlightedProductId = state.lastClickedProductId,
                         onProductClick = viewModel::onProductClick,
                         onMiscClick = viewModel::addMiscItemQuick,
@@ -2088,6 +2094,9 @@ private fun VectronProductGrid(
     categories: List<CategoryEntity>,
     currencySymbol: String,
     paymentEnabled: Boolean,
+    expressEnabled: Boolean = true,
+    cashEnabled: Boolean = true,
+    cardEnabled: Boolean = true,
     highlightedProductId: Long? = null,
     onProductClick: (Long) -> Unit,
     onMiscClick: () -> Unit,
@@ -2122,48 +2131,56 @@ private fun VectronProductGrid(
             }
         }
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(VectronColors.Header)
-                .padding(8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Button(
-                onClick = onXpress,
-                enabled = paymentEnabled,
-                modifier = Modifier.weight(1f).height(64.dp),
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFFE67E22),
-                    disabledContainerColor = VectronColors.KeypadButton
-                )
+        if (expressEnabled || cashEnabled || cardEnabled) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(VectronColors.Header)
+                    .padding(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text(stringResource(R.string.xpress_sale), fontSize = 16.sp, fontWeight = FontWeight.Bold)
-            }
-            Button(
-                onClick = onCash,
-                enabled = paymentEnabled,
-                modifier = Modifier.weight(1f).height(64.dp),
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = VectronColors.CashGreen,
-                    disabledContainerColor = VectronColors.KeypadButton
-                )
-            ) {
-                Text(stringResource(R.string.cash), fontSize = 20.sp, fontWeight = FontWeight.Bold)
-            }
-            Button(
-                onClick = onCard,
-                enabled = paymentEnabled,
-                modifier = Modifier.weight(1f).height(64.dp),
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = VectronColors.CardBlue,
-                    disabledContainerColor = VectronColors.KeypadButton
-                )
-            ) {
-                Text(stringResource(R.string.payment_by_card), fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                if (expressEnabled) {
+                    Button(
+                        onClick = onXpress,
+                        enabled = paymentEnabled,
+                        modifier = Modifier.weight(1f).height(64.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFFE67E22),
+                            disabledContainerColor = VectronColors.KeypadButton
+                        )
+                    ) {
+                        Text(stringResource(R.string.xpress_sale), fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+                if (cashEnabled) {
+                    Button(
+                        onClick = onCash,
+                        enabled = paymentEnabled,
+                        modifier = Modifier.weight(1f).height(64.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = VectronColors.CashGreen,
+                            disabledContainerColor = VectronColors.KeypadButton
+                        )
+                    ) {
+                        Text(stringResource(R.string.cash), fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+                if (cardEnabled) {
+                    Button(
+                        onClick = onCard,
+                        enabled = paymentEnabled,
+                        modifier = Modifier.weight(1f).height(64.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = VectronColors.CardBlue,
+                            disabledContainerColor = VectronColors.KeypadButton
+                        )
+                    ) {
+                        Text(stringResource(R.string.payment_by_card), fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
             }
         }
     }

@@ -65,7 +65,7 @@ function Send-RawToPrinter {
     )
 
     $docInfo = New-Object RawPrinterHelper+DOCINFO
-    $docInfo.pDocName = "ManuPOS Receipt"
+    $docInfo.pDocName = "ChaslayReborn Receipt"
     $docInfo.pDataType = "RAW"
 
     $handle = [IntPtr]::Zero

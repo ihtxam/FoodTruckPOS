@@ -103,21 +103,24 @@ class TerminalSyncRepository @Inject constructor(
 
         val defaultTerminalId = config.default_terminal_id?.trim().orEmpty()
         if (defaultTerminalId.isNotEmpty() && merged.adyenTerminalId.isBlank()) {
-            merged = merged.copy(
-                adyenTerminalId = defaultTerminalId,
-                adyenTerminalEnabled = true,
-                terminalEnabled = true
-            )
+            merged = merged.copy(adyenTerminalId = defaultTerminalId)
         }
 
         val hasActiveTerminal = config.terminals.any { it.status == "active" || it.status.isNullOrBlank() }
         if (hasActiveTerminal && merged.adyenTerminalId.isBlank() && config.terminals.isNotEmpty()) {
             val first = config.terminals.firstOrNull { it.status == "active" || it.status.isNullOrBlank() }
                 ?: config.terminals.first()
+            merged = merged.copy(adyenTerminalId = first.terminal_id)
+        }
+
+        config.methods?.let { methods ->
             merged = merged.copy(
-                adyenTerminalId = first.terminal_id,
-                adyenTerminalEnabled = true,
-                terminalEnabled = true
+                expressEnabled = methods.express,
+                cashEnabled = methods.cash,
+                cardEnabled = methods.card,
+                terminalEnabled = methods.terminal,
+                adyenTerminalEnabled = methods.terminal,
+                paymentMethodsManagedByCloud = true
             )
         }
 

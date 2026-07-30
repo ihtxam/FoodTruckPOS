@@ -2,6 +2,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, LogOut, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '@/store/auth';
+import { APP_NAME } from '@/lib/brand';
 import { useI18n } from '@/lib/i18n';
 
 interface MenuItem {
@@ -48,7 +49,7 @@ export default function Sidebar({ isOpen, onToggle, menuItems }: SidebarProps) {
       >
         <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between shrink-0">
           <div>
-            <h1 className="text-base font-semibold tracking-tight">ManuPOS</h1>
+            <h1 className="text-base font-semibold tracking-tight">{APP_NAME}</h1>
             <p className="text-[11px] text-slate-400 mt-0.5">{t('panel')}</p>
           </div>
           <button

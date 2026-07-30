@@ -10,10 +10,15 @@ import {
   Search,
   ShoppingBag,
   X,
+  Zap,
+  MonitorSmartphone,
+  UserCircle2,
+  Vault,
 } from 'lucide-react';
 import api from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
 import { roundMoney2, roundTo005, roundingAdjustment } from '@/lib/money';
+import { APP_NAME } from '@/lib/brand';
 import {
   generateWebPosReceiptText,
   textToEscPos,
@@ -42,6 +47,16 @@ import ShopComboWizard, {
   type ComboSlot,
   type ShopComboProduct,
 } from '@/components/shop/ShopComboWizard';
+import WebPosPaymentModal, { type WebPosPaymentPhase } from '@/components/WebPosPaymentModal';
+import WebPosPinModal from '@/components/WebPosPinModal';
+import {
+  hasPermission,
+  loadWebPosStaffSession,
+  saveWebPosStaffSession,
+  type Permission,
+  type WebPosStaffSession,
+} from '@/lib/permissions';
+import { openCashDrawerViaAgent } from '@/lib/print-agent';
 
 type Channel = 'takeaway' | 'dine_in' | 'delivery';
 
@@ -101,6 +116,28 @@ type SaleRecord = {
   synced: boolean;
 };
 
+type PosPaymentMethod = 'cash' | 'card' | 'terminal';
+
+type WebPosTerminal = {
+  id: string;
+  terminalId: string;
+  terminalName: string | null;
+  status: string;
+};
+
+type WebPosPaymentConfig = {
+  methods: {
+    express: boolean;
+    cash: boolean;
+    card: boolean;
+    terminal: boolean;
+  };
+  terminalReady: boolean;
+  adyenConfigured: boolean;
+  defaultTerminalId: string | null;
+  terminals: WebPosTerminal[];
+};
+
 const CHANNELS: { id: Channel; label: string }[] = [
   { id: 'takeaway', label: 'Take away' },
   { id: 'dine_in', label: 'Dine in' },
@@ -121,7 +158,13 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
   const [search, setSearch] = useState('');
   const [cart, setCart] = useState<CartLine[]>([]);
   const [channel, setChannel] = useState<Channel>('takeaway');
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card'>('cash');
+  const [paymentMethod, setPaymentMethod] = useState<PosPaymentMethod>('cash');
+  const [paymentConfig, setPaymentConfig] = useState<WebPosPaymentConfig | null>(null);
+  const [selectedTerminalId, setSelectedTerminalId] = useState('');
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [paymentPhase, setPaymentPhase] = useState<WebPosPaymentPhase>('processing');
+  const [paymentMessage, setPaymentMessage] = useState('');
+  const paymentAbortRef = useRef<AbortController | null>(null);
   const [busy, setBusy] = useState(false);
   const [sales, setSales] = useState<SaleRecord[]>([]);
   const [agentOk, setAgentOk] = useState(false);
@@ -135,6 +178,9 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [mobileCartOpen, setMobileCartOpen] = useState(false);
   const [recentOpen, setRecentOpen] = useState(false);
+  const [pinModalOpen, setPinModalOpen] = useState(false);
+  const [webposStaff, setWebposStaff] = useState<WebPosStaffSession | null>(() => loadWebPosStaffSession());
+  const [staffConfigured, setStaffConfigured] = useState(false);
   const settingsRef = useRef<HTMLDivElement>(null);
 
   const cartCount = useMemo(() => cart.reduce((n, l) => n + l.quantity, 0), [cart]);
@@ -238,13 +284,28 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [settingsRes, catRes, prodRes] = await Promise.all([
+      const [settingsRes, catRes, prodRes, webposRes, staffRes] = await Promise.all([
         api.get('/merchant/settings'),
         api.get('/merchant/categories'),
         api.get('/merchant/products', { params: { limit: 500 } }),
+        api.get('/merchant/webpos-config').catch(() => ({ data: { config: null } })),
+        api.get('/merchant/staff').catch(() => ({ data: { staff: [] } })),
       ]);
       setMerchant(settingsRes.data.settings || settingsRes.data.merchant);
       setCategories(catRes.data.categories || catRes.data || []);
+      const cfg = webposRes.data.config as WebPosPaymentConfig | null;
+      if (cfg) {
+        setPaymentConfig(cfg);
+        if (cfg.defaultTerminalId) setSelectedTerminalId(cfg.defaultTerminalId);
+        const first: PosPaymentMethod[] = ['cash', 'card', 'terminal'];
+        const pick = first.find((m) => cfg.methods[m]);
+        if (pick) setPaymentMethod(pick);
+      }
+      const staffList = staffRes.data.staff || [];
+      setStaffConfigured(staffList.some((s: { pinSet?: boolean; isActive?: boolean }) => s.pinSet && s.isActive));
+      if (!loadWebPosStaffSession() && staffList.some((s: { pinSet?: boolean }) => s.pinSet)) {
+        setPinModalOpen(true);
+      }
       const prods = prodRes.data.products || prodRes.data || [];
       setProducts(
         prods.map((p: any) => ({
@@ -365,113 +426,250 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
       return;
     }
     throw new Error(
-      'Print agent offline. Start ManuPOS Print Agent on this PC (print-agent\\start.bat), then click Refresh printers.'
+      'Print agent offline. Start ChaslayReborn Print Agent on this PC (print-agent\\start.bat), then click Refresh printers.'
     );
   };
 
-  const completeSale = async () => {
-    if (!cart.length || busy) return;
-    setBusy(true);
-    try {
-      const clientId = `webpos-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      const sale = {
-        clientId,
-        paymentMethod,
-        paymentStatus: 'completed',
-        subtotal: totals.subtotal,
-        taxAmount: totals.tax,
-        discountAmount: 0,
-        total: totals.total,
-        fulfillmentChannel: channel,
-        completedAt: Date.now(),
-        notes: totals.rounding ? `Rounding ${totals.rounding > 0 ? '+' : ''}${totals.rounding.toFixed(2)}` : undefined,
-        items: cart.map((l) => ({
-          productClientId: l.productId,
-          productId: l.productId,
-          productName: l.name,
+  const buildSalePayload = (clientId: string, method: PosPaymentMethod) => ({
+    clientId,
+    paymentMethod: method,
+    paymentStatus: 'completed',
+    subtotal: totals.subtotal,
+    taxAmount: totals.tax,
+    discountAmount: 0,
+    total: totals.total,
+    fulfillmentChannel: channel,
+    completedAt: Date.now(),
+    notes: totals.rounding ? `Rounding ${totals.rounding > 0 ? '+' : ''}${totals.rounding.toFixed(2)}` : undefined,
+    items: cart.map((l) => ({
+      productClientId: l.productId,
+      productId: l.productId,
+      productName: l.name,
+      quantity: l.quantity,
+      unitPrice: l.unitPrice,
+      totalPrice: l.lineTotal,
+      taxAmount: l.taxable ? roundMoney2((l.lineTotal * taxRate) / 100) : 0,
+      selectedExtras: l.selectedExtras.map((e) => ({
+        id: e.id,
+        name: e.name,
+        price: e.price,
+      })),
+      comboSelections: l.comboSelections.map((c) => ({
+        slotId: c.slotId,
+        slotName: c.slotName,
+        productId: c.productId,
+        productName: c.productName,
+        extraPrice: c.extraPrice,
+        selectedExtras: (c.selectedExtras || []).map((e) => ({
+          id: e.id,
+          name: e.name,
+          price: e.price,
+        })),
+      })),
+      isOpenPrice: false,
+    })),
+  });
+
+  const closePaymentModal = () => {
+    paymentAbortRef.current?.abort();
+    paymentAbortRef.current = null;
+    setPaymentModalOpen(false);
+    setPaymentMessage('');
+  };
+
+  const finalizeSale = async (method: PosPaymentMethod, presetClientId?: string) => {
+    const clientId = presetClientId || `webpos-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const sale = buildSalePayload(clientId, method);
+
+    await api.post('/sync/push-sales', { sales: [sale] });
+
+    const receiptUrl = buildReceiptUrl(clientId);
+    const receiptPayload: WebPosReceipt = {
+      businessName: merchant?.name || APP_NAME,
+      address: [merchant?.address, merchant?.city].filter(Boolean).join(', '),
+      phone: merchant?.phone || undefined,
+      id: clientId,
+      completedAt: Date.now(),
+      channel,
+      paymentMethod: method,
+      items: cart.map((l) => {
+        const detail = lineExtrasLabel(l);
+        return {
+          name: detail ? `${l.name} (${detail})` : l.name,
           quantity: l.quantity,
           unitPrice: l.unitPrice,
-          totalPrice: l.lineTotal,
-          taxAmount: l.taxable ? roundMoney2((l.lineTotal * taxRate) / 100) : 0,
-          selectedExtras: l.selectedExtras.map((e) => ({
-            id: e.id,
-            name: e.name,
-            price: e.price,
-          })),
-          comboSelections: l.comboSelections.map((c) => ({
-            slotId: c.slotId,
-            slotName: c.slotName,
-            productId: c.productId,
-            productName: c.productName,
-            extraPrice: c.extraPrice,
-            selectedExtras: (c.selectedExtras || []).map((e) => ({
-              id: e.id,
-              name: e.name,
-              price: e.price,
-            })),
-          })),
-          isOpenPrice: false,
-        })),
-      };
-
-      await api.post('/sync/push-sales', { sales: [sale] });
-
-      const receiptUrl = buildReceiptUrl(clientId);
-      const receiptPayload: WebPosReceipt = {
-        businessName: merchant?.name || 'ManuPOS',
-        address: [merchant?.address, merchant?.city].filter(Boolean).join(', '),
-        phone: merchant?.phone || undefined,
-        id: clientId,
-        completedAt: Date.now(),
-        channel,
-        paymentMethod,
-        items: cart.map((l) => {
-          const detail = lineExtrasLabel(l);
-          return {
-            name: detail ? `${l.name} (${detail})` : l.name,
-            quantity: l.quantity,
-            unitPrice: l.unitPrice,
-            lineTotal: l.lineTotal,
-          };
-        }),
-        subtotal: totals.subtotal,
-        discount: 0,
-        taxAmount: totals.tax,
-        taxRate,
-        rounding: totals.rounding,
-        total: totals.total,
-        receiptUrl,
-        includeQr: true,
-      };
-      const receiptText = generateWebPosReceiptText(receiptPayload);
-      setLastReceipt(receiptText);
-      setLastReceiptUrl(receiptUrl);
-      setSales((prev) => [
+          lineTotal: l.lineTotal,
+        };
+      }),
+      subtotal: totals.subtotal,
+      discount: 0,
+      taxAmount: totals.tax,
+      taxRate,
+      rounding: totals.rounding,
+      total: totals.total,
+      receiptUrl,
+      includeQr: true,
+    };
+    const receiptText = generateWebPosReceiptText(receiptPayload);
+    setLastReceipt(receiptText);
+    setLastReceiptUrl(receiptUrl);
+    setSales((prev) =>
+      [
         {
           id: clientId,
           total: totals.total,
-          paymentMethod,
+          paymentMethod: method,
           channel,
           completedAt: Date.now(),
           synced: true,
         },
         ...prev,
-      ].slice(0, 30));
-      setCart([]);
-      toast.success(`Sale complete · ${money(totals.total)}`);
-      if (autoPrint) {
-        try {
-          await printReceipt(receiptText, receiptUrl);
-        } catch (e: any) {
-          toast.error(e.message || 'Print failed');
-        }
+      ].slice(0, 30)
+    );
+    setCart([]);
+    toast.success(`Sale complete · ${money(totals.total)}`);
+    if (autoPrint) {
+      try {
+        await printReceipt(receiptText, receiptUrl);
+      } catch (e: any) {
+        toast.error(e.message || 'Print failed');
       }
+    }
+  };
+
+  const runTerminalPayment = async () => {
+    if (!selectedTerminalId) {
+      toast.error('Select a payment terminal first');
+      return;
+    }
+
+    const clientId = `webpos-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const abort = new AbortController();
+    paymentAbortRef.current = abort;
+    setPaymentModalOpen(true);
+    setPaymentPhase('processing');
+    setPaymentMessage('Complete the payment on your terminal…');
+    setBusy(true);
+
+    try {
+      const res = await api.post(
+        '/payment/terminal/poi',
+        {
+          amount: totals.total,
+          terminalId: selectedTerminalId,
+          currency: 'CHF',
+          saleRef: clientId,
+        },
+        { signal: abort.signal, timeout: 170_000 }
+      );
+
+      const result = res.data.result as { status: string; message?: string; reference?: string };
+
+      if (result.status === 'approved') {
+        closePaymentModal();
+        await finalizeSale('terminal', clientId);
+        return;
+      }
+
+      if (result.status === 'cancelled') {
+        setPaymentPhase('cancelled');
+        setPaymentMessage(result.message || 'Payment cancelled on terminal.');
+        return;
+      }
+
+      setPaymentPhase('failed');
+      setPaymentMessage(result.message || 'Terminal payment failed.');
+    } catch (e: any) {
+      if (e.code === 'ERR_CANCELED' || e.name === 'CanceledError') {
+        setPaymentPhase('cancelled');
+        setPaymentMessage('Payment cancelled.');
+        return;
+      }
+      setPaymentPhase('failed');
+      setPaymentMessage(e.response?.data?.error || e.message || 'Terminal payment failed.');
+    } finally {
+      setBusy(false);
+      paymentAbortRef.current = null;
+    }
+  };
+
+  const completeSale = async () => {
+    if (!cart.length || busy || paymentModalOpen) return;
+    if (paymentMethod === 'terminal') {
+      await runTerminalPayment();
+      return;
+    }
+    setBusy(true);
+    try {
+      await finalizeSale(paymentMethod);
     } catch (e: any) {
       toast.error(e.response?.data?.error || e.message || 'Sale failed');
     } finally {
       setBusy(false);
     }
   };
+
+  const expressSale = async () => {
+    if (!cart.length || busy || paymentModalOpen) return;
+    setBusy(true);
+    try {
+      await finalizeSale('cash');
+    } catch (e: any) {
+      toast.error(e.response?.data?.error || e.message || 'Sale failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const staffPerms = webposStaff?.permissions;
+  const canPay =
+    !staffConfigured || (!!webposStaff && hasPermission(staffPerms, 'PROCESS_PAYMENTS'));
+  const canDrawer =
+    !staffConfigured || (!!webposStaff && hasPermission(staffPerms, 'OPEN_CASH_DRAWER'));
+
+  const openCashDrawer = async () => {
+    if (!canDrawer) {
+      toast.error('You do not have permission to open the cash drawer');
+      return;
+    }
+    try {
+      await openCashDrawerViaAgent({ printerName: printerName || undefined });
+      toast.success('Cash drawer opened');
+    } catch (e: any) {
+      toast.error(e.message || 'Could not open cash drawer');
+    }
+  };
+
+  const onStaffPinSuccess = (staff: {
+    id: string;
+    name: string;
+    roleId: string;
+    roleName: string;
+    permissions: string[];
+  }) => {
+    const session: WebPosStaffSession = {
+      id: staff.id,
+      name: staff.name,
+      roleId: staff.roleId,
+      roleName: staff.roleName,
+      permissions: staff.permissions as Permission[],
+    };
+    setWebposStaff(session);
+    saveWebPosStaffSession(session);
+    toast.success(`Signed in as ${staff.name}`);
+  };
+
+  const enabledMethods = {
+    express: (paymentConfig?.methods.express ?? true) && canPay,
+    cash: (paymentConfig?.methods.cash ?? true) && canPay,
+    card: (paymentConfig?.methods.card ?? true) && canPay,
+    terminal: (paymentConfig?.methods.terminal ?? false) && canPay,
+  };
+
+  const activeTerminals = useMemo(
+    () => (paymentConfig?.terminals || []).filter((t) => t.status === 'active'),
+    [paymentConfig]
+  );
 
   if (loading) {
     return (
@@ -600,40 +798,101 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
+        {enabledMethods.express ? (
           <button
             type="button"
-            onClick={() => setPaymentMethod('cash')}
-            className={`inline-flex items-center justify-center gap-1.5 rounded-xl border py-2.5 text-sm font-semibold transition ${
-              paymentMethod === 'cash'
-                ? 'border-stone-900 bg-stone-900 text-white'
-                : 'border-[var(--border)] bg-[var(--bg)] text-[var(--text)]'
+            disabled={!cart.length || busy || paymentModalOpen}
+            onClick={() => void expressSale()}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-xl border-2 border-amber-500 bg-amber-50 py-2.5 text-sm font-semibold text-amber-900 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Zap size={16} />
+            Express · {money(totals.total)}
+          </button>
+        ) : null}
+
+        {(enabledMethods.cash || enabledMethods.card || enabledMethods.terminal) && (
+          <div
+            className={`grid gap-2 ${
+              [enabledMethods.cash, enabledMethods.card, enabledMethods.terminal].filter(Boolean).length >= 3
+                ? 'grid-cols-3'
+                : 'grid-cols-2'
             }`}
           >
-            <Banknote size={16} />
-            Cash
-          </button>
-          <button
-            type="button"
-            onClick={() => setPaymentMethod('card')}
-            className={`inline-flex items-center justify-center gap-1.5 rounded-xl border py-2.5 text-sm font-semibold transition ${
-              paymentMethod === 'card'
-                ? 'border-stone-900 bg-stone-900 text-white'
-                : 'border-[var(--border)] bg-[var(--bg)] text-[var(--text)]'
-            }`}
-          >
-            <CreditCard size={16} />
-            Card
-          </button>
-        </div>
+            {enabledMethods.cash ? (
+              <button
+                type="button"
+                onClick={() => setPaymentMethod('cash')}
+                className={`inline-flex items-center justify-center gap-1.5 rounded-xl border py-2.5 text-sm font-semibold transition ${
+                  paymentMethod === 'cash'
+                    ? 'border-stone-900 bg-stone-900 text-white'
+                    : 'border-[var(--border)] bg-[var(--bg)] text-[var(--text)]'
+                }`}
+              >
+                <Banknote size={16} />
+                Cash
+              </button>
+            ) : null}
+            {enabledMethods.card ? (
+              <button
+                type="button"
+                onClick={() => setPaymentMethod('card')}
+                className={`inline-flex items-center justify-center gap-1.5 rounded-xl border py-2.5 text-sm font-semibold transition ${
+                  paymentMethod === 'card'
+                    ? 'border-stone-900 bg-stone-900 text-white'
+                    : 'border-[var(--border)] bg-[var(--bg)] text-[var(--text)]'
+                }`}
+              >
+                <CreditCard size={16} />
+                Card
+              </button>
+            ) : null}
+            {enabledMethods.terminal ? (
+              <button
+                type="button"
+                onClick={() => setPaymentMethod('terminal')}
+                className={`inline-flex items-center justify-center gap-1.5 rounded-xl border py-2.5 text-sm font-semibold transition ${
+                  paymentMethod === 'terminal'
+                    ? 'border-stone-900 bg-stone-900 text-white'
+                    : 'border-[var(--border)] bg-[var(--bg)] text-[var(--text)]'
+                }`}
+              >
+                <MonitorSmartphone size={16} />
+                Terminal
+              </button>
+            ) : null}
+          </div>
+        )}
+
+        {enabledMethods.terminal && paymentMethod === 'terminal' && activeTerminals.length > 0 ? (
+          <label className="block text-xs">
+            <span className="mb-1 block font-medium text-[var(--text-muted)]">Terminal</span>
+            <select
+              className="input w-full text-sm"
+              value={selectedTerminalId}
+              onChange={(e) => setSelectedTerminalId(e.target.value)}
+            >
+              {activeTerminals.map((t) => (
+                <option key={t.id} value={t.terminalId}>
+                  {t.terminalName || t.terminalId}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
 
         <button
           type="button"
-          disabled={!cart.length || busy}
+          disabled={!cart.length || busy || paymentModalOpen}
           onClick={() => void completeSale()}
           className="w-full rounded-xl bg-teal-700 py-3.5 text-base font-semibold text-white shadow-sm transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          {busy ? 'Processing…' : cart.length ? `Charge ${money(totals.total)}` : 'Add items to charge'}
+          {busy && !paymentModalOpen
+            ? 'Processing…'
+            : paymentMethod === 'terminal' && cart.length
+              ? `Pay ${money(totals.total)} on terminal`
+              : cart.length
+                ? `Charge ${money(totals.total)}`
+                : 'Add items to charge'}
         </button>
 
         {lastReceipt ? (
@@ -715,6 +974,35 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
         </div>
 
         <div className="flex shrink-0 items-center gap-1.5">
+          {webposStaff ? (
+            <button
+              type="button"
+              className="hidden sm:inline-flex h-10 max-w-[8rem] items-center gap-1.5 truncate rounded-xl border border-[var(--border)] px-2.5 text-xs font-medium"
+              onClick={() => setPinModalOpen(true)}
+              title="Switch user"
+            >
+              <UserCircle2 size={16} className="shrink-0" />
+              <span className="truncate">{webposStaff.name}</span>
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--border)] hover:bg-[var(--bg-muted)] disabled:opacity-40"
+            aria-label="Switch user"
+            onClick={() => setPinModalOpen(true)}
+          >
+            <UserCircle2 size={18} />
+          </button>
+          {canDrawer ? (
+            <button
+              type="button"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--border)] hover:bg-[var(--bg-muted)]"
+              aria-label="Open cash drawer"
+              onClick={() => void openCashDrawer()}
+            >
+              <Vault size={18} />
+            </button>
+          ) : null}
           <button
             type="button"
             className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-[var(--border)] px-2.5 text-sm font-medium lg:hidden"
@@ -793,7 +1081,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
                 <p className="text-[11px] leading-snug text-[var(--text-muted)]">
                   {agentOk
                     ? 'Print agent online — receipts print silently to your Windows printer (no popup).'
-                    : 'Start ManuPOS Print Agent on this PC: FoodTruckPOS\\print-agent\\start.bat — then Refresh printers. Set your thermal printer as Windows default, or pick it in the list above.'}
+                    : 'Start ChaslayReborn Print Agent on this PC: FoodTruckPOS\\print-agent\\start.bat — then Refresh printers. Set your thermal printer as Windows default, or pick it in the list above.'}
                 </p>
               </div>
             ) : null}
@@ -925,7 +1213,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
           </button>
           <button
             type="button"
-            disabled={!cart.length || busy}
+            disabled={!cart.length || busy || paymentModalOpen}
             onClick={() => {
               if (!cart.length) {
                 setMobileCartOpen(true);
@@ -935,7 +1223,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
             }}
             className="shrink-0 rounded-xl bg-teal-700 px-4 py-3 text-sm font-semibold text-white disabled:opacity-40"
           >
-            {busy ? '…' : 'Charge'}
+            {busy && !paymentModalOpen ? '…' : 'Charge'}
           </button>
         </div>
       </div>
@@ -986,6 +1274,29 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
           }}
         />
       )}
+
+      <WebPosPinModal
+        open={pinModalOpen}
+        onClose={() => setPinModalOpen(false)}
+        onSuccess={onStaffPinSuccess}
+      />
+
+      <WebPosPaymentModal
+        open={paymentModalOpen}
+        phase={paymentPhase}
+        amountLabel={money(totals.total)}
+        message={paymentMessage}
+        onCancel={() => {
+          paymentAbortRef.current?.abort();
+          setPaymentPhase('cancelled');
+          setPaymentMessage('Payment cancelled.');
+        }}
+        onRetry={() => {
+          closePaymentModal();
+          void runTerminalPayment();
+        }}
+        onClose={closePaymentModal}
+      />
     </div>
   );
 }

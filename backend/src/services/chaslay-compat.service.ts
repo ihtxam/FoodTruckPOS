@@ -249,6 +249,10 @@ export class ChaslayCompatService {
     });
     const active = terminals.filter((t) => t.status === "active");
     const defaultTerminal = active[0] || terminals[0];
+    const terminalReady =
+      !!merchant.adyenApiKey &&
+      !!merchant.adyenMerchantAccount &&
+      active.length > 0;
 
     return {
       adyen: {
@@ -264,6 +268,13 @@ export class ChaslayCompatService {
         serial_number: t.serialNumber,
         status: t.status,
       })),
+      terminal_ready: terminalReady,
+      methods: {
+        express: merchant.webposExpressEnabled !== false,
+        cash: merchant.webposCashEnabled !== false,
+        card: merchant.webposCardEnabled !== false,
+        terminal: merchant.webposTerminalEnabled !== false && terminalReady,
+      },
     };
   }
 

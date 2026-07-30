@@ -456,6 +456,7 @@
     <string name="payment_cash">Accept Cash</string>
     <string name="payment_card">Accept Card</string>
     <string name="payment_terminal">Accept Terminal</string>
+    <string name="payment_methods_managed_by_panel">Payment methods are managed in the Chaslay merchant panel and sync to this device.</string>
     <string name="printer_roles">Printer Job Assignment</string>
     <string name="print_receipts">Receipts</string>
     <string name="print_reports">Reports</string>

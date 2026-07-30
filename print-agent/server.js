@@ -1,5 +1,5 @@
 /**
- * ManuPOS Windows Print Agent
+ * ChaslayReborn Windows Print Agent
  * Exposes localhost HTTP API for WebPOS silent thermal printing (ESC/POS RAW).
  */
 const cors = require("cors");
@@ -74,7 +74,7 @@ $items | ConvertTo-Json -Compress
 
 async function printRaw({ printerName, dataBase64 }) {
   if (!isWindows()) {
-    throw new Error("ManuPOS Print Agent supports Windows only.");
+    throw new Error("ChaslayReborn Print Agent supports Windows only.");
   }
   if (!dataBase64) {
     throw new Error("dataBase64 is required.");
@@ -132,8 +132,23 @@ app.post("/print", async (req, res) => {
   }
 });
 
+/** ESC/POS cash drawer kick (pin 2, on-time 25 × 2ms, off-time 250 × 2ms) */
+app.post("/drawer", async (req, res) => {
+  try {
+    const drawerBytes = Buffer.from([0x1b, 0x40, 0x1b, 0x70, 0x00, 0x19, 0xfa]);
+    const usedPrinter = await printRaw({
+      printerName: req.body?.printerName,
+      dataBase64: drawerBytes.toString("base64"),
+    });
+    res.json({ ok: true, printer: usedPrinter });
+  } catch (error) {
+    console.error("[print-agent] drawer failed:", error);
+    res.status(500).json({ error: error.message || "Drawer failed" });
+  }
+});
+
 app.listen(PORT, "127.0.0.1", () => {
-  console.log(`ManuPOS Print Agent listening on http://127.0.0.1:${PORT}`);
+  console.log(`ChaslayReborn Print Agent listening on http://127.0.0.1:${PORT}`);
   if (!isWindows()) {
     console.warn("Warning: RAW thermal printing is only supported on Windows.");
   }

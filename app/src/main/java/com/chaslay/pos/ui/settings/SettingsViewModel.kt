@@ -85,6 +85,8 @@ data class SettingsUiState(
     val cashEnabled: Boolean = true,
     val cardEnabled: Boolean = true,
     val terminalEnabled: Boolean = true,
+    val expressEnabled: Boolean = true,
+    val paymentMethodsManagedByCloud: Boolean = false,
     val printerPrintReceipts: Boolean = true,
     val printerPrintReports: Boolean = true,
     val printerPrintKitchen: Boolean = false,
@@ -210,6 +212,8 @@ class SettingsViewModel @Inject constructor(
                     cashEnabled = settings.cashEnabled,
                     cardEnabled = settings.cardEnabled,
                     terminalEnabled = settings.terminalEnabled,
+                    expressEnabled = settings.expressEnabled,
+                    paymentMethodsManagedByCloud = settings.paymentMethodsManagedByCloud,
                     printerPrintReceipts = settings.printerPrintReceipts,
                     printerPrintReports = settings.printerPrintReports,
                     printerPrintKitchen = settings.printerPrintKitchen,
@@ -960,9 +964,27 @@ class SettingsViewModel @Inject constructor(
             openMinute = state.openMinute.toIntOrNull()?.coerceIn(0, 59) ?: 0,
             closeHour = state.closeHour.toIntOrNull()?.coerceIn(0, 23) ?: 22,
             closeMinute = state.closeMinute.toIntOrNull()?.coerceIn(0, 59) ?: 0,
-            cashEnabled = state.cashEnabled,
-            cardEnabled = state.cardEnabled,
-            terminalEnabled = state.terminalEnabled,
+            cashEnabled = if (currentSettings.paymentMethodsManagedByCloud) {
+                currentSettings.cashEnabled
+            } else {
+                state.cashEnabled
+            },
+            cardEnabled = if (currentSettings.paymentMethodsManagedByCloud) {
+                currentSettings.cardEnabled
+            } else {
+                state.cardEnabled
+            },
+            terminalEnabled = if (currentSettings.paymentMethodsManagedByCloud) {
+                currentSettings.terminalEnabled
+            } else {
+                state.terminalEnabled
+            },
+            expressEnabled = if (currentSettings.paymentMethodsManagedByCloud) {
+                currentSettings.expressEnabled
+            } else {
+                state.expressEnabled
+            },
+            paymentMethodsManagedByCloud = currentSettings.paymentMethodsManagedByCloud,
             printerPrintReceipts = state.printerPrintReceipts,
             printerPrintReports = state.printerPrintReports,
             printerPrintKitchen = state.printerPrintKitchen,

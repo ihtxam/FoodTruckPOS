@@ -81,6 +81,9 @@ fun CheckoutScreen(
     discountPresets: List<DiscountPreset>,
     checkoutState: CheckoutState,
     isProcessing: Boolean,
+    cashEnabled: Boolean = true,
+    cardEnabled: Boolean = true,
+    terminalEnabled: Boolean = true,
     splitBillIndex: Int? = null,
     splitBillCount: Int? = null,
     isEqualSplit: Boolean = false,
@@ -193,33 +196,39 @@ fun CheckoutScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                PaymentMethodCard(
-                    title = stringResource(R.string.cash),
-                    subtitle = "Manual processing",
-                    icon = Icons.Default.AttachMoney,
-                    selected = checkoutState.method == PaymentMethod.CASH,
-                    accent = Color(0xFF22C55E),
-                    onClick = { onSelectMethod(PaymentMethod.CASH) },
-                    modifier = Modifier.weight(1f)
-                )
-                PaymentMethodCard(
-                    title = stringResource(R.string.card),
-                    subtitle = "Credit & Debit",
-                    icon = Icons.Default.CreditCard,
-                    selected = checkoutState.method == PaymentMethod.CARD,
-                    accent = Color(0xFF3B82F6),
-                    onClick = { onSelectMethod(PaymentMethod.CARD) },
-                    modifier = Modifier.weight(1f)
-                )
-                PaymentMethodCard(
-                    title = "Terminal",
-                    subtitle = "Terminal Required",
-                    icon = Icons.Default.LocalAtm,
-                    selected = checkoutState.method == PaymentMethod.ADYEN_TERMINAL,
-                    accent = Color(0xFF8B5CF6),
-                    onClick = { onSelectMethod(PaymentMethod.ADYEN_TERMINAL) },
-                    modifier = Modifier.weight(1f)
-                )
+                if (cashEnabled) {
+                    PaymentMethodCard(
+                        title = stringResource(R.string.cash),
+                        subtitle = "Manual processing",
+                        icon = Icons.Default.AttachMoney,
+                        selected = checkoutState.method == PaymentMethod.CASH,
+                        accent = Color(0xFF22C55E),
+                        onClick = { onSelectMethod(PaymentMethod.CASH) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                if (cardEnabled) {
+                    PaymentMethodCard(
+                        title = stringResource(R.string.card),
+                        subtitle = "Credit & Debit",
+                        icon = Icons.Default.CreditCard,
+                        selected = checkoutState.method == PaymentMethod.CARD,
+                        accent = Color(0xFF3B82F6),
+                        onClick = { onSelectMethod(PaymentMethod.CARD) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                if (terminalEnabled) {
+                    PaymentMethodCard(
+                        title = "Terminal",
+                        subtitle = "Terminal Required",
+                        icon = Icons.Default.LocalAtm,
+                        selected = checkoutState.method == PaymentMethod.ADYEN_TERMINAL,
+                        accent = Color(0xFF8B5CF6),
+                        onClick = { onSelectMethod(PaymentMethod.ADYEN_TERMINAL) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
 
             if (cart.pickupTimeMs != null) {

@@ -110,6 +110,17 @@ export const merchants = pgTable(
     adyenMerchantAccount: varchar("adyen_merchant_account", { length: 255 }),
     adyenApiKey: text("adyen_api_key"),
     adyenClientId: varchar("adyen_client_id", { length: 255 }),
+    /** Adyen Terminal API: test vs live environment */
+    adyenLiveEnvironment: boolean("adyen_live_environment").default(false).notNull(),
+    /** Adyen cloud device region: EU | US | AU | APSE */
+    adyenLiveRegion: varchar("adyen_live_region", { length: 10 }).default("EU").notNull(),
+    /** Use legacy Terminal API sync URL instead of Cloud Device API */
+    adyenUseLegacyEndpoint: boolean("adyen_use_legacy_endpoint").default(false).notNull(),
+    /** WebPOS payment method toggles (merchant panel counter sales) */
+    webposExpressEnabled: boolean("webpos_express_enabled").default(true).notNull(),
+    webposCashEnabled: boolean("webpos_cash_enabled").default(true).notNull(),
+    webposCardEnabled: boolean("webpos_card_enabled").default(true).notNull(),
+    webposTerminalEnabled: boolean("webpos_terminal_enabled").default(true).notNull(),
     /** Fixed CHF surcharge added to online card checkouts */
     onlineCardFeeFixed: decimal("online_card_fee_fixed", { precision: 10, scale: 2 }).default("0"),
     /** Percent surcharge on (subtotal+tax+delivery+tip) for online card checkouts */
@@ -186,6 +197,57 @@ export const merchants = pgTable(
     customDomainIdx: uniqueIndex("merchants_custom_domain_idx").on(table.customDomain),
     syncApiKeyIdx: uniqueIndex("merchants_sync_api_key_idx").on(table.syncApiKey),
     inviteTokenIdx: index("merchants_invite_token_hash_idx").on(table.inviteTokenHash),
+  })
+);
+
+// ============================================================================
+// MERCHANT STAFF & ROLES (panel + POS / WebPOS)
+// ============================================================================
+
+export const merchantRoles = pgTable(
+  "merchant_roles",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    merchantId: uuid("merchant_id")
+      .notNull()
+      .references(() => merchants.id, { onDelete: "cascade" }),
+    name: varchar("name", { length: 100 }).notNull(),
+    /** Comma-separated permission keys (see backend/src/lib/permissions.ts) */
+    permissions: text("permissions").notNull().default(""),
+    isSystem: boolean("is_system").default(false).notNull(),
+    sortOrder: integer("sort_order").default(0).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    merchantNameIdx: uniqueIndex("merchant_roles_merchant_name_idx").on(table.merchantId, table.name),
+    merchantIdIdx: index("merchant_roles_merchant_id_idx").on(table.merchantId),
+  })
+);
+
+export const merchantStaff = pgTable(
+  "merchant_staff",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    merchantId: uuid("merchant_id")
+      .notNull()
+      .references(() => merchants.id, { onDelete: "cascade" }),
+    roleId: uuid("role_id")
+      .notNull()
+      .references(() => merchantRoles.id, { onDelete: "restrict" }),
+    name: varchar("name", { length: 255 }).notNull(),
+    email: varchar("email", { length: 255 }),
+    pinHash: varchar("pin_hash", { length: 255 }),
+    passwordHash: varchar("password_hash", { length: 255 }),
+    /** Can sign in to merchant backend panel (email + password) */
+    canAccessPanel: boolean("can_access_panel").default(false).notNull(),
+    isActive: boolean("is_active").default(true).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    merchantIdIdx: index("merchant_staff_merchant_id_idx").on(table.merchantId),
+    merchantEmailIdx: uniqueIndex("merchant_staff_merchant_email_idx").on(table.merchantId, table.email),
   })
 );
 

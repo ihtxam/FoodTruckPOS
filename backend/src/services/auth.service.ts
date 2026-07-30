@@ -6,10 +6,13 @@ import { eq } from "drizzle-orm";
 export interface JWTPayload {
   id: string;
   email: string;
-  role: "superadmin" | "merchant" | "customer";
+  role: "superadmin" | "merchant" | "customer" | "staff";
   merchantId?: string;
   customerId?: string;
+  staffId?: string;
   name?: string;
+  roleName?: string;
+  permissions?: string[];
   /** Set when a superadmin opens a merchant panel */
   impersonatedBy?: string;
 }
@@ -101,53 +104,88 @@ export class AuthService {
   }
 
   /**
-   * Login merchant
+   * Login merchant owner or staff with panel access
    */
   static async loginMerchant(email: string, password: string) {
+    try {
+      return await this.loginMerchantOwner(email, password);
+    } catch (ownerError) {
+      try {
+        return await this.loginMerchantStaff(email, password);
+      } catch {
+        throw ownerError;
+      }
+    }
+  }
+
+  static async loginMerchantOwner(email: string, password: string) {
     const db = getDb();
 
-    try {
-      // Find merchant
-      const merchant = await db.query.merchants.findFirst({
-        where: eq(schema.merchants.email, email),
-      });
+    const merchant = await db.query.merchants.findFirst({
+      where: eq(schema.merchants.email, email),
+    });
 
-      if (!merchant) {
-        throw new Error("Invalid email or password");
-      }
+    if (!merchant) {
+      throw new Error("Invalid email or password");
+    }
 
-      // Verify password
-      const isValid = await this.comparePassword(password, merchant.passwordHash);
-      if (!isValid) {
-        throw new Error("Invalid email or password");
-      }
+    const isValid = await this.comparePassword(password, merchant.passwordHash);
+    if (!isValid) {
+      throw new Error("Invalid email or password");
+    }
 
-      // Check if merchant is active
-      if (merchant.status !== "active" && merchant.status !== "trial") {
-        throw new Error(`Merchant account is ${merchant.status}`);
-      }
+    if (merchant.status !== "active" && merchant.status !== "trial") {
+      throw new Error(`Merchant account is ${merchant.status}`);
+    }
 
-      // Generate token
-      const token = this.generateToken({
+    const token = this.generateToken({
+      id: merchant.id,
+      email: merchant.email,
+      role: "merchant",
+      merchantId: merchant.id,
+      name: merchant.name,
+    });
+
+    return {
+      token,
+      merchant: {
         id: merchant.id,
         email: merchant.email,
-        role: "merchant",
-        merchantId: merchant.id,
-      });
+        name: merchant.name,
+        status: merchant.status,
+      },
+      isOwner: true,
+    };
+  }
 
-      return {
-        token,
-        merchant: {
-          id: merchant.id,
-          email: merchant.email,
-          name: merchant.name,
-          status: merchant.status,
-        },
-      };
-    } catch (error) {
-      console.error("Error logging in merchant:", error);
-      throw error;
-    }
+  static async loginMerchantStaff(email: string, password: string) {
+    const { StaffService } = await import("@/services/staff.service");
+    const { staff, role, permissions } = await StaffService.loginStaff(email, password);
+
+    const token = this.generateToken({
+      id: staff.id,
+      email: staff.email || email,
+      role: "staff",
+      merchantId: staff.merchantId,
+      staffId: staff.id,
+      name: staff.name,
+      roleName: role?.name,
+      permissions,
+    });
+
+    return {
+      token,
+      merchant: {
+        id: staff.merchantId,
+        email: staff.email || email,
+        name: staff.name,
+        status: "active",
+        staffId: staff.id,
+        roleName: role?.name,
+        permissions,
+      },
+      isOwner: false,
+    };
   }
 
   /**

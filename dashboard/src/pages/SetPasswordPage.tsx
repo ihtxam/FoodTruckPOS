@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
+import { APP_NAME } from '@/lib/brand';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
@@ -58,10 +59,15 @@ export default function SetPasswordPage() {
     }
   };
 
+  useEffect(() => {
+    document.title = `${APP_NAME} — Create password`;
+  }, []);
+
   return (
     <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
       <div className="bg-white rounded-xl shadow-lg w-full max-w-md p-6 space-y-4">
         <div>
+          <p className="text-sm font-medium text-slate-500 text-center mb-1">{APP_NAME}</p>
           <h1 className="text-2xl font-bold">Create your password</h1>
           <p className="text-sm text-gray-600 mt-1">Set a password for your merchant account.</p>
         </div>

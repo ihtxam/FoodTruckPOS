@@ -30,6 +30,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -469,9 +470,17 @@ fun SettingsScreen(
                 )
             }
         }
-        SettingSwitch(stringResource(R.string.payment_cash), state.cashEnabled, viewModel::updateCashEnabled)
-        SettingSwitch(stringResource(R.string.payment_card), state.cardEnabled, viewModel::updateCardEnabled)
-        SettingSwitch(stringResource(R.string.payment_terminal), state.terminalEnabled, viewModel::updateTerminalEnabled)
+        SettingSwitch(stringResource(R.string.payment_cash), state.cashEnabled, viewModel::updateCashEnabled, enabled = !state.paymentMethodsManagedByCloud)
+        SettingSwitch(stringResource(R.string.payment_card), state.cardEnabled, viewModel::updateCardEnabled, enabled = !state.paymentMethodsManagedByCloud)
+        SettingSwitch(stringResource(R.string.payment_terminal), state.terminalEnabled, viewModel::updateTerminalEnabled, enabled = !state.paymentMethodsManagedByCloud)
+        if (state.paymentMethodsManagedByCloud) {
+            Text(
+                stringResource(R.string.payment_methods_managed_by_panel),
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.Gray,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+        }
         }
 
         if (state.selectedSection == SettingsSection.PRINTERS) {
@@ -902,14 +911,19 @@ fun SettingsScreen(
 }
 
 @Composable
-private fun SettingSwitch(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+private fun SettingSwitch(
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    enabled: Boolean = true
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(label)
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+        Text(label, color = if (enabled) LocalContentColor.current else Color.Gray)
+        Switch(checked = checked, onCheckedChange = onCheckedChange, enabled = enabled)
     }
 }
 

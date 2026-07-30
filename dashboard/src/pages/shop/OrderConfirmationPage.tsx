@@ -3,6 +3,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { clearCart, resolveShopKey, shopBasePath } from '@/lib/shop-cart';
 import { useI18n } from '@/lib/i18n';
+import { shopDocumentTitle } from '@/lib/brand';
 import ShopLangSwitcher from '@/components/shop/ShopLangSwitcher';
 import { roundMoney2 } from '@/lib/money';
 
@@ -111,6 +112,12 @@ export default function OrderConfirmationPage() {
     const t = window.setInterval(() => void load(), 15000);
     return () => window.clearInterval(t);
   }, [load]);
+
+  useEffect(() => {
+    if (order?.store?.name) {
+      document.title = shopDocumentTitle(`${order.store.name} — ${order.orderNumber}`);
+    }
+  }, [order?.store?.name, order?.orderNumber]);
 
   const needsPayment = useMemo(
     () =>

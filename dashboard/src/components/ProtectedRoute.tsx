@@ -14,7 +14,11 @@ export default function ProtectedRoute({ children, requiredRole }: ProtectedRout
     return <Navigate to="/login" replace />;
   }
 
-  if (requiredRole && user.role !== requiredRole) {
+  if (requiredRole === 'superadmin' && user.role !== 'superadmin') {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (requiredRole === 'merchant' && user.role !== 'merchant' && user.role !== 'staff') {
     return <Navigate to="/login" replace />;
   }
 

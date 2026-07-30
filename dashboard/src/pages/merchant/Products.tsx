@@ -520,7 +520,7 @@ export default function Products() {
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const a = document.createElement('a');
       a.href = url;
-      a.download = 'manupos-catalog-template.xlsx';
+      a.download = 'chaslayreborn-catalog-template.xlsx';
       a.click();
       window.URL.revokeObjectURL(url);
     } catch {

@@ -6,7 +6,7 @@ REPO_DIR="${DEPLOY_PATH:-$HOME/FoodTruckPOS}"
 SECRETS_DIR="${CHASLAY_SECRETS_DIR:-/root/chaslay-secrets}"
 cd "$REPO_DIR"
 
-echo "=== FoodTruckPOS / ManuPOS deploy @ $(date -u +"%Y-%m-%dT%H:%M:%SZ") ==="
+echo "=== ChaslayReborn deploy @ $(date -u +"%Y-%m-%dT%H:%M:%SZ") ==="
 
 mkdir -p "$SECRETS_DIR"
 ENV_FILE="$SECRETS_DIR/.env.production"

@@ -93,11 +93,20 @@ data class SyncPaymentTerminalDto(
     val status: String? = null
 )
 
+data class SyncPaymentMethodsDto(
+    val express: Boolean = true,
+    val cash: Boolean = true,
+    val card: Boolean = true,
+    val terminal: Boolean = false
+)
+
 data class PaymentConfigResponse(
     val serverTime: Long = 0L,
     val adyen: SyncAdyenConfigDto? = null,
     val default_terminal_id: String? = null,
-    val terminals: List<SyncPaymentTerminalDto> = emptyList()
+    val terminals: List<SyncPaymentTerminalDto> = emptyList(),
+    val terminal_ready: Boolean = false,
+    val methods: SyncPaymentMethodsDto? = null
 )
 
 data class PushTerminalItemDto(
@@ -121,4 +130,41 @@ data class PushTerminalsResponse(
     val ok: Boolean = true,
     val upserted: Int = 0,
     val serverTime: Long = 0L
+)
+
+data class SyncStaffRoleDto(
+    val id: String,
+    val name: String,
+    val permissions: List<String> = emptyList(),
+    val isSystem: Boolean = false
+)
+
+data class SyncStaffMemberDto(
+    val id: String,
+    val name: String,
+    val roleId: String,
+    val pinHash: String? = null,
+    val isActive: Boolean = true
+)
+
+data class StaffSyncResponse(
+    val roles: List<SyncStaffRoleDto> = emptyList(),
+    val staff: List<SyncStaffMemberDto> = emptyList()
+)
+
+data class VerifyStaffPinRequest(
+    val pin: String
+)
+
+data class VerifyStaffPinResponse(
+    val success: Boolean = true,
+    val staff: SyncStaffProfileDto? = null
+)
+
+data class SyncStaffProfileDto(
+    val id: String,
+    val name: String,
+    val roleId: String,
+    val roleName: String,
+    val permissions: List<String> = emptyList()
 )

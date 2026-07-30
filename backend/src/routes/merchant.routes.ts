@@ -49,7 +49,7 @@ router.get("/products/import/template", async (_req: Request, res: Response) => 
       "Content-Type",
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     );
-    res.setHeader("Content-Disposition", 'attachment; filename="manupos-catalog-template.xlsx"');
+    res.setHeader("Content-Disposition", 'attachment; filename="chaslayreborn-catalog-template.xlsx"');
     res.send(buffer);
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : "Failed to build template" });
@@ -1011,6 +1011,64 @@ router.get("/settings", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Error getting settings:", error);
     res.status(500).json({ error: error instanceof Error ? error.message : "Failed to get settings" });
+  }
+});
+
+/**
+ * GET /api/merchant/webpos-config
+ * Payment methods + terminals for WebPOS checkout
+ */
+router.get("/webpos-config", async (req: Request, res: Response) => {
+  try {
+    const merchantId = req.merchantId;
+    if (!merchantId) {
+      return res.status(400).json({ error: "Merchant ID is required" });
+    }
+
+    const db = getDb();
+    const merchant = await db.query.merchants.findFirst({
+      where: eq(schema.merchants.id, merchantId),
+    });
+    if (!merchant) {
+      return res.status(404).json({ error: "Merchant not found" });
+    }
+
+    const terminals = await db.query.paymentTerminals.findMany({
+      where: eq(schema.paymentTerminals.merchantId, merchantId),
+      orderBy: asc(schema.paymentTerminals.createdAt),
+    });
+
+    const activeTerminals = terminals.filter((t) => t.status === "active");
+    const terminalReady =
+      !!merchant.adyenApiKey &&
+      !!merchant.adyenMerchantAccount &&
+      activeTerminals.length > 0;
+
+    res.json({
+      success: true,
+      config: {
+        methods: {
+          express: merchant.webposExpressEnabled !== false,
+          cash: merchant.webposCashEnabled !== false,
+          card: merchant.webposCardEnabled !== false,
+          terminal: merchant.webposTerminalEnabled !== false && terminalReady,
+        },
+        terminalReady,
+        adyenConfigured: !!merchant.adyenApiKey && !!merchant.adyenMerchantAccount,
+        adyenLiveEnvironment: !!merchant.adyenLiveEnvironment,
+        adyenUseLegacyEndpoint: !!merchant.adyenUseLegacyEndpoint,
+        defaultTerminalId: activeTerminals[0]?.terminalId || null,
+        terminals: terminals.map((t) => ({
+          id: t.id,
+          terminalId: t.terminalId,
+          terminalName: t.terminalName,
+          status: t.status,
+        })),
+      },
+    });
+  } catch (error) {
+    console.error("Error getting webpos config:", error);
+    res.status(500).json({ error: error instanceof Error ? error.message : "Failed to get WebPOS config" });
   }
 });
 

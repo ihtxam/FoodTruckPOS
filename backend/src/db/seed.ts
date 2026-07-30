@@ -41,7 +41,7 @@ const ALWAYS_OPEN = {
 async function seedSuperadmin() {
   const email = process.env.SEED_SUPERADMIN_EMAIL || "admin@manupos.webprintmedia.swiss";
   const password = process.env.SEED_SUPERADMIN_PASSWORD || "ChangeMeNow!123";
-  const name = process.env.SEED_SUPERADMIN_NAME || "ManuPOS Admin";
+  const name = process.env.SEED_SUPERADMIN_NAME || "ChaslayReborn Admin";
   const db = getDb();
 
   const existing = await db

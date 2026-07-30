@@ -43,4 +43,24 @@ router.post("/terminals", async (req: Request, res: Response) => {
   }
 });
 
+router.get("/staff", async (req: Request, res: Response) => {
+  try {
+    const { StaffService } = await import("@/services/staff.service");
+    const data = await StaffService.getSyncPayload(req.chaslayMerchantId!);
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : "Staff sync failed" });
+  }
+});
+
+router.post("/staff/verify-pin", async (req: Request, res: Response) => {
+  try {
+    const { StaffService } = await import("@/services/staff.service");
+    const staff = await StaffService.verifyPin(req.chaslayMerchantId!, String(req.body?.pin || ""));
+    res.json({ success: true, staff });
+  } catch (error) {
+    res.status(401).json({ error: error instanceof Error ? error.message : "Invalid PIN" });
+  }
+});
+
 export default router;

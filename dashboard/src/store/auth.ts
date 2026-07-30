@@ -1,11 +1,16 @@
 import { create } from 'zustand';
+import type { Permission } from '@/lib/permissions';
 
 export interface User {
   id: string;
   email: string;
-  role: 'superadmin' | 'merchant';
+  role: 'superadmin' | 'merchant' | 'staff';
   name: string;
   merchantId?: string;
+  staffId?: string;
+  roleName?: string;
+  permissions?: Permission[];
+  isOwner?: boolean;
   impersonatedBy?: string;
 }
 

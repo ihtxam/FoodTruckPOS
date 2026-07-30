@@ -5,6 +5,7 @@ import { Render, type Data } from '@puckeditor/core';
 import '@puckeditor/core/puck.css';
 import { resolveShopKey, shopBasePath } from '@/lib/shop-cart';
 import { useI18n } from '@/lib/i18n';
+import { shopDocumentTitle } from '@/lib/brand';
 import ShopLangSwitcher from '@/components/shop/ShopLangSwitcher';
 import { CalendarDays, ShoppingBag } from 'lucide-react';
 import { cmsPuckConfig, emptyPuckData, withReservationsHomeCtas } from '@/lib/cms/puck-config';
@@ -91,7 +92,7 @@ export default function ShopHomePage() {
   }, [shopKey, t, setLocale]);
 
   useEffect(() => {
-    if (seoTitle) document.title = seoTitle;
+    if (seoTitle) document.title = shopDocumentTitle(seoTitle);
   }, [seoTitle]);
 
   const themeCss = useMemo(() => themeToCss(theme), [theme]);

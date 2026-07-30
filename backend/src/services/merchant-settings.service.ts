@@ -111,6 +111,13 @@ export class MerchantSettingsService {
       adyenApiKeyMasked: maskSecret(merchant.adyenApiKey),
       adyenApiKeySet: !!merchant.adyenApiKey,
       adyenClientId: merchant.adyenClientId,
+      adyenLiveEnvironment: !!merchant.adyenLiveEnvironment,
+      adyenLiveRegion: merchant.adyenLiveRegion || "EU",
+      adyenUseLegacyEndpoint: !!merchant.adyenUseLegacyEndpoint,
+      webposExpressEnabled: merchant.webposExpressEnabled !== false,
+      webposCashEnabled: merchant.webposCashEnabled !== false,
+      webposCardEnabled: merchant.webposCardEnabled !== false,
+      webposTerminalEnabled: merchant.webposTerminalEnabled !== false,
       onlineCardFeeFixed: merchant.onlineCardFeeFixed ?? "0",
       onlineCardFeePercent: merchant.onlineCardFeePercent ?? "0",
       panelLanguage: merchant.panelLanguage || "en",
@@ -164,6 +171,13 @@ export class MerchantSettingsService {
       adyenMerchantAccount?: string;
       adyenApiKey?: string;
       adyenClientId?: string;
+      adyenLiveEnvironment?: boolean;
+      adyenLiveRegion?: string;
+      adyenUseLegacyEndpoint?: boolean;
+      webposExpressEnabled?: boolean;
+      webposCashEnabled?: boolean;
+      webposCardEnabled?: boolean;
+      webposTerminalEnabled?: boolean;
       onlineCardFeeFixed?: number;
       onlineCardFeePercent?: number;
       panelLanguage?: string;
@@ -229,6 +243,18 @@ export class MerchantSettingsService {
     }
     if (updates.adyenMerchantAccount !== undefined) patch.adyenMerchantAccount = updates.adyenMerchantAccount;
     if (updates.adyenClientId !== undefined) patch.adyenClientId = updates.adyenClientId;
+    if (updates.adyenLiveEnvironment !== undefined) patch.adyenLiveEnvironment = !!updates.adyenLiveEnvironment;
+    if (updates.adyenLiveRegion !== undefined) {
+      const region = String(updates.adyenLiveRegion || "EU").toUpperCase();
+      patch.adyenLiveRegion = ["EU", "US", "AU", "APSE"].includes(region) ? region : "EU";
+    }
+    if (updates.adyenUseLegacyEndpoint !== undefined) {
+      patch.adyenUseLegacyEndpoint = !!updates.adyenUseLegacyEndpoint;
+    }
+    if (updates.webposExpressEnabled !== undefined) patch.webposExpressEnabled = !!updates.webposExpressEnabled;
+    if (updates.webposCashEnabled !== undefined) patch.webposCashEnabled = !!updates.webposCashEnabled;
+    if (updates.webposCardEnabled !== undefined) patch.webposCardEnabled = !!updates.webposCardEnabled;
+    if (updates.webposTerminalEnabled !== undefined) patch.webposTerminalEnabled = !!updates.webposTerminalEnabled;
     if (updates.onlineCardFeeFixed !== undefined) {
       const n = Number(updates.onlineCardFeeFixed);
       if (!Number.isFinite(n) || n < 0) throw new Error("onlineCardFeeFixed must be >= 0");

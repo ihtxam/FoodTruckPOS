@@ -2,7 +2,7 @@
   "name": "manupos-print-agent",
   "version": "1.0.0",
   "private": true,
-  "description": "Local print service for ManuPOS WebPOS — silent ESC/POS to Windows default printer",
+  "description": "Local print service for ChaslayReborn WebPOS - silent ESC/POS to Windows default printer",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

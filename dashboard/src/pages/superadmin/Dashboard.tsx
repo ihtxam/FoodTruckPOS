@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import Sidebar from '@/components/Sidebar';
 import Header from '@/components/Header';
@@ -8,12 +8,17 @@ import Licenses from './Licenses';
 import Analytics from './Analytics';
 import Settings from './Settings';
 import { I18nProvider, useI18n, type Locale } from '@/lib/i18n';
+import { APP_PANEL_TITLE } from '@/lib/brand';
 
 function SuperadminShell() {
   const { t, locale, setLocale } = useI18n();
   const [sidebarOpen, setSidebarOpen] = useState(
     typeof window !== 'undefined' ? window.innerWidth >= 1024 : true
   );
+
+  useEffect(() => {
+    document.title = APP_PANEL_TITLE;
+  }, []);
 
   const changeLanguage = useCallback(
     (lang: Locale) => {

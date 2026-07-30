@@ -17,7 +17,7 @@ fi
 # Keep a backup outside the app tree so sync --delete cannot wipe secrets
 cp -f .env.production /root/manupos.env.production
 
-echo "==> Building and starting ManuPOS"
+echo "==> Building and starting ChaslayReborn"
 docker compose --env-file .env.production up -d --build migrate
 docker compose --env-file .env.production up -d --build
 

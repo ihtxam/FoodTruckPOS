@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import { verifyToken, requireMerchant, setMerchantContext } from "@/middleware/auth.middleware";
 import { AdyenService } from "@/services/adyen.service";
+import { AdyenTerminalPoiService } from "@/services/adyen-terminal-poi.service";
 
 const router = Router();
 
@@ -135,6 +136,45 @@ router.post("/terminal", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Error processing terminal payment:", error);
     res.status(400).json({ error: error instanceof Error ? error.message : "Failed to process payment" });
+  }
+});
+
+/**
+ * POST /api/payment/terminal/poi
+ * Adyen Terminal API (SaleToPOI) — same flow as Android POS terminal payments
+ */
+router.post("/terminal/poi", async (req: Request, res: Response) => {
+  try {
+    const merchantId = req.merchantId;
+    const { amount, terminalId, currency, saleRef } = req.body;
+
+    if (!merchantId) {
+      return res.status(400).json({ error: "Merchant ID is required" });
+    }
+    if (amount == null || Number(amount) <= 0) {
+      return res.status(400).json({ error: "Valid amount is required" });
+    }
+
+    const result = await AdyenTerminalPoiService.processTerminalPayment(merchantId, Number(amount), {
+      terminalId,
+      currency: currency || "CHF",
+    });
+
+    if (result.status === "approved" && saleRef) {
+      await AdyenService.recordPaymentTransaction(
+        merchantId,
+        String(saleRef),
+        Number(amount),
+        "terminal",
+        result.reference || `terminal-${Date.now()}`,
+        "completed"
+      );
+    }
+
+    res.json({ success: result.status === "approved", result });
+  } catch (error) {
+    console.error("Error processing terminal POI payment:", error);
+    res.status(400).json({ error: error instanceof Error ? error.message : "Terminal payment failed" });
   }
 });
 

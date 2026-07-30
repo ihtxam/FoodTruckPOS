@@ -1597,19 +1597,32 @@ class PosViewModel @Inject constructor(
         val full = cartManager.snapshot()
         val payable = cartManager.paymentSnapshot()
         if (payable.isEmpty && !(full.splitCount > 1 && !full.splitByItems)) return
+        val resolvedMethod = resolveCheckoutMethod(method)
         updateExtras {
             it.copy(
                 showCheckoutScreen = true,
                 showSplitBillScreen = false,
                 returnToSplitAfterCheckout = false,
                 checkoutState = CheckoutState(
-                    method = method,
+                    method = resolvedMethod,
                     roundingStep = checkoutRoundingDefault()
                 ),
                 errorMessage = null,
                 errorTitle = null
             )
         }
+    }
+
+    private fun resolveCheckoutMethod(preferred: PaymentMethod): PaymentMethod {
+        val settings = cachedSettings
+        val enabled = buildList {
+            if (settings.cashEnabled) add(PaymentMethod.CASH)
+            if (settings.cardEnabled) add(PaymentMethod.CARD)
+            if (settings.terminalEnabled && settings.adyenTerminalEnabled) add(PaymentMethod.ADYEN_TERMINAL)
+        }
+        if (enabled.isEmpty()) return preferred
+        if (preferred in enabled) return preferred
+        return enabled.first()
     }
 
     fun dismissCheckout() {
@@ -2031,11 +2044,18 @@ class PosViewModel @Inject constructor(
         updateExtras { it.copy(orderCompleteNotice = null) }
     }
 
-    fun initiateCashPayment() = openCheckout(PaymentMethod.CASH)
+    fun initiateCashPayment() {
+        if (!cachedSettings.cashEnabled) return
+        openCheckout(PaymentMethod.CASH)
+    }
 
-    fun initiateCardPayment() = openCheckout(PaymentMethod.CARD)
+    fun initiateCardPayment() {
+        if (!cachedSettings.cardEnabled) return
+        openCheckout(PaymentMethod.CARD)
+    }
 
     fun xpressSale() {
+        if (!cachedSettings.expressEnabled) return
         val payable = cartManager.paymentSnapshot()
         if (payable.isEmpty) return
         viewModelScope.launch {
@@ -2095,7 +2115,7 @@ class PosViewModel @Inject constructor(
 
     fun completeCheckout(activity: Activity?) {
         val checkout = _uiExtras.value.checkoutState
-        val method = checkout.method
+        val method = resolveCheckoutMethod(checkout.method)
         val fullCart = cartManager.snapshot()
         val payable = cartManager.paymentSnapshot()
         if (payable.isEmpty && !(fullCart.splitCount > 1 && !fullCart.splitByItems)) return

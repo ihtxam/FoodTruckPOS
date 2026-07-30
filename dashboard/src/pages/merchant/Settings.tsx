@@ -43,6 +43,12 @@ interface SettingsData {
   status?: string | null;
   onlineCardFeeFixed?: string | null;
   onlineCardFeePercent?: string | null;
+  webposExpressEnabled?: boolean;
+  webposCashEnabled?: boolean;
+  webposCardEnabled?: boolean;
+  webposTerminalEnabled?: boolean;
+  adyenLiveEnvironment?: boolean;
+  adyenUseLegacyEndpoint?: boolean;
   emailSmtpSettings?: {
     enabled?: boolean;
     host?: string | null;
@@ -196,6 +202,7 @@ export default function Settings() {
   const [saving, setSaving] = useState(false);
   const [savingAdyen, setSavingAdyen] = useState(false);
   const [savingFee, setSavingFee] = useState(false);
+  const [savingWebposPay, setSavingWebposPay] = useState(false);
   const [savingTerminal, setSavingTerminal] = useState(false);
   const vacationImageInputRef = useRef<HTMLInputElement>(null);
   const [tab, setTab] = useState<TabId>(() => {
@@ -357,6 +364,29 @@ export default function Settings() {
       toast.error(error.response?.data?.error || t('failedSaveCardFees'));
     } finally {
       setSavingFee(false);
+    }
+  };
+
+  const saveWebposPayments = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!settings) return;
+    setSavingWebposPay(true);
+    try {
+      const response = await api.put('/merchant/settings', {
+        webposExpressEnabled: settings.webposExpressEnabled !== false,
+        webposCashEnabled: settings.webposCashEnabled !== false,
+        webposCardEnabled: settings.webposCardEnabled !== false,
+        webposTerminalEnabled: settings.webposTerminalEnabled !== false,
+        adyenLiveEnvironment: !!settings.adyenLiveEnvironment,
+        adyenUseLegacyEndpoint: !!settings.adyenUseLegacyEndpoint,
+      });
+      const next = response.data.merchant || response.data.settings || {};
+      setSettings((prev) => (prev ? { ...prev, ...next } : prev));
+      toast.success(t('saved'));
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Failed to save WebPOS payment settings');
+    } finally {
+      setSavingWebposPay(false);
     }
   };
 
@@ -1013,7 +1043,7 @@ export default function Settings() {
                         className="input"
                         value={merchantAccount}
                         onChange={(e) => setMerchantAccount(e.target.value)}
-                        placeholder="ManuPOS_COM"
+                        placeholder="ChaslayReborn_COM"
                       />
                     </Field>
                     <Field label={t('clientId')}>
@@ -1080,6 +1110,72 @@ export default function Settings() {
                 <div className="flex justify-end border-t border-[var(--border)] pt-4">
                   <button type="submit" className="btn-primary" disabled={savingFee}>
                     {savingFee ? t('saving') : t('save')}
+                  </button>
+                </div>
+              </form>
+
+              <form onSubmit={saveWebposPayments} className="space-y-5 border-t border-[var(--border)] pt-6">
+                <Section title={t('webposPaymentMethods')} description={t('webposPaymentMethodsHint')}>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {(
+                      [
+                        ['webposExpressEnabled', t('webposExpress')] as const,
+                        ['webposCashEnabled', t('webposCash')] as const,
+                        ['webposCardEnabled', t('webposCard')] as const,
+                        ['webposTerminalEnabled', t('webposTerminal')] as const,
+                      ] as const
+                    ).map(([key, label]) => (
+                      <label
+                        key={key}
+                        className="flex items-center gap-2 rounded-lg border border-[var(--border)] px-3 py-2.5 text-sm"
+                      >
+                        <input
+                          type="checkbox"
+                          className="rounded"
+                          checked={settings?.[key] !== false}
+                          onChange={(e) =>
+                            setSettings((prev) =>
+                              prev ? { ...prev, [key]: e.target.checked } : prev
+                            )
+                          }
+                        />
+                        {label}
+                      </label>
+                    ))}
+                  </div>
+                  <div className="mt-4 space-y-2 border-t border-[var(--border)] pt-4">
+                    <p className="text-sm font-medium">{t('adyenTerminalEnv')}</p>
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        className="rounded"
+                        checked={!!settings?.adyenLiveEnvironment}
+                        onChange={(e) =>
+                          setSettings((prev) =>
+                            prev ? { ...prev, adyenLiveEnvironment: e.target.checked } : prev
+                          )
+                        }
+                      />
+                      {t('adyenLiveMode')}
+                    </label>
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        className="rounded"
+                        checked={!!settings?.adyenUseLegacyEndpoint}
+                        onChange={(e) =>
+                          setSettings((prev) =>
+                            prev ? { ...prev, adyenUseLegacyEndpoint: e.target.checked } : prev
+                          )
+                        }
+                      />
+                      {t('adyenLegacyEndpoint')}
+                    </label>
+                  </div>
+                </Section>
+                <div className="flex justify-end border-t border-[var(--border)] pt-4">
+                  <button type="submit" className="btn-primary" disabled={savingWebposPay}>
+                    {savingWebposPay ? t('saving') : t('save')}
                   </button>
                 </div>
               </form>

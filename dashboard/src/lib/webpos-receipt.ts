@@ -1,4 +1,5 @@
 import { roundMoney2 } from '@/lib/money';
+import { APP_NAME } from '@/lib/brand';
 import { buildReceiptUrl, concatBytes, escposQrCode } from '@/lib/qr';
 
 export type WebPosReceiptItem = {
@@ -37,7 +38,7 @@ export function generateWebPosReceiptText(tx: WebPosReceipt): string {
   const dateStr = `${date.toLocaleDateString('de-CH')} ${date.toLocaleTimeString('de-CH')}`;
   let r = '';
   r += '='.repeat(32) + '\n';
-  r += (tx.businessName || 'ManuPOS').toUpperCase() + '\n';
+  r += (tx.businessName || APP_NAME).toUpperCase() + '\n';
   if (tx.address) r += tx.address + '\n';
   if (tx.phone) r += `Tel: ${tx.phone}\n`;
   r += '='.repeat(32) + '\n';

@@ -49,7 +49,7 @@ services:
       SENDGRID_FROM_EMAIL: ${SENDGRID_FROM_EMAIL:-}
       SEED_SUPERADMIN_EMAIL: ${SEED_SUPERADMIN_EMAIL:-admin@manupos.webprintmedia.swiss}
       SEED_SUPERADMIN_PASSWORD: ${SEED_SUPERADMIN_PASSWORD:-}
-      SEED_SUPERADMIN_NAME: ${SEED_SUPERADMIN_NAME:-ManuPOS Admin}
+      SEED_SUPERADMIN_NAME: ${SEED_SUPERADMIN_NAME:-ChaslayReborn Admin}
     volumes:
       - uploads_data:/app/uploads
     healthcheck:
@@ -70,7 +70,7 @@ services:
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET}
       SEED_SUPERADMIN_EMAIL: ${SEED_SUPERADMIN_EMAIL:-admin@manupos.webprintmedia.swiss}
       SEED_SUPERADMIN_PASSWORD: ${SEED_SUPERADMIN_PASSWORD:-ChangeMeNow!123}
-      SEED_SUPERADMIN_NAME: ${SEED_SUPERADMIN_NAME:-ManuPOS Admin}
+      SEED_SUPERADMIN_NAME: ${SEED_SUPERADMIN_NAME:-ChaslayReborn Admin}
     command: >
       sh -c "npx drizzle-kit push --force &&
              npx tsx src/db/seed.ts || true"

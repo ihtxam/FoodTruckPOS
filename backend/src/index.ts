@@ -21,6 +21,7 @@ import chaslayRoutes from "@/routes/chaslay";
 import webhooksRoutes from "@/routes/webhooks.routes";
 import offersRoutes from "@/routes/offers.routes";
 import marketingRoutes from "@/routes/marketing.routes";
+import staffRoutes from "@/routes/staff.routes";
 import { ensureUploadsRoot } from "@/services/media-upload.service";
 import { MarketingService } from "@/services/marketing.service";
 import { ReservationService } from "@/services/reservation.service";
@@ -97,7 +98,7 @@ app.use(
 app.get("/health", (_req: Request, res: Response) => {
   res.json({
     status: "ok",
-    service: "manupos-backend",
+    service: "chaslayreborn-backend",
     timestamp: new Date().toISOString(),
   });
 });
@@ -106,6 +107,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/licensing", licensingRoutes);
 app.use("/api/superadmin", superadminRoutes);
 app.use("/api/merchant", merchantRoutes);
+app.use("/api/merchant", staffRoutes);
 app.use("/api/payment", paymentRoutes);
 app.use("/api/webshop", webshopRoutes);
 app.use("/api/loyalty", loyaltyRoutes);
@@ -142,7 +144,7 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`✅ ManuPOS API running on port ${PORT}`);
+  console.log(`✅ ChaslayReborn API running on port ${PORT}`);
   console.log(`🏥 Health check: /health`);
   console.log(`🔧 Environment: ${process.env.NODE_ENV || "development"}`);
 

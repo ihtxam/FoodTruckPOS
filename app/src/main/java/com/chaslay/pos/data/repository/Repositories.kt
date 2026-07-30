@@ -51,6 +51,8 @@ import com.chaslay.pos.domain.model.SyncStatus
 import com.chaslay.pos.domain.model.UserPerformanceReport
 import com.chaslay.pos.data.preferences.LicenseManager
 import com.chaslay.pos.data.remote.PosAuthApi
+import com.chaslay.pos.data.remote.SyncApi
+import com.chaslay.pos.data.remote.dto.VerifyStaffPinRequest
 import com.chaslay.pos.data.remote.dto.PosLoginRequest
 import com.chaslay.pos.domain.model.LoginResult
 import com.chaslay.pos.domain.model.PosPermission
@@ -75,6 +77,7 @@ class AuthRepository @Inject constructor(
     private val userDao: UserDao,
     private val roleDao: com.chaslay.pos.data.local.dao.RoleDao,
     private val posAuthApi: PosAuthApi,
+    private val syncApi: SyncApi,
     private val licenseManager: LicenseManager
 ) {
     data class AuthSession(
@@ -100,9 +103,24 @@ class AuthRepository @Inject constructor(
 
     suspend fun loginWithPin(pin: String): AuthSession? {
         val hash = hash(pin)
-        val user = userDao.getPinUsers().find { it.pinHash == hash && it.isActive } ?: return null
-        val role = roleDao.getById(user.roleId) ?: return null
-        return AuthSession(user, role)
+        userDao.getPinUsers().find { it.pinHash == hash && it.isActive }?.let { user ->
+            val role = roleDao.getById(user.roleId) ?: return null
+            return AuthSession(user, role)
+        }
+        return loginSyncedPinViaApi(pin)
+    }
+
+    private suspend fun loginSyncedPinViaApi(pin: String): AuthSession? {
+        return try {
+            val body = syncApi.verifyStaffPin(VerifyStaffPinRequest(pin))
+            val remote = body.staff ?: return null
+            val user = userDao.getByEmail("sync:${remote.id}") ?: return null
+            if (!user.isActive) return null
+            val role = roleDao.getById(user.roleId) ?: return null
+            AuthSession(user, role)
+        } catch (_: Exception) {
+            null
+        }
     }
 
     suspend fun loginWithEmail(email: String, password: String): LoginResult {

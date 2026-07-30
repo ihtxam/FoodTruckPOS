@@ -24,6 +24,7 @@ import {
   type StoreHours,
 } from '@/lib/shop-hours';
 import { roundMoney2, roundTo005, roundingAdjustment } from '@/lib/money';
+import { shopDocumentTitle } from '@/lib/brand';
 import { isLocale, useI18n } from '@/lib/i18n';
 import ShopLangSwitcher from '@/components/shop/ShopLangSwitcher';
 import ZipCityFields from '@/components/shop/ZipCityFields';
@@ -164,6 +165,10 @@ export default function CheckoutPage() {
   useEffect(() => {
     document.documentElement.lang = locale;
   }, [locale]);
+
+  useEffect(() => {
+    if (merchant?.name) document.title = shopDocumentTitle(merchant.name);
+  }, [merchant?.name]);
 
   /** Preview promotional offers for the cart */
   useEffect(() => {

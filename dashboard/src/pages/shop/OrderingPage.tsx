@@ -20,6 +20,7 @@ import {
   type ShopSelectedExtra,
 } from '@/lib/shop-cart';
 import { roundMoney2, roundTo005, roundingAdjustment } from '@/lib/money';
+import { shopDocumentTitle } from '@/lib/brand';
 import ShopProductModifiersModal, {
   productHasModifiers,
   type ShopModifierGroup,
@@ -256,6 +257,10 @@ export default function OrderingPage() {
   useEffect(() => {
     document.documentElement.lang = locale;
   }, [locale]);
+
+  useEffect(() => {
+    if (merchant?.name) document.title = shopDocumentTitle(merchant.name);
+  }, [merchant?.name]);
 
   const channels: Record<ShopChannel, ChannelInfo> = merchant?.channels || {
     takeaway: { enabled: true, open: true, todayLabel: '', etaMinutes: 25 },

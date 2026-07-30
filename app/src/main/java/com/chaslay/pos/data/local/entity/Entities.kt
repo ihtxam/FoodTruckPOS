@@ -224,6 +224,10 @@ data class BusinessSettingsEntity(
     val cashEnabled: Boolean = true,
     val cardEnabled: Boolean = true,
     val terminalEnabled: Boolean = true,
+    /** Quick one-tap cash sale (Xpress button). Synced from merchant panel. */
+    val expressEnabled: Boolean = true,
+    /** When true, payment method toggles are controlled by the merchant panel sync. */
+    val paymentMethodsManagedByCloud: Boolean = false,
     val printerPrintReceipts: Boolean = true,
     val printerPrintReports: Boolean = true,
     val printerPrintKitchen: Boolean = false,

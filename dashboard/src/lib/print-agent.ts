@@ -1,6 +1,6 @@
 /**
- * Client for ManuPOS Windows Print Agent (localhost).
- * Electron desktop also exposes window.manuposDesktop.
+ * ChaslayReborn Windows Print Agent (localhost).
+ * Electron desktop also exposes window.manuposDesktop (legacy API name).
  */
 
 export const PRINT_AGENT_URL =
@@ -80,6 +80,13 @@ export async function printViaAgent(opts: {
       dataBase64: opts.dataBase64,
       text: opts.text,
     }),
+  });
+}
+
+export async function openCashDrawerViaAgent(opts?: { printerName?: string }): Promise<void> {
+  await agentFetch('/drawer', {
+    method: 'POST',
+    body: JSON.stringify({ printerName: opts?.printerName || undefined }),
   });
 }
 

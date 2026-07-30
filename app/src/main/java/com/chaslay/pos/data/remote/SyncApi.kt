@@ -7,6 +7,9 @@ import com.chaslay.pos.data.remote.dto.MenuChangesResponse
 import com.chaslay.pos.data.remote.dto.PaymentConfigResponse
 import com.chaslay.pos.data.remote.dto.PushTerminalsRequest
 import com.chaslay.pos.data.remote.dto.PushTerminalsResponse
+import com.chaslay.pos.data.remote.dto.StaffSyncResponse
+import com.chaslay.pos.data.remote.dto.VerifyStaffPinRequest
+import com.chaslay.pos.data.remote.dto.VerifyStaffPinResponse
 import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.POST
@@ -25,6 +28,12 @@ interface SyncApi {
 
     @POST("v1/sync/terminals")
     suspend fun pushTerminals(@Body body: PushTerminalsRequest): PushTerminalsResponse
+
+    @GET("v1/sync/staff")
+    suspend fun staff(): StaffSyncResponse
+
+    @POST("v1/sync/staff/verify-pin")
+    suspend fun verifyStaffPin(@Body body: VerifyStaffPinRequest): VerifyStaffPinResponse
 
     @GET("v1/orders/incoming")
     suspend fun incomingOrders(@Query("since") since: Long): IncomingOrdersResponse

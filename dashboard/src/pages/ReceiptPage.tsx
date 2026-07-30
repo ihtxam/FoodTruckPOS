@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import api from '@/lib/api';
+import { APP_NAME } from '@/lib/brand';
 import { qrImageUrl } from '@/lib/qr';
 
 type Receipt = {
@@ -74,7 +74,7 @@ export default function ReceiptPage() {
     <div className="min-h-screen bg-slate-100 py-8 px-4">
       <div className="max-w-md mx-auto bg-white rounded-xl shadow p-6">
         <div className="text-center mb-4">
-          <h1 className="text-xl font-bold">{receipt.businessName || 'ManuPOS'}</h1>
+          <h1 className="text-xl font-bold">{receipt.businessName || APP_NAME}</h1>
           {receipt.address && <p className="text-sm text-gray-600">{receipt.address}</p>}
           {receipt.phone && <p className="text-sm text-gray-600">Tel: {receipt.phone}</p>}
         </div>

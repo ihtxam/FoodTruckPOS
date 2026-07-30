@@ -14,6 +14,7 @@ import Offers from './Offers';
 import Terminals from './Terminals';
 import Settings from './Settings';
 import Billing from './Billing';
+import Staff from './Staff';
 import OnlineShop from './OnlineShop';
 import FloorPlan from './FloorPlan';
 import Reservations from './Reservations';
@@ -21,11 +22,16 @@ import Newsletter from './Newsletter';
 import WebPos from './WebPos';
 import api from '@/lib/api';
 import { I18nProvider, useI18n, type Locale } from '@/lib/i18n';
+import { APP_PANEL_TITLE } from '@/lib/brand';
+import { useAuthStore } from '@/store/auth';
+import { canAccessRoute } from '@/lib/permissions';
 
 const WebsiteCms = lazy(() => import('./WebsiteCms'));
 
 function MerchantShell() {
   const { t, locale, setLocale } = useI18n();
+  const user = useAuthStore((s) => s.user);
+  const isOwner = user?.role === 'merchant' && user?.isOwner !== false;
   const location = useLocation();
   const isPosRoute = /^\/merchant\/pos\/?$/.test(location.pathname);
   const [sidebarOpen, setSidebarOpen] = useState(
@@ -38,6 +44,10 @@ function MerchantShell() {
   useEffect(() => {
     if (isPosRoute) setPosAppMode(true);
   }, [isPosRoute]);
+
+  useEffect(() => {
+    document.title = APP_PANEL_TITLE;
+  }, []);
 
   useEffect(() => {
     const showPanel = () => setPosAppMode(false);
@@ -78,8 +88,9 @@ function MerchantShell() {
     { label: t('floorPlan'), path: '/merchant/floor-plan', icon: '🪑' },
     { label: t('reservations'), path: '/merchant/reservations', icon: '📅' },
     { label: t('billing'), path: '/merchant/billing', icon: '💼' },
+    { label: 'Users & roles', path: '/merchant/users', icon: '👤' },
     { label: t('settings'), path: '/merchant/settings', icon: '⚙️' },
-  ];
+  ].filter((item) => canAccessRoute(item.path, user?.permissions, isOwner));
 
   return (
     <div className={`flex h-full max-h-full panel-shell${hideChrome ? ' webpos-app-mode' : ''}`}>
@@ -129,6 +140,7 @@ function MerchantShell() {
             <Route path="floor-plan" element={<FloorPlan />} />
             <Route path="reservations" element={<Reservations />} />
             <Route path="billing" element={<Billing />} />
+            <Route path="users" element={<Staff />} />
             <Route path="settings" element={<Settings />} />
           </Routes>
         </main>

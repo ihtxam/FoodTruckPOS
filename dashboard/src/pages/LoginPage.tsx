@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -6,7 +6,7 @@ import { z } from 'zod';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
-import { LogIn } from 'lucide-react';
+import { APP_NAME, APP_PANEL_TITLE } from '@/lib/brand';
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email'),
@@ -46,6 +46,10 @@ export default function LoginPage() {
 
   const role = watch('role');
 
+  useEffect(() => {
+    document.title = APP_PANEL_TITLE;
+  }, []);
+
   const fillAccount = (key: keyof typeof ACCOUNTS) => {
     const account = ACCOUNTS[key];
     setValue('role', account.role, { shouldValidate: true });
@@ -64,18 +68,26 @@ export default function LoginPage() {
         password: data.password,
       });
 
-      const { token, merchant, superadmin } = response.data;
+      const { token, merchant, superadmin, isOwner } = response.data;
       const account = data.role === 'superadmin' ? superadmin : merchant;
       if (!token || !account) {
         throw new Error('Invalid login response from server');
       }
 
+      const isStaff = data.role === 'merchant' && account.staffId;
       const user = {
-        id: account.id,
+        id: isStaff ? account.staffId : account.id,
         email: account.email,
         name: account.name,
-        role: data.role,
-        merchantId: data.role === 'merchant' ? account.id : undefined,
+        role: (data.role === 'superadmin' ? 'superadmin' : isStaff ? 'staff' : 'merchant') as
+          | 'superadmin'
+          | 'merchant'
+          | 'staff',
+        merchantId: data.role === 'merchant' ? (isStaff ? account.id : account.id) : undefined,
+        staffId: isStaff ? account.staffId : undefined,
+        roleName: account.roleName,
+        permissions: account.permissions,
+        isOwner: data.role === 'merchant' && isOwner !== false && !isStaff,
       };
 
       localStorage.setItem('token', token);
@@ -106,7 +118,7 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <h1 className="text-2xl font-bold text-center mb-2">ManuPOS</h1>
+          <h1 className="text-2xl font-bold text-center mb-2">{APP_NAME}</h1>
           <p className="text-gray-600 text-center mb-6">Sign in to your admin panel</p>
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
@@ -162,7 +174,7 @@ export default function LoginPage() {
               >
                 <span className="font-medium">Merchant</span>
                 <br />
-                <span className="text-xs break-all">merchant@manupos.webprintmedia.swiss</span>
+                <span className="text-xs break-all">{ACCOUNTS.merchant.email}</span>
               </button>
               <button
                 type="button"
@@ -171,7 +183,7 @@ export default function LoginPage() {
               >
                 <span className="font-medium">Superadmin</span>
                 <br />
-                <span className="text-xs break-all">admin@manupos.webprintmedia.swiss</span>
+                <span className="text-xs break-all">{ACCOUNTS.superadmin.email}</span>
               </button>
             </div>
             <p className="text-xs text-gray-500">
