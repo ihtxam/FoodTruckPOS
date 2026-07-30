@@ -427,9 +427,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
       toast.success(printerName ? `Printed on ${printerName}` : 'Sent to default printer');
       return;
     }
-    throw new Error(
-      'Print agent offline. Start ChaslayReborn Print Agent on this PC (print-agent\\start.bat), then click {t('webPosRefreshPrinters')}.'
-    );
+    throw new Error(t('webPosAgentOffline'));
   };
 
   const buildSalePayload = (clientId: string, method: PosPaymentMethod) => ({
