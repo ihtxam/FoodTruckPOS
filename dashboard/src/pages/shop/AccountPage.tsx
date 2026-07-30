@@ -191,7 +191,7 @@ export default function AccountPage() {
         setAddresses(res.data.customer.addresses);
       }
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Update failed');
+      setError(err.response?.data?.error || t('shopUpdateFailed'));
     } finally {
       setSaving(false);
     }
@@ -231,7 +231,7 @@ export default function AccountPage() {
       setNewZip('');
       setNewCity('');
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Could not save address');
+      setError(err.response?.data?.error || t('shopCouldNotSaveAddress'));
     } finally {
       setSavingAddress(false);
     }
@@ -245,7 +245,7 @@ export default function AccountPage() {
       });
       setAddresses((prev) => prev.filter((a) => a.id !== id));
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Could not delete address');
+      setError(err.response?.data?.error || t('shopCouldNotDeleteAddress'));
     }
   };
 
@@ -577,7 +577,7 @@ export default function AccountPage() {
                           <p className="font-semibold">
                             {addressLabelText(a.label)}
                             {a.isDefault ? (
-                              <span className="ml-2 text-[10px] uppercase text-teal-700">default</span>
+                              <span className="ml-2 text-[10px] uppercase text-teal-700">{t('shopDefaultLabel')}</span>
                             ) : null}
                           </p>
                           <p className="text-stone-600 truncate">

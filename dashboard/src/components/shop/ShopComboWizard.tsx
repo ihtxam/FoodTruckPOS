@@ -168,12 +168,13 @@ export default function ShopComboWizard({ product, onClose, onConfirm }: Props) 
     for (const g of groups) {
       const count = (selection[g.id] || []).length;
       const min = groupMin(g);
+      const title = g.title === 'Extras' ? t('shopExtras') : g.title;
       if (count < min) {
         return min === 1
-          ? `Please choose an option for "${g.title}"`
-          : `Please choose at least ${min} options for "${g.title}"`;
+          ? t('shopChooseOptionFor').replace('{name}', title)
+          : t('shopChooseAtLeastOptions').replace('{n}', String(min)).replace('{name}', title);
       }
-      if (count > groupMax(g)) return `Too many options for "${g.title}"`;
+      if (count > groupMax(g)) return t('shopTooManyOptions').replace('{name}', title);
     }
     return null;
   };
@@ -302,10 +303,14 @@ export default function ShopComboWizard({ product, onClose, onConfirm }: Props) 
         return (
           <section key={g.id}>
             <div className="flex items-baseline justify-between gap-2 mb-2">
-              <h3 className="font-semibold text-stone-900">{g.title}</h3>
+              <h3 className="font-semibold text-stone-900">
+                {g.title === 'Extras' ? t('shopExtras') : g.title}
+              </h3>
               <span className="text-xs text-stone-500">
-                {g.selectionType === 'required' || groupMin(g) > 0 ? 'Required' : 'Optional'}
-                {max > 1 ? ` · up to ${max}` : ''}
+                {g.selectionType === 'required' || groupMin(g) > 0
+                  ? t('shopRequired')
+                  : t('shopOptional')}
+                {max > 1 ? ` · ${t('shopUpTo').replace('{n}', String(max))}` : ''}
               </span>
             </div>
             <ul className="space-y-2">
@@ -323,7 +328,9 @@ export default function ShopComboWizard({ product, onClose, onConfirm }: Props) 
                       />
                       <span className="flex-1 text-sm font-medium">{opt.name}</span>
                       <span className="text-sm text-stone-600">
-                        {opt.price > 0 ? `+CHF ${Number(opt.price).toFixed(2)}` : 'Free'}
+                        {opt.price > 0
+                          ? `+CHF ${Number(opt.price).toFixed(2)}`
+                          : t('shopFree')}
                       </span>
                     </label>
                   </li>
@@ -529,8 +536,10 @@ export default function ShopComboWizard({ product, onClose, onConfirm }: Props) 
                     if (count < (slot.minPick || 1)) {
                       setError(
                         (slot.minPick || 1) === 1
-                          ? `Please choose an option for "${slot.name}"`
-                          : `Please choose ${slot.minPick} options for "${slot.name}"`
+                          ? t('shopChooseOptionFor').replace('{name}', slot.name)
+                          : t('shopChooseNOptions')
+                              .replace('{n}', String(slot.minPick))
+                              .replace('{name}', slot.name)
                       );
                       return;
                     }

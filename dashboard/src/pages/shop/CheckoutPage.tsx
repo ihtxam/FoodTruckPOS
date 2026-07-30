@@ -1584,7 +1584,7 @@ export default function CheckoutPage() {
                                 )}
                               </div>
                               <span className="shrink-0">
-                                {i.price === 0 ? 'Free' : `CHF ${(i.price * i.quantity).toFixed(2)}`}
+                                {i.price === 0 ? t('shopFree') : `CHF ${(i.price * i.quantity).toFixed(2)}`}
                               </span>
                             </li>
                           ))}
@@ -1722,10 +1722,10 @@ export default function CheckoutPage() {
                       <div key={i.lineId || i.id} className="flex justify-between gap-2 text-xs">
                         <span className="min-w-0 truncate">
                           {i.name}
-                          {i.price === 0 ? ' · Free' : ''}
+                          {i.price === 0 ? ` · ${t('shopFree')}` : ''}
                         </span>
                         <span className="shrink-0">
-                          {i.price === 0 ? 'Free' : `CHF ${(i.price * i.quantity).toFixed(2)}`}
+                          {i.price === 0 ? t('shopFree') : `CHF ${(i.price * i.quantity).toFixed(2)}`}
                         </span>
                       </div>
                     ))}

@@ -567,7 +567,7 @@ export default function OrderingPage() {
     }
     const meta = {
       offerId: next.offerId,
-      offerBadge: next.role === 'free' ? 'Free' : next.offerBadge,
+      offerBadge: next.role === 'free' ? 'free' : next.offerBadge,
       dealPrice: next.role === 'free' ? 0 : next.dealPrice,
       catalogPrice: next.catalogPrice,
       role: next.role,
@@ -852,7 +852,9 @@ export default function OrderingPage() {
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <span className="inline-block rounded-full bg-amber-700 px-2 py-0.5 text-[10px] font-bold uppercase text-white">
-                          {block.offerBadge || t('shopOffer')}
+                          {(block.offerBadge || '').toLowerCase() === 'free'
+                            ? t('shopFree')
+                            : block.offerBadge || t('shopOffer')}
                         </span>
                         <p className="mt-1 text-sm font-semibold text-stone-900">{block.offerName}</p>
                         <p className="text-[11px] text-stone-500">{t('shopDealLocked')}</p>
@@ -873,7 +875,7 @@ export default function OrderingPage() {
                               {item.name}
                               {item.offerBadge?.toLowerCase() === 'free' || item.price === 0 ? (
                                 <span className="ml-1.5 text-[10px] font-bold uppercase text-amber-800">
-                                  Free
+                                  {t('shopFree')}
                                 </span>
                               ) : null}
                             </p>
@@ -895,7 +897,7 @@ export default function OrderingPage() {
                             )}
                           </div>
                           <span className="shrink-0 tabular-nums text-stone-700">
-                            {item.price === 0 ? 'Free' : `CHF ${item.price.toFixed(2)}`}
+                            {item.price === 0 ? t('shopFree') : `CHF ${item.price.toFixed(2)}`}
                           </span>
                         </li>
                       ))}
@@ -930,7 +932,9 @@ export default function OrderingPage() {
                       )}
                       {item.offerBadge ? (
                         <span className="ml-2 text-[10px] font-bold uppercase text-amber-700">
-                          {item.offerBadge}
+                          {item.offerBadge.toLowerCase() === 'free'
+                            ? t('shopFree')
+                            : item.offerBadge}
                         </span>
                       ) : null}
                     </div>
@@ -959,7 +963,7 @@ export default function OrderingPage() {
                                 CHF {item.catalogPrice.toFixed(2)}
                               </span>
                               <span className="text-amber-800 font-semibold">
-                                {item.price === 0 ? 'Free' : `CHF ${item.price.toFixed(2)}`}
+                                {item.price === 0 ? t('shopFree') : `CHF ${item.price.toFixed(2)}`}
                               </span>
                             </span>
                           ) : (
@@ -1624,7 +1628,7 @@ export default function OrderingPage() {
               setOfferConfigQueue([]);
               setOfferConfigMeta(null);
               setError(
-                `Cancelled — "${pendingCombo.name}" needs choices like Main before it can be ordered.`
+                t('shopComboCancelledNeedsChoices').replace('{name}', pendingCombo.name)
               );
             }
           }}
@@ -1735,7 +1739,9 @@ function ProductCard({
         <span className="line-through text-stone-400 mr-1.5">CHF {price.toFixed(2)}</span>
         <span className="text-amber-800 font-semibold">CHF {salePrice.toFixed(2)}</span>
         {offerBadge ? (
-          <span className="ml-1.5 text-[10px] font-bold uppercase text-amber-700">{offerBadge}</span>
+          <span className="ml-1.5 text-[10px] font-bold uppercase text-amber-700">
+            {offerBadge.toLowerCase() === 'free' ? t('shopFree') : offerBadge}
+          </span>
         ) : null}
       </span>
     ) : (
@@ -1807,7 +1813,7 @@ function ProductCard({
         )}
         {offerBadge ? (
           <span className="absolute left-2 top-2 rounded-full bg-amber-700 px-2 py-0.5 text-[10px] font-bold uppercase text-white">
-            {offerBadge}
+            {offerBadge.toLowerCase() === 'free' ? t('shopFree') : offerBadge}
           </span>
         ) : null}
         <button

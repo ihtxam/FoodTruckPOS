@@ -289,7 +289,7 @@ export default function ShopOfferPicker({ offer, products, priceOf, onClose, onC
             <p className="text-sm font-semibold text-stone-900 tabular-nums">
               {t('shopDealTotal')}: CHF {previewTotal.toFixed(2)}
               {isPackage && packagePrice > 0 ? (
-                <span className="ml-2 text-xs font-normal text-stone-500">package price</span>
+                <span className="ml-2 text-xs font-normal text-stone-500">{t('shopPackagePrice')}</span>
               ) : (
                 <span className="ml-2 text-xs font-normal text-amber-800">{t('shopNFree').replace('{n}', String(getQty))}</span>
               )}

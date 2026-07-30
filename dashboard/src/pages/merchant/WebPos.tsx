@@ -377,7 +377,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
   const onProductClick = (p: Product) => {
     if (productHasComboSlots(p)) {
       if (!p.comboSlots?.length) {
-        toast.error('This combo has no available options');
+        toast.error(t('webPosComboNoOptions'));
         return;
       }
       setPendingCombo({
@@ -424,7 +424,11 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
     const dataBase64 = uint8ToBase64(escpos);
     if (agentOk) {
       await printViaAgent({ printerName: printerName || undefined, dataBase64, text: receiptText });
-      toast.success(printerName ? `Printed on ${printerName}` : 'Sent to default printer');
+      toast.success(
+        printerName
+          ? t('webPosPrintedOn').replace('{name}', printerName)
+          : t('webPosSentDefaultPrinter')
+      );
       return;
     }
     throw new Error(t('webPosAgentOffline'));
@@ -527,19 +531,19 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
       ].slice(0, 30)
     );
     setCart([]);
-    toast.success(`Sale complete · ${money(totals.total)}`);
+    toast.success(t('webPosSaleCompleteAmount').replace('{amount}', money(totals.total)));
     if (autoPrint) {
       try {
         await printReceipt(receiptText, receiptUrl);
       } catch (e: any) {
-        toast.error(e.message || 'Print failed');
+        toast.error(e.message || t('webPosPrintFailed'));
       }
     }
   };
 
   const runTerminalPayment = async () => {
     if (!selectedTerminalId) {
-      toast.error('Select a payment terminal first');
+      toast.error(t('webPosSelectTerminal'));
       return;
     }
 
@@ -548,7 +552,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
     paymentAbortRef.current = abort;
     setPaymentModalOpen(true);
     setPaymentPhase('processing');
-    setPaymentMessage('Complete the payment on your terminal…');
+    setPaymentMessage(t('webPosPayCompleteOnTerminal'));
     setBusy(true);
 
     try {
@@ -573,20 +577,20 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
 
       if (result.status === 'cancelled') {
         setPaymentPhase('cancelled');
-        setPaymentMessage(result.message || 'Payment cancelled on terminal.');
+        setPaymentMessage(result.message || t('webPosPayCancelledMsg'));
         return;
       }
 
       setPaymentPhase('failed');
-      setPaymentMessage(result.message || 'Terminal payment failed.');
+      setPaymentMessage(result.message || t('webPosPayFailedMsg'));
     } catch (e: any) {
       if (e.code === 'ERR_CANCELED' || e.name === 'CanceledError') {
         setPaymentPhase('cancelled');
-        setPaymentMessage('Payment cancelled.');
+        setPaymentMessage(t('webPosPayCancelled'));
         return;
       }
       setPaymentPhase('failed');
-      setPaymentMessage(e.response?.data?.error || e.message || 'Terminal payment failed.');
+      setPaymentMessage(e.response?.data?.error || e.message || t('webPosPayFailedMsg'));
     } finally {
       setBusy(false);
       paymentAbortRef.current = null;
@@ -603,7 +607,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
     try {
       await finalizeSale(paymentMethod);
     } catch (e: any) {
-      toast.error(e.response?.data?.error || e.message || 'Sale failed');
+      toast.error(e.response?.data?.error || e.message || t('webPosSaleFailed'));
     } finally {
       setBusy(false);
     }
@@ -615,7 +619,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
     try {
       await finalizeSale('cash');
     } catch (e: any) {
-      toast.error(e.response?.data?.error || e.message || 'Sale failed');
+      toast.error(e.response?.data?.error || e.message || t('webPosSaleFailed'));
     } finally {
       setBusy(false);
     }
