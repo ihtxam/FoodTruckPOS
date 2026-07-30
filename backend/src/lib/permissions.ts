@@ -85,6 +85,7 @@ export const DEFAULT_ROLE_TEMPLATES: DefaultRoleTemplate[] = [
       "MANAGE_ONLINE_SHOP",
       "MANAGE_SETTINGS",
       "MANAGE_STAFF",
+      "MANAGE_BILLING",
       "END_OF_DAY",
     ],
   },

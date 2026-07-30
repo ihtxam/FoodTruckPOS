@@ -47,6 +47,7 @@ router.post("/merchant/login", async (req: Request, res: Response) => {
       success: true,
       token: result.token,
       merchant: result.merchant,
+      isOwner: result.isOwner !== false,
     });
   } catch (error) {
     console.error("Error logging in merchant:", error);
