@@ -8,5 +8,5 @@ export const APP_TAGLINE = 'Restaurant POS & online ordering';
 /** Browser tab title for online shop pages (merchant site + platform). */
 export function shopDocumentTitle(pageOrMerchantName?: string | null): string {
   const label = pageOrMerchantName?.trim();
-  return label ? `${label} · ${APP_NAME}` : APP_NAME;
+  return label ? `${label} Â· ${APP_NAME}` : APP_NAME;
 }

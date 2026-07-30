@@ -102,7 +102,7 @@ export default function StaffPage() {
   };
 
   if (loading) {
-    return <div className="p-4 text-sm text-[var(--text-muted)]">Loading users & rolesÖ</div>;
+    return <div className="p-4 text-sm text-[var(--text-muted)]">Loading users & roles‚Ä¶</div>;
   }
 
   return (
@@ -163,7 +163,7 @@ export default function StaffPage() {
                   className="input mt-1"
                   inputMode="numeric"
                   pattern="[0-9]{4,8}"
-                  placeholder="4ù8 digits"
+                  placeholder="4‚Äì8 digits"
                   value={staffForm.pin}
                   onChange={(e) => setStaffForm({ ...staffForm, pin: e.target.value.replace(/\D/g, '') })}
                 />
@@ -223,7 +223,7 @@ export default function StaffPage() {
                   <tr key={s.id} className="border-t border-[var(--border)]">
                     <td className="px-3 py-2 font-medium">{s.name}</td>
                     <td className="px-3 py-2">{s.roleName}</td>
-                    <td className="px-3 py-2">{s.pinSet ? 'Set' : 'ù'}</td>
+                    <td className="px-3 py-2">{s.pinSet ? 'Set' : '‚Äî'}</td>
                     <td className="px-3 py-2">{s.canAccessPanel ? s.email || 'Yes' : 'No'}</td>
                     <td className="px-3 py-2 text-right">
                       <button type="button" className="text-red-600 text-xs" onClick={() => void removeStaff(s.id)}>
@@ -244,7 +244,7 @@ export default function StaffPage() {
                 <p className="font-medium">{role.name}</p>
                 <p className="text-xs text-[var(--text-muted)]">
                   {role.permissions.length} permissions
-                  {role.isSystem ? ' ù system profile' : ''}
+                  {role.isSystem ? ' ‚Äî system profile' : ''}
                 </p>
               </div>
               <button type="button" className="btn-secondary text-sm" onClick={() => openRoleEdit(role)}>
