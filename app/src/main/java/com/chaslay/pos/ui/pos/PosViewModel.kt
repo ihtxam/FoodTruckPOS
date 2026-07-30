@@ -193,23 +193,6 @@ class PosViewModel @Inject constructor(
     @ApplicationContext private val appContext: android.content.Context
 ) : ViewModel() {
 
-    init {
-        viewModelScope.launch {
-            settingsRepository.observeSettings().collect { settings ->
-                if (settings.scaleEnabled && !settings.scaleUsbAddress.isNullOrBlank()) {
-                    scaleService.connect(settings.scaleUsbAddress!!)
-                } else {
-                    scaleService.disconnect()
-                }
-            }
-        }
-        viewModelScope.launch {
-            scaleService.reading.collect { reading ->
-                updateExtras { it.copy(scaleReading = reading) }
-            }
-        }
-    }
-
     private val _selectedCategoryId = MutableStateFlow<Long?>(null)
     private val _uiExtras = MutableStateFlow(PosDialogState())
     private val _tables = MutableStateFlow<List<TableWithOrderInfo>>(emptyList())
@@ -331,7 +314,17 @@ class PosViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             settingsRepository.observeSettings().collect { settings ->
+                if (settings.scaleEnabled && !settings.scaleUsbAddress.isNullOrBlank()) {
+                    scaleService.connect(settings.scaleUsbAddress!!)
+                } else {
+                    scaleService.disconnect()
+                }
                 cartManager.setVatIncludedInPrice(settings.vatIncludedInPrice)
+            }
+        }
+        viewModelScope.launch {
+            scaleService.reading.collect { reading ->
+                updateExtras { it.copy(scaleReading = reading) }
             }
         }
         viewModelScope.launch {

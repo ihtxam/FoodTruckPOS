@@ -149,4 +149,14 @@ button {
   .webpos-cat-scroll::-webkit-scrollbar {
     display: none;
   }
+
+  /* Online shop: allow normal page scroll (panel-shell sets overflow:hidden globally). */
+  html.shop-shell,
+  html.shop-shell body {
+    height: auto;
+    min-height: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior-y: auto;
+  }
 }

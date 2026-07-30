@@ -823,7 +823,7 @@ export default function OrderingPage() {
   const showReservations = !!merchant?.reservationsEnabled;
 
   const Basket = (
-    <aside className="bg-white border border-stone-200 flex flex-col h-full">
+    <aside className="bg-white border border-stone-200 flex flex-col max-h-[calc(100dvh-6rem)] min-h-[12rem]">
       <div className="px-5 py-4 border-b border-stone-200">
         <h2 className="text-xl font-bold tracking-tight">{t('shopBasket')}</h2>
         <p className="text-sm text-stone-500 mt-1">
@@ -1551,7 +1551,9 @@ export default function OrderingPage() {
           </div>
         </div>
 
-        <div className="hidden lg:block sticky top-20 h-[calc(100vh-6rem)]">{Basket}</div>
+        <div className="hidden lg:block sticky top-20 self-start max-h-[calc(100dvh-6rem)]">
+          <div className="max-h-[calc(100dvh-6rem)] overflow-y-auto overscroll-y-contain">{Basket}</div>
+        </div>
       </div>
 
       {mobileBasket && (

@@ -21,13 +21,12 @@ import {
   type WebPosReceipt,
 } from '@/lib/webpos-receipt';
 import {
-  browserPrintText,
   isPrintAgentAvailable,
   listAgentPrinters,
   printViaAgent,
   type AgentPrinter,
 } from '@/lib/print-agent';
-import { buildReceiptUrl, qrImageUrl } from '@/lib/qr';
+import { buildReceiptUrl } from '@/lib/qr';
 import {
   lineSignature,
   type ShopComboSelection,
@@ -362,11 +361,12 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
     const dataBase64 = uint8ToBase64(escpos);
     if (agentOk) {
       await printViaAgent({ printerName: printerName || undefined, dataBase64, text: receiptText });
-      toast.success(printerName ? `Printed on ${printerName}` : 'Sent to printer');
+      toast.success(printerName ? `Printed on ${printerName}` : 'Sent to default printer');
       return;
     }
-    browserPrintText(receiptText, receiptUrl ? qrImageUrl(receiptUrl, 160) : undefined);
-    toast('Print agent offline — used browser print', { icon: '🖨️' });
+    throw new Error(
+      'Print agent offline. Start ManuPOS Print Agent on this PC (print-agent\\start.bat), then click Refresh printers.'
+    );
   };
 
   const completeSale = async () => {
@@ -705,7 +705,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
               <span
                 className={`h-1.5 w-1.5 rounded-full ${agentOk ? 'bg-emerald-500' : 'bg-amber-500'}`}
               />
-              {agentOk ? 'Printer ready' : 'Browser print'}
+              {agentOk ? 'Printer ready' : 'Start print agent'}
             </span>
           </div>
           <p className="truncate text-[11px] text-[var(--text-muted)]">
@@ -792,8 +792,8 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
                 </div>
                 <p className="text-[11px] leading-snug text-[var(--text-muted)]">
                   {agentOk
-                    ? 'Print agent online — receipts go to the selected printer.'
-                    : 'Print agent offline — browser print is used as fallback.'}
+                    ? 'Print agent online — receipts print silently to your Windows printer (no popup).'
+                    : 'Start ManuPOS Print Agent on this PC: FoodTruckPOS\\print-agent\\start.bat — then Refresh printers. Set your thermal printer as Windows default, or pick it in the list above.'}
                 </p>
               </div>
             ) : null}

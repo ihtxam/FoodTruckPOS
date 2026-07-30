@@ -104,6 +104,15 @@ router.post("/", async (req: Request, res: Response) => {
         adyenClientId: null,
         status: "active",
       })
+      .onConflictDoUpdate({
+        target: schema.paymentTerminals.terminalId,
+        set: {
+          terminalName: terminalName || terminalId,
+          serialNumber,
+          status: "active",
+          lastHeartbeat: new Date(),
+        },
+      })
       .returning();
     res.status(201).json({ success: true, terminal: sanitizeTerminal(terminal) });
   } catch (error) {

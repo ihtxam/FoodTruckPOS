@@ -11,6 +11,7 @@ import kotlinx.coroutines.sync.withLock
 class SyncService @Inject constructor(
     private val transactionRepository: TransactionRepository,
     private val menuSyncRepository: MenuSyncRepository,
+    private val terminalSyncRepository: TerminalSyncRepository,
     private val onlineOrderSyncRepository: OnlineOrderSyncRepository
 ) {
     private val mutex = Mutex()
@@ -24,6 +25,9 @@ class SyncService @Inject constructor(
         val menu = runCatching { menuSyncRepository.syncMenu() }
             .onFailure { Log.w(TAG, "Menu sync failed", it) }
             .getOrDefault(MenuSyncResult())
+        val terminals = runCatching { terminalSyncRepository.syncTerminals() }
+            .onFailure { Log.w(TAG, "Terminal sync failed", it) }
+            .getOrDefault(TerminalSyncResult())
         val orders = runCatching { onlineOrderSyncRepository.syncIncomingOrders() }
             .onFailure { Log.w(TAG, "Online order sync failed", it) }
             .getOrDefault(OnlineOrderSyncResult())
@@ -31,7 +35,7 @@ class SyncService @Inject constructor(
             .onFailure { Log.w(TAG, "Transaction sync failed", it) }
             .getOrDefault(SyncResult(0, 0))
         lastFullSyncAt = now
-        FullSyncResult(menu = menu, orders = orders, transactions = tx)
+        FullSyncResult(menu = menu, terminals = terminals, orders = orders, transactions = tx)
     }
 
     suspend fun syncOnlineOrdersOnly(): OnlineOrderSyncResult =
@@ -72,6 +76,7 @@ data class SyncResult(val synced: Int, val failed: Int)
 
 data class FullSyncResult(
     val menu: MenuSyncResult = MenuSyncResult(),
+    val terminals: TerminalSyncResult = TerminalSyncResult(),
     val orders: OnlineOrderSyncResult = OnlineOrderSyncResult(),
     val transactions: SyncResult = SyncResult(0, 0),
     val skipped: Boolean = false

@@ -221,8 +221,8 @@ object SushiSakeCatalogSeeder {
     ) {
         db.execSQL(
             """
-            INSERT INTO products (name, categoryId, taxRate, price, isActive, onlineVisible, isOpenPrice, sortOrder, stockQuantity, lowStockThreshold, createdAt, updatedAt, printTarget)
-            VALUES ('${q(name)}', $categoryId, $taxRate, $price, 1, 1, ${if (openPrice) 1 else 0}, $sortOrder, ${if (openPrice) "NULL" else "NULL"}, ${if (openPrice) "NULL" else "NULL"}, $timestamp, $timestamp, NULL)
+            INSERT INTO products (name, categoryId, taxRate, price, isActive, onlineVisible, isOpenPrice, isWeighed, isCombo, sortOrder, stockQuantity, lowStockThreshold, createdAt, updatedAt, printTarget)
+            VALUES ('${q(name)}', $categoryId, $taxRate, $price, 1, 1, ${if (openPrice) 1 else 0}, 0, 0, $sortOrder, ${if (openPrice) "NULL" else "NULL"}, ${if (openPrice) "NULL" else "NULL"}, $timestamp, $timestamp, NULL)
             """.trimIndent()
         )
     }

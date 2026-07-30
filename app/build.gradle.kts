@@ -131,10 +131,13 @@ afterEvaluate {
             doLast {
                 val versionName = android.defaultConfig.versionName
                 val apkDir = layout.buildDirectory.dir("outputs/apk/$variantFolder").get().asFile
-                val source = apkDir.listFiles()
-                    ?.filter { it.isFile && it.extension.equals("apk", ignoreCase = true) }
-                    ?.maxByOrNull { it.lastModified() }
-                    ?: error("No APK found in $apkDir — run $assembleTaskName first")
+                val intermediatesDir = layout.buildDirectory.dir("intermediates/apk/$variantFolder").get().asFile
+
+                val source = sequenceOf(apkDir, intermediatesDir)
+                    .flatMap { it.walkTopDown() }
+                    .filter { it.isFile && it.extension.equals("apk", ignoreCase = true) }
+                    .maxByOrNull { it.lastModified() }
+                    ?: error("No APK found in $apkDir or $intermediatesDir — run $assembleTaskName first")
                 val fileName = if (suffix.isEmpty()) {
                     "chaslaypos-$versionName.apk"
                 } else {

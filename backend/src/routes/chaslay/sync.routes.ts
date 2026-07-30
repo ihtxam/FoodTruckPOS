@@ -25,4 +25,22 @@ router.get("/menu", async (req: Request, res: Response) => {
   }
 });
 
+router.get("/payment-config", async (req: Request, res: Response) => {
+  try {
+    const data = await ChaslayCompatService.getPaymentConfig(req.chaslayMerchantId!);
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : "Payment config sync failed" });
+  }
+});
+
+router.post("/terminals", async (req: Request, res: Response) => {
+  try {
+    const data = await ChaslayCompatService.pushTerminalsFromDevice(req.chaslayMerchantId!, req.body || {});
+    res.json(data);
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Terminal sync failed" });
+  }
+});
+
 export default router;

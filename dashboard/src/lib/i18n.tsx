@@ -16,6 +16,11 @@ type Dict = Record<string, string>;
 export const PANEL_LANG_KEY = 'manupos_panel_lang';
 export const SHOP_LANG_KEY = 'manupos_shop_lang';
 
+export function shopLangStorageKey(shopKey: string): string {
+  const slug = shopKey.trim().toLowerCase();
+  return slug ? `${SHOP_LANG_KEY}:${slug}` : SHOP_LANG_KEY;
+}
+
 const en: Dict = {
   overview: 'Overview',
   orders: 'Orders',
@@ -314,7 +319,7 @@ const en: Dict = {
   failedSaveCardFees: 'Could not save card fees',
   paymentTerminals: 'Payment terminals',
   paymentTerminalsHint:
-    'Register Swisspayout terminals by Terminal ID only. Merchant account and API key come from the credentials above.',
+    'Register terminals here or on the Android POS (Settings → Payments). Terminals sync both ways when the app has SYNC_API_KEY and internet. Merchant account and API key are shared from the credentials above.',
   terminalId: 'Terminal ID',
   terminalIdHint: 'Swisspayout terminal ID / serial (e.g. S1F2-…)',
   terminalIdRequired: 'Terminal ID is required',
@@ -1270,6 +1275,10 @@ export function I18nProvider({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialLocale, storageKey]);
+
+  useEffect(() => {
+    document.documentElement.lang = locale;
+  }, [locale]);
 
   const value = useMemo(
     () => ({

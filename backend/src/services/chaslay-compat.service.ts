@@ -2,6 +2,7 @@ import crypto from "crypto";
 import { getDb, schema } from "@/db";
 import { and, eq, gt, inArray } from "drizzle-orm";
 import { AuthService } from "./auth.service";
+import { MerchantSettingsService } from "./merchant-settings.service";
 
 export function normalizeChaslayDeviceId(deviceId: string): string {
   if (!deviceId) return "";
@@ -225,7 +226,135 @@ export class ChaslayCompatService {
       },
       categories: categories.map((c) => this.mapCategory(c)),
       products: products.map((p) => this.mapProduct(p)),
+      paymentConfig: await this.getPaymentConfigPayload(merchantId),
     };
+  }
+
+  static async getPaymentConfig(merchantId: string) {
+    return {
+      serverTime: Date.now(),
+      ...(await this.getPaymentConfigPayload(merchantId)),
+    };
+  }
+
+  private static async getPaymentConfigPayload(merchantId: string) {
+    const db = getDb();
+    const merchant = await db.query.merchants.findFirst({
+      where: eq(schema.merchants.id, merchantId),
+    });
+    if (!merchant) throw new Error("Merchant not found");
+
+    const terminals = await db.query.paymentTerminals.findMany({
+      where: eq(schema.paymentTerminals.merchantId, merchantId),
+    });
+    const active = terminals.filter((t) => t.status === "active");
+    const defaultTerminal = active[0] || terminals[0];
+
+    return {
+      adyen: {
+        merchant_account: merchant.adyenMerchantAccount || null,
+        api_key: merchant.adyenApiKey || null,
+        client_id: merchant.adyenClientId || null,
+      },
+      default_terminal_id: defaultTerminal?.terminalId || null,
+      terminals: terminals.map((t) => ({
+        id: t.id,
+        terminal_id: t.terminalId,
+        terminal_name: t.terminalName,
+        serial_number: t.serialNumber,
+        status: t.status,
+      })),
+    };
+  }
+
+  static async pushTerminalsFromDevice(
+    merchantId: string,
+    input: {
+      terminals?: Array<{
+        terminalId?: string;
+        terminalName?: string;
+        serialNumber?: string;
+        status?: string;
+      }>;
+      defaultTerminalId?: string;
+      adyenMerchantAccount?: string;
+      adyenApiKey?: string;
+      adyenClientId?: string;
+      adyenTerminalEnabled?: boolean;
+      deviceLabel?: string;
+    }
+  ) {
+    const db = getDb();
+    const now = new Date();
+
+    const adyenPatch: {
+      adyenMerchantAccount?: string;
+      adyenApiKey?: string;
+      adyenClientId?: string;
+    } = {};
+    if (input.adyenMerchantAccount?.trim()) {
+      adyenPatch.adyenMerchantAccount = input.adyenMerchantAccount.trim();
+    }
+    if (input.adyenApiKey?.trim()) {
+      adyenPatch.adyenApiKey = input.adyenApiKey.trim();
+    }
+    if (input.adyenClientId?.trim()) {
+      adyenPatch.adyenClientId = input.adyenClientId.trim();
+    }
+    if (Object.keys(adyenPatch).length > 0) {
+      await MerchantSettingsService.updateMerchantSettings(merchantId, adyenPatch);
+    }
+
+    const rows = input.terminals?.length
+      ? input.terminals
+      : input.defaultTerminalId?.trim()
+        ? [{ terminalId: input.defaultTerminalId.trim() }]
+        : [];
+
+    let upserted = 0;
+    for (const row of rows) {
+      const terminalId = String(row.terminalId || "").trim();
+      if (!terminalId) continue;
+
+      const terminalName =
+        String(row.terminalName || input.deviceLabel || terminalId).trim() || terminalId;
+      const serialNumber = String(row.serialNumber || terminalId).trim() || null;
+      const status =
+        input.adyenTerminalEnabled === false
+          ? "inactive"
+          : String(row.status || "active").trim() || "active";
+
+      const existing = await db.query.paymentTerminals.findFirst({
+        where: eq(schema.paymentTerminals.terminalId, terminalId),
+      });
+
+      if (existing) {
+        if (existing.merchantId !== merchantId) {
+          throw new Error(`Terminal ${terminalId} belongs to another merchant`);
+        }
+        await db
+          .update(schema.paymentTerminals)
+          .set({
+            terminalName: existing.terminalName?.trim() ? existing.terminalName : terminalName,
+            serialNumber: serialNumber || existing.serialNumber,
+            status,
+            lastHeartbeat: now,
+          })
+          .where(eq(schema.paymentTerminals.id, existing.id));
+      } else {
+        await db.insert(schema.paymentTerminals).values({
+          merchantId,
+          terminalId,
+          terminalName,
+          serialNumber,
+          status,
+          lastHeartbeat: now,
+        });
+      }
+      upserted += 1;
+    }
+
+    return { ok: true, upserted, serverTime: Date.now() };
   }
 
   static async syncMenuChanges(merchantId: string, sinceMs: number) {

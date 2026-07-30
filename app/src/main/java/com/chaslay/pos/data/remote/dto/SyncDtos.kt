@@ -78,3 +78,47 @@ data class IncomingOrdersResponse(
 data class AckResponse(
     val ok: Boolean = true
 )
+
+data class SyncAdyenConfigDto(
+    val merchant_account: String? = null,
+    val api_key: String? = null,
+    val client_id: String? = null
+)
+
+data class SyncPaymentTerminalDto(
+    val id: String? = null,
+    val terminal_id: String,
+    val terminal_name: String? = null,
+    val serial_number: String? = null,
+    val status: String? = null
+)
+
+data class PaymentConfigResponse(
+    val serverTime: Long = 0L,
+    val adyen: SyncAdyenConfigDto? = null,
+    val default_terminal_id: String? = null,
+    val terminals: List<SyncPaymentTerminalDto> = emptyList()
+)
+
+data class PushTerminalItemDto(
+    val terminalId: String,
+    val terminalName: String? = null,
+    val serialNumber: String? = null,
+    val status: String? = null
+)
+
+data class PushTerminalsRequest(
+    val terminals: List<PushTerminalItemDto>? = null,
+    val defaultTerminalId: String? = null,
+    val adyenMerchantAccount: String? = null,
+    val adyenApiKey: String? = null,
+    val adyenClientId: String? = null,
+    val adyenTerminalEnabled: Boolean? = null,
+    val deviceLabel: String? = null
+)
+
+data class PushTerminalsResponse(
+    val ok: Boolean = true,
+    val upserted: Int = 0,
+    val serverTime: Long = 0L
+)

@@ -1,8 +1,10 @@
-import { lazy, Suspense, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { lazy, Suspense, useEffect, useMemo } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { useAuthStore } from '@/store/auth';
-import { I18nProvider, SHOP_LANG_KEY } from '@/lib/i18n';
+import { I18nProvider, SHOP_LANG_KEY, shopLangStorageKey } from '@/lib/i18n';
+import { resolveShopKey } from '@/lib/shop-cart';
+import ShopLocaleSync from '@/components/shop/ShopLocaleSync';
 
 import LoginPage from '@/pages/LoginPage';
 import SetPasswordPage from '@/pages/SetPasswordPage';
@@ -19,8 +21,18 @@ import ProtectedRoute from '@/components/ProtectedRoute';
 const ShopEntry = lazy(() => import('@/pages/shop/ShopEntry'));
 
 function ShopRoutes({ children }: { children: React.ReactNode }) {
+  const { merchantSlug } = useParams();
+  const shopKey = useMemo(() => resolveShopKey(merchantSlug), [merchantSlug]);
+  const storageKey = shopKey ? shopLangStorageKey(shopKey) : SHOP_LANG_KEY;
+
+  useEffect(() => {
+    document.documentElement.classList.add('shop-shell');
+    return () => document.documentElement.classList.remove('shop-shell');
+  }, []);
+
   return (
-    <I18nProvider storageKey={SHOP_LANG_KEY}>
+    <I18nProvider storageKey={storageKey}>
+      <ShopLocaleSync shopKey={shopKey} />
       <Suspense
         fallback={
           <div className="min-h-screen flex items-center justify-center text-stone-500">…</div>

@@ -160,7 +160,8 @@ class SettingsViewModel @Inject constructor(
     private val crashLogger: CrashLogger,
     private val adyenTerminalService: com.chaslay.pos.payment.AdyenTerminalService,
     private val scaleService: com.chaslay.pos.scale.AclasScaleService,
-    private val floorSyncRepository: com.chaslay.pos.sync.FloorSyncRepository
+    private val floorSyncRepository: com.chaslay.pos.sync.FloorSyncRepository,
+    private val terminalSyncRepository: com.chaslay.pos.sync.TerminalSyncRepository
 ) : ViewModel() {
 
     private var currentSettings = BusinessSettingsEntity()
@@ -919,7 +920,17 @@ class SettingsViewModel @Inject constructor(
             val settings = buildSettingsFromState()
             settingsRepository.saveSettings(settings)
             currentSettings = settings
-            _uiState.update { it.copy(message = "Settings saved") }
+            val terminalSync = runCatching { terminalSyncRepository.pushLocalTerminalOnly() }
+                .getOrDefault(com.chaslay.pos.sync.TerminalSyncResult())
+            val syncNote = when {
+                terminalSync.skipped -> null
+                terminalSync.error != null -> " · terminal sync failed"
+                terminalSync.pushed -> " · terminal synced to panel"
+                else -> null
+            }
+            _uiState.update {
+                it.copy(message = "Settings saved${syncNote ?: ""}")
+            }
         }
     }
 
