@@ -139,6 +139,7 @@ export const PANEL_ROUTE_PERMISSIONS: Record<string, Permission[]> = {
   "/merchant": ["VIEW_REPORTS", "ACCESS_PANEL"],
   "/merchant/orders": ["VIEW_ORDER_HISTORY"],
   "/merchant/pos": ["USE_WEBPOS"],
+  "/merchant/reports": ["VIEW_REPORTS", "END_OF_DAY"],
   "/merchant/products": ["MANAGE_PRODUCTS"],
   "/merchant/modifiers": ["MANAGE_PRODUCTS"],
   "/merchant/categories": ["MANAGE_PRODUCTS"],

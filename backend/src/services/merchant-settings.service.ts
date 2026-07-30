@@ -4,6 +4,10 @@ import { eq, and, or } from "drizzle-orm";
 import { normalizeCustomDomain } from "@/services/cms.service";
 import { normalizeVacationSettings } from "@/lib/vacation";
 import { MarketingService } from "@/services/marketing.service";
+import {
+  normalizePosPrintSettings,
+  type PosPrintSettings,
+} from "@/lib/pos-print-settings";
 
 function maskSecret(value?: string | null): string | null {
   if (!value) return null;
@@ -122,6 +126,7 @@ export class MerchantSettingsService {
       onlineCardFeePercent: merchant.onlineCardFeePercent ?? "0",
       panelLanguage: merchant.panelLanguage || "en",
       shopLanguage: merchant.shopLanguage || merchant.panelLanguage || "en",
+      posPrintSettings: normalizePosPrintSettings(merchant.posPrintSettings),
       status: merchant.status,
       subscriptionPlan: merchant.subscriptionPlan,
     };
@@ -182,6 +187,7 @@ export class MerchantSettingsService {
       onlineCardFeePercent?: number;
       panelLanguage?: string;
       shopLanguage?: string;
+      posPrintSettings?: PosPrintSettings | null;
     }
   ) {
     const db = getDb();
@@ -324,6 +330,9 @@ export class MerchantSettingsService {
     }
     if (updates.marketingSettings !== undefined) {
       patch.marketingSettings = MarketingService.normalizeMarketing(updates.marketingSettings);
+    }
+    if (updates.posPrintSettings !== undefined) {
+      patch.posPrintSettings = normalizePosPrintSettings(updates.posPrintSettings);
     }
 
     // Auto-create slug when enabling shop without one

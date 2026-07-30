@@ -2,9 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import {
   Banknote,
+  ClipboardList,
   CreditCard,
   MoreHorizontal,
   PanelLeft,
+  PauseCircle,
   Printer,
   RefreshCw,
   Search,
@@ -20,10 +22,17 @@ import { useI18n } from '@/lib/i18n';
 import { roundMoney2, roundTo005, roundingAdjustment } from '@/lib/money';
 import { APP_NAME } from '@/lib/brand';
 import {
+  filterKitchenItems,
+  generateKitchenTicketText,
   generateWebPosReceiptText,
+  logoUrlToEscPos,
+  printersForRole,
+  resolveReceiptLanguage,
   textToEscPos,
   uint8ToBase64,
+  type PosPrintSettingsClient,
   type WebPosReceipt,
+  type WebPosReceiptItem,
 } from '@/lib/webpos-receipt';
 import {
   isPrintAgentAvailable,
@@ -49,6 +58,7 @@ import ShopComboWizard, {
 } from '@/components/shop/ShopComboWizard';
 import WebPosPaymentModal, { type WebPosPaymentPhase } from '@/components/WebPosPaymentModal';
 import WebPosPinModal from '@/components/WebPosPinModal';
+import WebPosOrdersPanel from '@/components/WebPosOrdersPanel';
 import {
   hasPermission,
   loadWebPosStaffSession,
@@ -84,6 +94,7 @@ type CartLine = {
   unitPrice: number;
   lineTotal: number;
   taxable: boolean;
+  categoryId?: string | null;
   selectedExtras: ShopSelectedExtra[];
   comboSelections: ShopComboSelection[];
 };
@@ -136,6 +147,9 @@ type WebPosPaymentConfig = {
   adyenConfigured: boolean;
   defaultTerminalId: string | null;
   terminals: WebPosTerminal[];
+  posPrintSettings?: PosPrintSettingsClient | null;
+  shopLogoUrl?: string | null;
+  panelLanguage?: string | null;
 };
 
 function money(n: number) {
@@ -143,7 +157,7 @@ function money(n: number) {
 }
 
 export default function WebPos({ appMode = true }: { appMode?: boolean }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const channels = useMemo(
     () => [
       { id: 'takeaway' as Channel, label: t('takeaway') },
@@ -175,6 +189,8 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
   const [autoPrint, setAutoPrint] = useState(() => localStorage.getItem('manupos_webpos_autoprint') !== '0');
   const [lastReceipt, setLastReceipt] = useState<string>('');
   const [lastReceiptUrl, setLastReceiptUrl] = useState<string>('');
+  const [printSettings, setPrintSettings] = useState<PosPrintSettingsClient | null>(null);
+  const [ordersOpen, setOrdersOpen] = useState(false);
   const [pendingProduct, setPendingProduct] = useState<ShopProductForModifiers | null>(null);
   const [pendingCombo, setPendingCombo] = useState<ShopComboProduct | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -293,15 +309,21 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
         api.get('/merchant/webpos-config').catch(() => ({ data: { config: null } })),
         api.get('/merchant/staff').catch(() => ({ data: { staff: [] } })),
       ]);
-      setMerchant(settingsRes.data.settings || settingsRes.data.merchant);
+      const merch = settingsRes.data.settings || settingsRes.data.merchant;
+      setMerchant(merch);
+      setPrintSettings(merch?.posPrintSettings || null);
       setCategories(catRes.data.categories || catRes.data || []);
       const cfg = webposRes.data.config as WebPosPaymentConfig | null;
       if (cfg) {
         setPaymentConfig(cfg);
+        if (cfg.posPrintSettings) setPrintSettings(cfg.posPrintSettings);
         if (cfg.defaultTerminalId) setSelectedTerminalId(cfg.defaultTerminalId);
         const first: PosPaymentMethod[] = ['cash', 'card', 'terminal'];
         const pick = first.find((m) => cfg.methods[m]);
         if (pick) setPaymentMethod(pick);
+        if (cfg.posPrintSettings?.autoPrintReceipt != null) {
+          setAutoPrint(cfg.posPrintSettings.autoPrintReceipt !== false);
+        }
       }
       const staffList = staffRes.data.staff || [];
       setStaffConfigured(staffList.some((s: { pinSet?: boolean; isActive?: boolean }) => s.pinSet && s.isActive));
@@ -367,6 +389,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
           unitPrice: price,
           lineTotal: price,
           taxable: p.isTaxable !== false,
+          categoryId: p.categoryId,
           selectedExtras,
           comboSelections,
         },
@@ -419,19 +442,96 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
     );
   };
 
-  const printReceipt = async (receiptText: string, receiptUrl?: string) => {
-    const escpos = textToEscPos(receiptText, receiptUrl);
+  const printEscPosToTargets = async (
+    text: string,
+    opts: { qrUrl?: string; role: 'receipt' | 'kitchen' | 'eod'; paperWidthMm?: 58 | 80 }
+  ) => {
+    const targets = printersForRole(printSettings, opts.role);
+    const names =
+      targets.length > 0
+        ? targets.map((x) => x.name)
+        : [printerName || ''];
+    const paper = opts.paperWidthMm || targets[0]?.paperWidthMm || printSettings?.paperWidthMm || 80;
+    const logoUrl =
+      opts.role === 'receipt'
+        ? printSettings?.receiptLogoUrl || merchant?.shopLogoUrl || paymentConfig?.shopLogoUrl
+        : null;
+    const logo = logoUrl
+      ? await logoUrlToEscPos(String(logoUrl), paper === 58 ? 240 : 384)
+      : null;
+    const qr =
+      opts.role === 'receipt' && printSettings?.receiptShowQrCode !== false ? opts.qrUrl : undefined;
+    const escpos = textToEscPos(text, qr, logo);
     const dataBase64 = uint8ToBase64(escpos);
-    if (agentOk) {
-      await printViaAgent({ printerName: printerName || undefined, dataBase64, text: receiptText });
-      toast.success(
-        printerName
-          ? t('webPosPrintedOn').replace('{name}', printerName)
-          : t('webPosSentDefaultPrinter')
-      );
+    if (!(agentOk || (await isPrintAgentAvailable()))) {
+      throw new Error(t('webPosAgentOffline'));
+    }
+    for (const name of names) {
+      await printViaAgent({ printerName: name || undefined, dataBase64, text });
+    }
+    toast.success(
+      names[0]
+        ? t('webPosPrintedOn').replace('{name}', names[0])
+        : t('webPosSentDefaultPrinter')
+    );
+  };
+
+  const printReceipt = async (receiptText: string, receiptUrl?: string) => {
+    await printEscPosToTargets(receiptText, { qrUrl: receiptUrl, role: 'receipt' });
+  };
+
+  const printKitchenForCart = async (lines: CartLine[], saleChannel: Channel) => {
+    if (printSettings?.autoPrintKitchen === false) return;
+    const lang = resolveReceiptLanguage(printSettings, printSettings?.receiptLanguage === 'panel' ? locale : printSettings?.receiptLanguage || locale);
+    const kitchenPrinters = (printSettings?.printers || []).filter(
+      (p) => p.enabled !== false && p.printKitchenTickets && p.name
+    );
+    const receiptItems: WebPosReceiptItem[] = lines.map((l) => {
+      const detail = lineExtrasLabel(l);
+      return {
+        name: detail ? `${l.name} (${detail})` : l.name,
+        quantity: l.quantity,
+        unitPrice: l.unitPrice,
+        lineTotal: l.lineTotal,
+        productId: l.productId,
+        categoryId: l.categoryId,
+      };
+    });
+
+    if (kitchenPrinters.length) {
+      for (const kp of kitchenPrinters) {
+        const items = filterKitchenItems(receiptItems, kp);
+        if (!items.length) continue;
+        const text = generateKitchenTicketText({
+          businessName: merchant?.name,
+          channel: saleChannel,
+          items,
+          language: lang,
+          paperWidthMm: kp.paperWidthMm || printSettings?.paperWidthMm || 80,
+          header: printSettings?.kitchenTicketHeader,
+          footer: printSettings?.kitchenTicketFooter,
+        });
+        const escpos = textToEscPos(text);
+        await printViaAgent({
+          printerName: kp.name,
+          dataBase64: uint8ToBase64(escpos),
+          text,
+        });
+      }
       return;
     }
-    throw new Error(t('webPosAgentOffline'));
+
+    // Fallback: same Windows printer as receipts
+    const text = generateKitchenTicketText({
+      businessName: merchant?.name,
+      channel: saleChannel,
+      items: receiptItems,
+      language: lang,
+      paperWidthMm: printSettings?.paperWidthMm || 80,
+      header: printSettings?.kitchenTicketHeader,
+      footer: printSettings?.kitchenTicketFooter,
+    });
+    await printEscPosToTargets(text, { role: 'kitchen' });
   };
 
   const buildSalePayload = (clientId: string, method: PosPaymentMethod) => ({
@@ -488,10 +588,18 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
     await api.post('/sync/push-sales', { sales: [sale] });
 
     const receiptUrl = buildReceiptUrl(clientId);
+    const lang = resolveReceiptLanguage(
+      printSettings,
+      paymentConfig?.panelLanguage || locale
+    );
+    const paperWidthMm = printSettings?.paperWidthMm || 80;
+    const cartSnapshot = [...cart];
+    const channelSnapshot = channel;
     const receiptPayload: WebPosReceipt = {
       businessName: merchant?.name || APP_NAME,
       address: [merchant?.address, merchant?.city].filter(Boolean).join(', '),
       phone: merchant?.phone || undefined,
+      vatNumber: merchant?.vatNumber || undefined,
       id: clientId,
       completedAt: Date.now(),
       channel,
@@ -503,6 +611,8 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
           quantity: l.quantity,
           unitPrice: l.unitPrice,
           lineTotal: l.lineTotal,
+          productId: l.productId,
+          categoryId: l.categoryId,
         };
       }),
       subtotal: totals.subtotal,
@@ -512,9 +622,16 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
       rounding: totals.rounding,
       total: totals.total,
       receiptUrl,
-      includeQr: true,
+      includeQr: printSettings?.receiptShowQrCode !== false,
+      staffName: webposStaff?.name,
+      language: lang,
+      paperWidthMm,
+      header: printSettings?.receiptHeader,
+      footer: printSettings?.receiptFooter,
+      showVat: printSettings?.receiptShowVatTable !== false,
+      showStaff: printSettings?.receiptShowStaffLine !== false,
     };
-    const receiptText = generateWebPosReceiptText(receiptPayload);
+    const receiptText = generateWebPosReceiptText(receiptPayload, locale);
     setLastReceipt(receiptText);
     setLastReceiptUrl(receiptUrl);
     setSales((prev) =>
@@ -532,12 +649,44 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
     );
     setCart([]);
     toast.success(t('webPosSaleCompleteAmount').replace('{amount}', money(totals.total)));
-    if (autoPrint) {
+    const shouldPrintReceipt =
+      autoPrint && printSettings?.autoPrintReceipt !== false;
+    if (shouldPrintReceipt) {
       try {
         await printReceipt(receiptText, receiptUrl);
       } catch (e: any) {
         toast.error(e.message || t('webPosPrintFailed'));
       }
+    }
+    try {
+      await printKitchenForCart(cartSnapshot, channelSnapshot);
+    } catch (e: any) {
+      toast.error(e.message || t('webPosKitchenPrintFailed'));
+    }
+  };
+
+  const holdCurrentOrder = async (sendToKitchen = false) => {
+    if (!cart.length) return;
+    try {
+      await api.post('/merchant/pos/held', {
+        label: `${channel} · ${money(totals.total)}`,
+        channel,
+        cartJson: { cart, channel },
+        staffId: webposStaff?.id,
+        staffName: webposStaff?.name,
+        sendToKitchen,
+      });
+      if (sendToKitchen) {
+        try {
+          await printKitchenForCart(cart, channel);
+        } catch {
+          /* kitchen optional on hold */
+        }
+      }
+      setCart([]);
+      toast.success(sendToKitchen ? t('webPosHeldSentKitchen') : t('webPosOrderHeld'));
+    } catch (e: any) {
+      toast.error(e.response?.data?.error || t('webPosHoldFailed'));
     }
   };
 
@@ -980,6 +1129,25 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
         </div>
 
         <div className="flex shrink-0 items-center gap-1.5">
+          <button
+            type="button"
+            className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-[var(--border)] px-2.5 text-xs font-medium hover:bg-[var(--bg-muted)]"
+            onClick={() => setOrdersOpen(true)}
+            title={t('webPosOrders')}
+          >
+            <ClipboardList size={16} />
+            <span className="hidden sm:inline">{t('webPosOrders')}</span>
+          </button>
+          <button
+            type="button"
+            disabled={!cart.length || busy}
+            className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-[var(--border)] px-2.5 text-xs font-medium hover:bg-[var(--bg-muted)] disabled:opacity-40"
+            onClick={() => void holdCurrentOrder(false)}
+            title={t('webPosHold')}
+          >
+            <PauseCircle size={16} />
+            <span className="hidden sm:inline">{t('webPosHold')}</span>
+          </button>
           {webposStaff ? (
             <button
               type="button"
@@ -1294,13 +1462,28 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
         onCancel={() => {
           paymentAbortRef.current?.abort();
           setPaymentPhase('cancelled');
-          setPaymentMessage('Payment cancelled.');
+          setPaymentMessage(t('webPosPayCancelled'));
         }}
         onRetry={() => {
           closePaymentModal();
           void runTerminalPayment();
         }}
         onClose={closePaymentModal}
+      />
+
+      <WebPosOrdersPanel
+        open={ordersOpen}
+        onClose={() => setOrdersOpen(false)}
+        onResumeHeld={(held) => {
+          const data = held.cartJson as { cart?: CartLine[]; channel?: Channel } | CartLine[];
+          if (Array.isArray(data)) {
+            setCart(data);
+          } else if (data?.cart) {
+            setCart(data.cart);
+            if (data.channel) setChannel(data.channel);
+          }
+          toast.success(t('webPosOrderResumed'));
+        }}
       />
     </div>
   );

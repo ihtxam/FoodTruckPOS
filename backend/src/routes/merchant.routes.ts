@@ -1046,6 +1046,9 @@ router.get("/webpos-config", async (req: Request, res: Response) => {
       !!merchant.adyenMerchantAccount &&
       activeTerminals.length > 0;
 
+    const { normalizePosPrintSettings } = await import("@/lib/pos-print-settings");
+    const posPrintSettings = normalizePosPrintSettings(merchant.posPrintSettings);
+
     res.json({
       success: true,
       config: {
@@ -1066,6 +1069,9 @@ router.get("/webpos-config", async (req: Request, res: Response) => {
           terminalName: t.terminalName,
           status: t.status,
         })),
+        posPrintSettings,
+        shopLogoUrl: merchant.shopLogoUrl || null,
+        panelLanguage: merchant.panelLanguage || "en",
       },
     });
   } catch (error) {
@@ -1097,6 +1103,130 @@ router.put("/settings", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Error updating settings:", error);
     res.status(400).json({ error: error instanceof Error ? error.message : "Failed to update settings" });
+  }
+});
+
+/**
+ * GET /api/merchant/reports/eod
+ * End-of-day / sales report (POS + synced sales in orders table)
+ * Query: preset=today|yesterday|last_week|last_month|custom&from=&to=
+ */
+router.get("/reports/eod", async (req: Request, res: Response) => {
+  try {
+    const merchantId = req.merchantId;
+    if (!merchantId) return res.status(400).json({ error: "Merchant ID is required" });
+    const { PosReportsService } = await import("@/services/pos-reports.service");
+    const preset = String(req.query.preset || "today") as
+      | "today"
+      | "yesterday"
+      | "last_week"
+      | "last_month"
+      | "custom";
+    const report = await PosReportsService.getEndOfDayReport(merchantId, {
+      preset,
+      from: req.query.from ? String(req.query.from) : undefined,
+      to: req.query.to ? String(req.query.to) : undefined,
+      channel: req.query.channel ? String(req.query.channel) : undefined,
+    });
+    res.json({ success: true, report });
+  } catch (error) {
+    console.error("EOD report failed:", error);
+    res.status(500).json({ error: error instanceof Error ? error.message : "Failed to load report" });
+  }
+});
+
+/** GET /api/merchant/pos/orders — POS order history */
+router.get("/pos/orders", async (req: Request, res: Response) => {
+  try {
+    const merchantId = req.merchantId;
+    if (!merchantId) return res.status(400).json({ error: "Merchant ID is required" });
+    const { PosOrdersService } = await import("@/services/pos-orders.service");
+    const orders = await PosOrdersService.listPosOrders(merchantId, {
+      status: req.query.status ? String(req.query.status) : undefined,
+      from: req.query.from ? String(req.query.from) : undefined,
+      to: req.query.to ? String(req.query.to) : undefined,
+      limit: req.query.limit ? Number(req.query.limit) : 50,
+    });
+    res.json({ success: true, orders, cancelReasons: PosOrdersService.cancelReasons() });
+  } catch (error) {
+    console.error("POS orders list failed:", error);
+    res.status(500).json({ error: error instanceof Error ? error.message : "Failed to list orders" });
+  }
+});
+
+router.post("/pos/orders/:id/cancel", async (req: Request, res: Response) => {
+  try {
+    const merchantId = req.merchantId;
+    if (!merchantId) return res.status(400).json({ error: "Merchant ID is required" });
+    const { PosOrdersService } = await import("@/services/pos-orders.service");
+    const order = await PosOrdersService.cancelOrder(merchantId, req.params.id, String(req.body?.reason || ""));
+    res.json({ success: true, order });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Cancel failed" });
+  }
+});
+
+router.post("/pos/orders/:id/refund", async (req: Request, res: Response) => {
+  try {
+    const merchantId = req.merchantId;
+    if (!merchantId) return res.status(400).json({ error: "Merchant ID is required" });
+    const { PosOrdersService } = await import("@/services/pos-orders.service");
+    const result = await PosOrdersService.refundOrder(
+      merchantId,
+      req.params.id,
+      req.body?.amount != null ? Number(req.body.amount) : undefined
+    );
+    res.json({ success: true, ...result });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Refund failed" });
+  }
+});
+
+router.get("/pos/held", async (req: Request, res: Response) => {
+  try {
+    const merchantId = req.merchantId;
+    if (!merchantId) return res.status(400).json({ error: "Merchant ID is required" });
+    const { PosOrdersService } = await import("@/services/pos-orders.service");
+    const held = await PosOrdersService.listHeld(merchantId);
+    res.json({ success: true, held });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : "Failed to list held orders" });
+  }
+});
+
+router.post("/pos/held", async (req: Request, res: Response) => {
+  try {
+    const merchantId = req.merchantId;
+    if (!merchantId) return res.status(400).json({ error: "Merchant ID is required" });
+    const { PosOrdersService } = await import("@/services/pos-orders.service");
+    const row = await PosOrdersService.holdOrder(merchantId, req.body || {});
+    res.json({ success: true, held: row });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Hold failed" });
+  }
+});
+
+router.post("/pos/held/:id/resume", async (req: Request, res: Response) => {
+  try {
+    const merchantId = req.merchantId;
+    if (!merchantId) return res.status(400).json({ error: "Merchant ID is required" });
+    const { PosOrdersService } = await import("@/services/pos-orders.service");
+    const row = await PosOrdersService.resumeHeld(merchantId, req.params.id);
+    res.json({ success: true, held: row });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Resume failed" });
+  }
+});
+
+router.delete("/pos/held/:id", async (req: Request, res: Response) => {
+  try {
+    const merchantId = req.merchantId;
+    if (!merchantId) return res.status(400).json({ error: "Merchant ID is required" });
+    const { PosOrdersService } = await import("@/services/pos-orders.service");
+    await PosOrdersService.deleteHeld(merchantId, req.params.id);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Delete failed" });
   }
 });
 

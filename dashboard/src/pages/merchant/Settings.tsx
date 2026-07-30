@@ -8,6 +8,7 @@ import {
   LayoutGrid,
   Mail,
   Percent,
+  Printer,
 } from 'lucide-react';
 import api from '@/lib/api';
 import { useI18n, type Locale } from '@/lib/i18n';
@@ -80,6 +81,31 @@ interface SettingsData {
       title?: { en?: string | null; fr?: string | null; de?: string | null } | string | null;
     }>;
   } | null;
+  shopLogoUrl?: string | null;
+  posPrintSettings?: {
+    receiptHeader?: string;
+    receiptFooter?: string;
+    kitchenTicketHeader?: string;
+    kitchenTicketFooter?: string;
+    receiptShowVatTable?: boolean;
+    receiptShowStaffLine?: boolean;
+    receiptShowQrCode?: boolean;
+    paperWidthMm?: 58 | 80;
+    receiptLanguage?: 'en' | 'fr' | 'de' | 'panel';
+    receiptLogoUrl?: string | null;
+    autoPrintReceipt?: boolean;
+    autoPrintKitchen?: boolean;
+    printers?: Array<{
+      id: string;
+      name: string;
+      enabled?: boolean;
+      paperWidthMm?: 58 | 80;
+      printReceipts?: boolean;
+      printKitchenTickets?: boolean;
+      printEndOfDayReports?: boolean;
+      printAllProducts?: boolean;
+    }>;
+  } | null;
 }
 
 interface AdyenCreds {
@@ -97,7 +123,7 @@ interface TerminalRow {
   status: string;
 }
 
-type TabId = 'business' | 'taxes' | 'shop' | 'operations' | 'payments' | 'email' | 'language';
+type TabId = 'business' | 'taxes' | 'shop' | 'operations' | 'payments' | 'receipt' | 'email' | 'language';
 
 function Field({
   label,
@@ -203,6 +229,7 @@ export default function Settings() {
   const [savingAdyen, setSavingAdyen] = useState(false);
   const [savingFee, setSavingFee] = useState(false);
   const [savingWebposPay, setSavingWebposPay] = useState(false);
+  const [savingReceipt, setSavingReceipt] = useState(false);
   const [savingTerminal, setSavingTerminal] = useState(false);
   const vacationImageInputRef = useRef<HTMLInputElement>(null);
   const [tab, setTab] = useState<TabId>(() => {
@@ -223,6 +250,7 @@ export default function Settings() {
         { id: 'shop' as const, label: t('shop'), icon: Globe2 },
         { id: 'operations' as const, label: t('settingsOperations'), icon: LayoutGrid },
         { id: 'payments' as const, label: t('settingsPayments'), icon: CreditCard },
+        { id: 'receipt' as const, label: t('settingsReceipt'), icon: Printer },
         { id: 'email' as const, label: t('settingsEmail'), icon: Mail },
         { id: 'language' as const, label: t('language'), icon: Languages },
       ] as const,
@@ -387,6 +415,39 @@ export default function Settings() {
       toast.error(error.response?.data?.error || 'Failed to save WebPOS payment settings');
     } finally {
       setSavingWebposPay(false);
+    }
+  };
+
+  const saveReceiptPrint = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!settings) return;
+    setSavingReceipt(true);
+    try {
+      const ps = settings.posPrintSettings || {};
+      const response = await api.put('/merchant/settings', {
+        posPrintSettings: {
+          receiptHeader: ps.receiptHeader || '',
+          receiptFooter: ps.receiptFooter || '',
+          kitchenTicketHeader: ps.kitchenTicketHeader || '',
+          kitchenTicketFooter: ps.kitchenTicketFooter || '',
+          receiptShowVatTable: ps.receiptShowVatTable !== false,
+          receiptShowStaffLine: ps.receiptShowStaffLine !== false,
+          receiptShowQrCode: ps.receiptShowQrCode !== false,
+          paperWidthMm: ps.paperWidthMm === 58 ? 58 : 80,
+          receiptLanguage: ps.receiptLanguage || 'panel',
+          receiptLogoUrl: ps.receiptLogoUrl || null,
+          autoPrintReceipt: ps.autoPrintReceipt !== false,
+          autoPrintKitchen: ps.autoPrintKitchen !== false,
+          printers: ps.printers || [],
+        },
+      });
+      const next = response.data.merchant || response.data.settings || {};
+      setSettings((prev) => (prev ? { ...prev, ...next } : prev));
+      toast.success(t('saved'));
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || t('failedSaveReceipt'));
+    } finally {
+      setSavingReceipt(false);
     }
   };
 
@@ -1506,6 +1567,251 @@ export default function Settings() {
               <div className="flex justify-end border-t border-[var(--border)] pt-4">
                 <button type="submit" className="btn-primary" disabled={saving}>
                   {saving ? t('saving') : t('save')}
+                </button>
+              </div>
+            </form>
+          )}
+
+          {tab === 'receipt' && (
+            <form className="space-y-5" onSubmit={saveReceiptPrint}>
+              <Section title={t('settingsReceipt')} description={t('settingsReceiptHint')}>
+                <Field label={t('receiptLanguage')}>
+                  <select
+                    className="input"
+                    value={settings.posPrintSettings?.receiptLanguage || 'panel'}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        posPrintSettings: {
+                          ...(settings.posPrintSettings || {}),
+                          receiptLanguage: e.target.value as 'en' | 'fr' | 'de' | 'panel',
+                        },
+                      })
+                    }
+                  >
+                    <option value="panel">{t('receiptLangPanel')}</option>
+                    <option value="en">English</option>
+                    <option value="fr">Français</option>
+                    <option value="de">Deutsch</option>
+                  </select>
+                </Field>
+                <Field label={t('receiptPaperWidth')}>
+                  <select
+                    className="input"
+                    value={settings.posPrintSettings?.paperWidthMm === 58 ? 58 : 80}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        posPrintSettings: {
+                          ...(settings.posPrintSettings || {}),
+                          paperWidthMm: Number(e.target.value) === 58 ? 58 : 80,
+                        },
+                      })
+                    }
+                  >
+                    <option value={80}>80mm</option>
+                    <option value={58}>58mm</option>
+                  </select>
+                </Field>
+                <Field label={t('receiptLogoUrl')} hint={t('receiptLogoHint')}>
+                  <input
+                    className="input"
+                    value={settings.posPrintSettings?.receiptLogoUrl || ''}
+                    placeholder={settings.shopLogoUrl || ''}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        posPrintSettings: {
+                          ...(settings.posPrintSettings || {}),
+                          receiptLogoUrl: e.target.value || null,
+                        },
+                      })
+                    }
+                  />
+                </Field>
+                <Field label={t('receiptHeader')}>
+                  <textarea
+                    className="input min-h-[5rem]"
+                    value={settings.posPrintSettings?.receiptHeader || ''}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        posPrintSettings: {
+                          ...(settings.posPrintSettings || {}),
+                          receiptHeader: e.target.value,
+                        },
+                      })
+                    }
+                  />
+                </Field>
+                <Field label={t('receiptFooter')}>
+                  <textarea
+                    className="input min-h-[4rem]"
+                    value={settings.posPrintSettings?.receiptFooter || ''}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        posPrintSettings: {
+                          ...(settings.posPrintSettings || {}),
+                          receiptFooter: e.target.value,
+                        },
+                      })
+                    }
+                  />
+                </Field>
+                <Field label={t('kitchenTicketHeader')}>
+                  <textarea
+                    className="input min-h-[3rem]"
+                    value={settings.posPrintSettings?.kitchenTicketHeader || ''}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        posPrintSettings: {
+                          ...(settings.posPrintSettings || {}),
+                          kitchenTicketHeader: e.target.value,
+                        },
+                      })
+                    }
+                  />
+                </Field>
+                <Field label={t('kitchenTicketFooter')}>
+                  <textarea
+                    className="input min-h-[3rem]"
+                    value={settings.posPrintSettings?.kitchenTicketFooter || ''}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        posPrintSettings: {
+                          ...(settings.posPrintSettings || {}),
+                          kitchenTicketFooter: e.target.value,
+                        },
+                      })
+                    }
+                  />
+                </Field>
+                <div className="flex flex-wrap gap-4 text-sm">
+                  {(
+                    [
+                      ['receiptShowVatTable', t('receiptShowVat')],
+                      ['receiptShowStaffLine', t('receiptShowStaff')],
+                      ['receiptShowQrCode', t('receiptShowQr')],
+                      ['autoPrintReceipt', t('autoPrintReceipt')],
+                      ['autoPrintKitchen', t('autoPrintKitchen')],
+                    ] as const
+                  ).map(([key, label]) => (
+                    <label key={key} className="inline-flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={settings.posPrintSettings?.[key] !== false}
+                        onChange={(e) =>
+                          setSettings({
+                            ...settings,
+                            posPrintSettings: {
+                              ...(settings.posPrintSettings || {}),
+                              [key]: e.target.checked,
+                            },
+                          })
+                        }
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+              </Section>
+
+              <Section title={t('printerProfiles')} description={t('printerProfilesHint')}>
+                {(settings.posPrintSettings?.printers || []).map((p, idx) => (
+                  <div
+                    key={p.id}
+                    className="rounded-xl border border-[var(--border)] p-3 space-y-2"
+                  >
+                    <Field label={t('printerName')}>
+                      <input
+                        className="input"
+                        value={p.name}
+                        onChange={(e) => {
+                          const printers = [...(settings.posPrintSettings?.printers || [])];
+                          printers[idx] = { ...p, name: e.target.value };
+                          setSettings({
+                            ...settings,
+                            posPrintSettings: { ...(settings.posPrintSettings || {}), printers },
+                          });
+                        }}
+                        placeholder="Windows printer name"
+                      />
+                    </Field>
+                    <div className="flex flex-wrap gap-3 text-sm">
+                      {(
+                        [
+                          ['printReceipts', t('printRoleReceipts')],
+                          ['printKitchenTickets', t('printRoleKitchen')],
+                          ['printEndOfDayReports', t('printRoleEod')],
+                        ] as const
+                      ).map(([key, label]) => (
+                        <label key={key} className="inline-flex items-center gap-1.5">
+                          <input
+                            type="checkbox"
+                            checked={!!p[key]}
+                            onChange={(e) => {
+                              const printers = [...(settings.posPrintSettings?.printers || [])];
+                              printers[idx] = { ...p, [key]: e.target.checked };
+                              setSettings({
+                                ...settings,
+                                posPrintSettings: { ...(settings.posPrintSettings || {}), printers },
+                              });
+                            }}
+                          />
+                          {label}
+                        </label>
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      className="text-xs text-red-600"
+                      onClick={() => {
+                        const printers = (settings.posPrintSettings?.printers || []).filter(
+                          (_, i) => i !== idx
+                        );
+                        setSettings({
+                          ...settings,
+                          posPrintSettings: { ...(settings.posPrintSettings || {}), printers },
+                        });
+                      }}
+                    >
+                      {t('delete')}
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => {
+                    const printers = [
+                      ...(settings.posPrintSettings?.printers || []),
+                      {
+                        id: `p-${Date.now()}`,
+                        name: '',
+                        enabled: true,
+                        paperWidthMm: 80 as const,
+                        printReceipts: false,
+                        printKitchenTickets: true,
+                        printEndOfDayReports: false,
+                        printAllProducts: true,
+                      },
+                    ];
+                    setSettings({
+                      ...settings,
+                      posPrintSettings: { ...(settings.posPrintSettings || {}), printers },
+                    });
+                  }}
+                >
+                  {t('addPrinterProfile')}
+                </button>
+              </Section>
+
+              <div className="flex justify-end border-t border-[var(--border)] pt-4">
+                <button type="submit" className="btn-primary" disabled={savingReceipt}>
+                  {savingReceipt ? t('saving') : t('save')}
                 </button>
               </div>
             </form>

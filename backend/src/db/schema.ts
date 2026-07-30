@@ -13,6 +13,7 @@ import {
   foreignKey,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
+import type { PosPrintSettings } from "../lib/pos-print-settings";
 
 // ============================================================================
 // SUPERADMIN & AUTHENTICATION
@@ -175,6 +176,13 @@ export const merchants = pgTable(
      * { reorderReminderEnabled, reorderReminderDays, reorderReminderSubject, reorderReminderBody }
      */
     marketingSettings: json("marketing_settings").$type<MarketingSettings | null>(),
+    /**
+     * POS / WebPOS receipt + kitchen + printer profiles:
+     * { receiptHeader, receiptFooter, kitchenTicketHeader/Footer, paperWidthMm,
+     *   receiptLanguage, receiptShowVatTable/StaffLine/QrCode, receiptLogoUrl,
+     *   autoPrintReceipt, autoPrintKitchen, printers: PosPrinterProfile[] }
+     */
+    posPrintSettings: json("pos_print_settings").$type<PosPrintSettings | null>(),
     status: varchar("status", { length: 50 }).default("active").notNull(), // active, suspended, trial, expired
     subscriptionPlan: varchar("subscription_plan", { length: 50 }).default("free"), // free, starter, professional, enterprise
     trialEndsAt: timestamp("trial_ends_at"),
@@ -733,6 +741,10 @@ export const orders = pgTable(
     syncedAt: timestamp("synced_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     completedAt: timestamp("completed_at"),
+    cancelReason: text("cancel_reason"),
+    cancelledAt: timestamp("cancelled_at"),
+    refundAmount: decimal("refund_amount", { precision: 10, scale: 2 }).default("0"),
+    refundedAt: timestamp("refunded_at"),
   },
   (table) => ({
     merchantIdIdx: index("orders_merchant_id_idx").on(table.merchantId),
@@ -741,6 +753,33 @@ export const orders = pgTable(
     createdAtIdx: index("orders_created_at_idx").on(table.createdAt),
     clientIdIdx: index("orders_client_id_idx").on(table.clientId),
     tableIdIdx: index("orders_table_id_idx").on(table.tableId),
+  })
+);
+
+// ============================================================================
+// WEBPOS / POS HELD ORDERS (on-hold carts)
+// ============================================================================
+
+export const heldOrders = pgTable(
+  "held_orders",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    merchantId: uuid("merchant_id")
+      .notNull()
+      .references(() => merchants.id, { onDelete: "cascade" }),
+    label: varchar("label", { length: 120 }),
+    status: varchar("status", { length: 40 }).default("held").notNull(), // held | sent_to_kitchen
+    channel: varchar("channel", { length: 50 }).default("takeaway"),
+    cartJson: json("cart_json").$type<unknown>().notNull(),
+    notes: text("notes"),
+    staffId: uuid("staff_id"),
+    staffName: varchar("staff_name", { length: 255 }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    merchantIdx: index("held_orders_merchant_id_idx").on(table.merchantId),
+    statusIdx: index("held_orders_status_idx").on(table.merchantId, table.status),
   })
 );
 
@@ -1543,6 +1582,10 @@ export const ordersRelations = relations(orders, ({ one, many }) => ({
   customer: one(customers, { fields: [orders.customerId], references: [customers.id] }),
   items: many(orderItems),
   paymentTransactions: many(paymentTransactions),
+}));
+
+export const heldOrdersRelations = relations(heldOrders, ({ one }) => ({
+  merchant: one(merchants, { fields: [heldOrders.merchantId], references: [merchants.id] }),
 }));
 
 export const customerAddressesRelations = relations(customerAddresses, ({ one }) => ({

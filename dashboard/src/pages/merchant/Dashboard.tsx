@@ -20,6 +20,7 @@ import FloorPlan from './FloorPlan';
 import Reservations from './Reservations';
 import Newsletter from './Newsletter';
 import WebPos from './WebPos';
+import Reports from './Reports';
 import api from '@/lib/api';
 import { I18nProvider, useI18n, type Locale } from '@/lib/i18n';
 import { APP_PANEL_TITLE } from '@/lib/brand';
@@ -76,6 +77,7 @@ function MerchantShell() {
     { label: t('overview'), path: '/merchant', icon: '📊' },
     { label: t('orders'), path: '/merchant/orders', icon: '📦' },
     { label: t('webPos'), path: '/merchant/pos', icon: '🖥️' },
+    { label: t('reports'), path: '/merchant/reports', icon: '📈' },
     { label: t('products'), path: '/merchant/products', icon: '🛍️' },
     { label: t('modifiers'), path: '/merchant/modifiers', icon: '🧩' },
     { label: t('categories'), path: '/merchant/categories', icon: '🏷️' },
@@ -120,6 +122,7 @@ function MerchantShell() {
             <Route index element={<Overview />} />
             <Route path="orders" element={<Orders />} />
             <Route path="pos" element={<WebPos appMode={hideChrome} />} />
+            <Route path="reports" element={<Reports />} />
             <Route path="products" element={<Products />} />
             <Route path="modifiers" element={<Modifiers />} />
             <Route path="categories" element={<Categories />} />
