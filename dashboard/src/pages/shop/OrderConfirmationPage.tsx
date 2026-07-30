@@ -101,7 +101,7 @@ export default function OrderConfirmationPage() {
         clearCart(shopKey);
       }
     } catch (e: any) {
-      setError(e.response?.data?.error || 'Order not found');
+      setError(e.response?.data?.error || '{t('shopOrderNotFound')}');
     } finally {
       setLoading(false);
     }
@@ -158,7 +158,7 @@ export default function OrderConfirmationPage() {
         setDemoMode(true);
         setPayMsg(
           e.response?.data?.error ||
-            'Card payments are not configured for this shop — you can confirm with the demo button.'
+            '{t('shopCardNotConfigured')}'
         );
       }
     })();
@@ -198,7 +198,7 @@ export default function OrderConfirmationPage() {
         dropinMounted.current = true;
       } catch {
         setDemoMode(true);
-        setPayMsg('Card payment form unavailable — use demo confirm below.');
+        setPayMsg(t('shopCardFormUnavailable'));
       }
     })();
 

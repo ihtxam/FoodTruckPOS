@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useI18n } from '@/lib/i18n';
 import type { ShopSelectedExtra } from '@/lib/shop-cart';
 import { roundMoney2 } from '@/lib/money';
 
@@ -74,6 +75,7 @@ function groupMax(g: ShopModifierGroup) {
 }
 
 export default function ShopProductModifiersModal({ product, onClose, onConfirm }: Props) {
+  const { t } = useI18n();
   const groups = useMemo(() => effectiveGroups(product), [product]);
   const [selection, setSelection] = useState<Record<string, string[]>>(() => initialSelection(groups));
   const [error, setError] = useState<string | null>(null);
@@ -127,13 +129,13 @@ export default function ShopProductModifiersModal({ product, onClose, onConfirm 
       if (count < min) {
         setError(
           min === 1
-            ? `Please choose an option for "${g.title}"`
-            : `Please choose at least ${min} options for "${g.title}"`
+            ? t('shopChooseOptionFor').replace('{name}', g.title)
+            : t('shopChooseOptionFor').replace('{name}', g.title)
         );
         return;
       }
       if (count > max) {
-        setError(`Too many options for "${g.title}"`);
+        setError(t('shopTooManyOptions').replace('{name}', g.title));
         return;
       }
     }
@@ -149,10 +151,10 @@ export default function ShopProductModifiersModal({ product, onClose, onConfirm 
         <div className="px-5 py-4 border-b border-stone-200 flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h2 className="text-lg font-bold tracking-tight truncate">{product.name}</h2>
-            <p className="text-sm text-stone-500 mt-0.5">Customize your item</p>
+            <p className="text-sm text-stone-500 mt-0.5">{t('shopCustomizeItem')}</p>
           </div>
           <button type="button" className="text-sm font-semibold text-stone-600 shrink-0" onClick={onClose}>
-            Close
+            {t('close')}
           </button>
         </div>
 
@@ -164,10 +166,10 @@ export default function ShopProductModifiersModal({ product, onClose, onConfirm 
             return (
               <section key={g.id}>
                 <div className="flex items-baseline justify-between gap-2 mb-2">
-                  <h3 className="font-semibold text-stone-900">{g.title}</h3>
+                  <h3 className="font-semibold text-stone-900">{g.title === 'Extras' ? t('shopExtras') : g.title}</h3>
                   <span className="text-xs text-stone-500">
-                    {g.selectionType === 'required' || min > 0 ? 'Required' : 'Optional'}
-                    {max > 1 ? ` · up to ${max}` : ''}
+                    {g.selectionType === 'required' || min > 0 ? t('shopRequired') : t('shopOptional')}
+                    {max > 1 ? ` · ${t('shopUpTo').replace('{n}', String(max))}` : ''}
                   </span>
                 </div>
                 <ul className="space-y-2">
@@ -186,7 +188,7 @@ export default function ShopProductModifiersModal({ product, onClose, onConfirm 
                           />
                           <span className="flex-1 text-sm font-medium text-stone-900">{opt.name}</span>
                           <span className="text-sm text-stone-600">
-                            {opt.price > 0 ? `+CHF ${opt.price.toFixed(2)}` : 'Included'}
+                            {opt.price > 0 ? `+CHF ${opt.price.toFixed(2)}` : t('shopIncluded')}
                           </span>
                         </label>
                       </li>
@@ -201,7 +203,7 @@ export default function ShopProductModifiersModal({ product, onClose, onConfirm 
         <div className="border-t border-stone-200 px-5 py-4 space-y-3">
           {error && <p className="text-sm text-red-600">{error}</p>}
           <div className="flex justify-between text-sm">
-            <span className="text-stone-500">Item total</span>
+            <span className="text-stone-500">{t('shopItemTotal')}</span>
             <span className="font-semibold">CHF {unitPrice.toFixed(2)}</span>
           </div>
           <button
@@ -209,7 +211,7 @@ export default function ShopProductModifiersModal({ product, onClose, onConfirm 
             onClick={confirm}
             className="w-full bg-stone-900 text-white py-3 font-semibold"
           >
-            Add to basket
+            {t('shopAddToBasket')}
           </button>
         </div>
       </div>

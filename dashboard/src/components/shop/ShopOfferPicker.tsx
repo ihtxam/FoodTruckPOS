@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useI18n } from '@/lib/i18n';
 import { X } from 'lucide-react';
 import { roundMoney2 } from '@/lib/money';
 
@@ -76,6 +77,7 @@ type Props = {
  * Interactive picker for 2+1 / package / BOGO: choose paid + free products, add to cart now.
  */
 export default function ShopOfferPicker({ offer, products, priceOf, onClose, onConfirm }: Props) {
+  const { t } = useI18n();
   const rules = offer.rules || {};
   const isPackage = offer.offerType === 'package_deal';
   const isPayN = offer.offerType === 'pay_n_get_m';
@@ -147,7 +149,7 @@ export default function ShopOfferPicker({ offer, products, priceOf, onClose, onC
 
     let paidPrices: number[];
     if (isPackage && packagePrice > 0 && paidProducts.length) {
-      // Distribute package price across paid lines; free = 0
+      // Distribute {t('shopPackagePrice')} across paid lines; free = 0
       paidPrices = paidCatalogs.map((c) =>
         paidSum > 0 ? roundMoney2((c / paidSum) * packagePrice) : roundMoney2(packagePrice / paidProducts.length)
       );
@@ -208,14 +210,14 @@ export default function ShopOfferPicker({ offer, products, priceOf, onClose, onC
           >
             <p className="text-xs font-semibold text-stone-900 line-clamp-2">{p.name}</p>
             {p.isCombo || p.productType === 'combo' ? (
-              <p className="mt-0.5 text-[10px] font-semibold text-amber-800">Combo — you’ll pick Main etc.</p>
+              <p className="mt-0.5 text-[10px] font-semibold text-amber-800">{t('shopComboPickHint')}</p>
             ) : null}
             <p className="mt-1 text-[11px] text-stone-600 tabular-nums">CHF {price.toFixed(2)}</p>
           </button>
         );
       })}
       {pool.length === 0 ? (
-        <p className="col-span-2 text-sm text-stone-500 py-4 text-center">No matching products</p>
+        <p className="col-span-2 text-sm text-stone-500 py-4 text-center">{t('shopNoMatchingProducts')}</p>
       ) : null}
     </div>
   );
@@ -239,7 +241,7 @@ export default function ShopOfferPicker({ offer, products, priceOf, onClose, onC
               <p className="mt-0.5 text-xs text-stone-600">{offer.description}</p>
             ) : null}
           </div>
-          <button type="button" onClick={onClose} className="p-1 text-stone-500" aria-label="Close">
+          <button type="button" onClick={onClose} className="p-1 text-stone-500" aria-label={t('close')}>
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -248,7 +250,7 @@ export default function ShopOfferPicker({ offer, products, priceOf, onClose, onC
           <section className="space-y-2">
             <div className="flex items-center justify-between gap-2">
               <h3 className="text-sm font-semibold text-stone-900">
-                Paid — pick {buyQty}
+                {t('shopPaidPick').replace('{n}', String(buyQty))}
               </h3>
               <span className="text-xs text-stone-500">
                 {paidIds.length}/{buyQty}
@@ -267,7 +269,7 @@ export default function ShopOfferPicker({ offer, products, priceOf, onClose, onC
             <section className="space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <h3 className="text-sm font-semibold text-amber-900">
-                  Free — pick {getQty}
+                  {t('shopFreePick').replace('{n}', String(getQty))}
                 </h3>
                 <span className="text-xs text-stone-500">
                   {freeIds.length}/{getQty}
@@ -285,26 +287,26 @@ export default function ShopOfferPicker({ offer, products, priceOf, onClose, onC
 
           {previewTotal != null ? (
             <p className="text-sm font-semibold text-stone-900 tabular-nums">
-              Deal total: CHF {previewTotal.toFixed(2)}
+              {t('shopDealTotal')}: CHF {previewTotal.toFixed(2)}
               {isPackage && packagePrice > 0 ? (
                 <span className="ml-2 text-xs font-normal text-stone-500">package price</span>
               ) : (
-                <span className="ml-2 text-xs font-normal text-amber-800">{getQty} free</span>
+                <span className="ml-2 text-xs font-normal text-amber-800">{t('shopNFree').replace('{n}', String(getQty))}</span>
               )}
             </p>
           ) : (
             <p className="text-xs text-stone-500">
-              Select {buyQty} paid{getQty > 0 ? ` and ${getQty} free` : ''} to add this deal to your cart.
+              {t('shopSelectDealHint').replace('{paid}', String(buyQty)).replace('{freePart}', getQty > 0 ? t('shopAndNFree').replace('{n}', String(getQty)) : '')}
             </p>
           )}
           <p className="text-[11px] text-stone-500">
-            Combo meals (e.g. Family-first) need Main / Side / Drink picks — you’ll choose those next.
+            {t('shopComboNextHint')}
           </p>
         </div>
 
         <div className="sticky bottom-0 border-t border-stone-200 bg-white px-4 py-3 flex gap-2">
           <button type="button" onClick={onClose} className="flex-1 border border-stone-300 py-3 text-sm font-semibold">
-            Cancel
+            {t('cancel')}
           </button>
           <button
             type="button"
@@ -312,7 +314,7 @@ export default function ShopOfferPicker({ offer, products, priceOf, onClose, onC
             onClick={confirm}
             className="flex-1 bg-amber-700 text-white py-3 text-sm font-semibold disabled:opacity-40"
           >
-            Add to cart
+            {t('shopAddToCart')}
           </button>
         </div>
       </div>

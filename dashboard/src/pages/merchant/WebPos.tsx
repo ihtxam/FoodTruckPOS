@@ -138,18 +138,20 @@ type WebPosPaymentConfig = {
   terminals: WebPosTerminal[];
 };
 
-const CHANNELS: { id: Channel; label: string }[] = [
-  { id: 'takeaway', label: 'Take away' },
-  { id: 'dine_in', label: 'Dine in' },
-  { id: 'delivery', label: 'Delivery' },
-];
-
 function money(n: number) {
   return `CHF ${n.toFixed(2)}`;
 }
 
 export default function WebPos({ appMode = true }: { appMode?: boolean }) {
   const { t } = useI18n();
+  const channels = useMemo(
+    () => [
+      { id: 'takeaway' as Channel, label: t('takeaway') },
+      { id: 'dine_in' as Channel, label: t('dineIn') },
+      { id: 'delivery' as Channel, label: t('delivery') },
+    ],
+    [t]
+  );
   const [loading, setLoading] = useState(true);
   const [merchant, setMerchant] = useState<any>(null);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -315,7 +317,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
       );
       await refreshAgent();
     } catch (e: any) {
-      toast.error(e.response?.data?.error || 'Failed to load WebPOS catalog');
+      toast.error(e.response?.data?.error || t('webPosLoadFailed'));
     } finally {
       setLoading(false);
     }
@@ -426,7 +428,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
       return;
     }
     throw new Error(
-      'Print agent offline. Start ChaslayReborn Print Agent on this PC (print-agent\\start.bat), then click Refresh printers.'
+      'Print agent offline. Start ChaslayReborn Print Agent on this PC (print-agent\\start.bat), then click {t('webPosRefreshPrinters')}.'
     );
   };
 
@@ -629,14 +631,14 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
 
   const openCashDrawer = async () => {
     if (!canDrawer) {
-      toast.error('You do not have permission to open the cash drawer');
+      toast.error(t('webPosDrawerDenied'));
       return;
     }
     try {
       await openCashDrawerViaAgent({ printerName: printerName || undefined });
-      toast.success('Cash drawer opened');
+      toast.success(t('webPosDrawerOpened'));
     } catch (e: any) {
-      toast.error(e.message || 'Could not open cash drawer');
+      toast.error(e.message || t('webPosDrawerFailed'));
     }
   };
 
@@ -656,7 +658,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
     };
     setWebposStaff(session);
     saveWebPosStaffSession(session);
-    toast.success(`Signed in as ${staff.name}`);
+    toast.success(t('webPosSignedInAs').replace('{name}', staff.name));
   };
 
   const enabledMethods = {
@@ -674,7 +676,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-[var(--text-muted)]">
-        Loading WebPOS…
+        {t('webPosLoading')}
       </div>
     );
   }
@@ -684,16 +686,18 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
       <div className="shrink-0 border-b border-[var(--border)] px-3 pt-3 pb-2 space-y-3">
         <div className="flex items-center justify-between gap-2">
           <div>
-            <p className="text-sm font-semibold tracking-tight">Current order</p>
+            <p className="text-sm font-semibold tracking-tight">{t('webPosCurrentOrder')}</p>
             <p className="text-[11px] text-[var(--text-muted)]">
-              {cartCount === 0 ? 'No items yet' : `${cartCount} item${cartCount === 1 ? '' : 's'}`}
+              {cartCount === 0
+                ? t('webPosNoItems')
+                : (cartCount === 1 ? t('webPosItemCount') : t('webPosItemCountPlural')).replace('{n}', String(cartCount))}
             </p>
           </div>
           {opts?.showClose ? (
             <button
               type="button"
               className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--border)]"
-              aria-label="Close cart"
+              aria-label={t('webPosCloseCart')}
               onClick={() => setMobileCartOpen(false)}
             >
               <X size={18} />
@@ -701,7 +705,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
           ) : null}
         </div>
         <div className="grid grid-cols-3 gap-1 rounded-xl bg-[var(--bg-muted)] p-1">
-          {CHANNELS.map((c) => (
+          {channels.map((c) => (
             <button
               key={c.id}
               type="button"
@@ -722,7 +726,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
         {cart.length === 0 ? (
           <div className="flex h-full min-h-[8rem] flex-col items-center justify-center gap-2 text-center px-4">
             <ShoppingBag className="text-[var(--text-muted)] opacity-50" size={28} />
-            <p className="text-sm text-[var(--text-muted)]">Tap products to add them</p>
+            <p className="text-sm text-[var(--text-muted)]">{t('webPosTapProducts')}</p>
           </div>
         ) : (
           cart.map((l) => (
@@ -742,7 +746,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
                 <button
                   type="button"
                   className="shrink-0 rounded-md p-1 text-[var(--text-muted)] hover:bg-[var(--bg-muted)] hover:text-[var(--danger)]"
-                  aria-label="Remove item"
+                  aria-label={t('webPosRemoveItem')}
                   onClick={() => setQty(l.lineId, 0)}
                 >
                   <X size={14} />
@@ -776,16 +780,16 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
       <div className="shrink-0 border-t border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-3 space-y-2.5">
         <div className="space-y-1 text-sm">
           <div className="flex justify-between text-[var(--text-muted)]">
-            <span>Subtotal</span>
+            <span>{t('webPosSubtotal')}</span>
             <span className="tabular-nums">{money(totals.subtotal)}</span>
           </div>
           <div className="flex justify-between text-[var(--text-muted)]">
-            <span>Tax ({taxRate}%)</span>
+            <span>{t('webPosTax').replace('{rate}', String(taxRate))}</span>
             <span className="tabular-nums">{money(totals.tax)}</span>
           </div>
           {totals.rounding !== 0 && (
             <div className="flex justify-between text-[var(--text-muted)]">
-              <span>Rounding</span>
+              <span>{t('webPosRounding')}</span>
               <span className="tabular-nums">
                 {totals.rounding > 0 ? '+' : ''}
                 {money(totals.rounding)}
@@ -793,7 +797,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
             </div>
           )}
           <div className="flex items-end justify-between pt-1">
-            <span className="text-base font-semibold">Total</span>
+            <span className="text-base font-semibold">{t('webPosTotal')}</span>
             <span className="text-2xl font-bold tracking-tight tabular-nums">{money(totals.total)}</span>
           </div>
         </div>
@@ -806,7 +810,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
             className="inline-flex w-full items-center justify-center gap-2 rounded-xl border-2 border-amber-500 bg-amber-50 py-2.5 text-sm font-semibold text-amber-900 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Zap size={16} />
-            Express · {money(totals.total)}
+            {t('webPosExpress')} · {money(totals.total)}
           </button>
         ) : null}
 
@@ -829,7 +833,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
                 }`}
               >
                 <Banknote size={16} />
-                Cash
+                {t('webPosCash')}
               </button>
             ) : null}
             {enabledMethods.card ? (
@@ -843,7 +847,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
                 }`}
               >
                 <CreditCard size={16} />
-                Card
+                {t('webPosCard')}
               </button>
             ) : null}
             {enabledMethods.terminal ? (
@@ -857,7 +861,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
                 }`}
               >
                 <MonitorSmartphone size={16} />
-                Terminal
+                {t('webPosTerminal')}
               </button>
             ) : null}
           </div>
@@ -865,7 +869,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
 
         {enabledMethods.terminal && paymentMethod === 'terminal' && activeTerminals.length > 0 ? (
           <label className="block text-xs">
-            <span className="mb-1 block font-medium text-[var(--text-muted)]">Terminal</span>
+            <span className="mb-1 block font-medium text-[var(--text-muted)]">{t('webPosTerminal')}</span>
             <select
               className="input w-full text-sm"
               value={selectedTerminalId}
@@ -887,12 +891,12 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
           className="w-full rounded-xl bg-teal-700 py-3.5 text-base font-semibold text-white shadow-sm transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {busy && !paymentModalOpen
-            ? 'Processing…'
+            ? t('webPosProcessing')
             : paymentMethod === 'terminal' && cart.length
-              ? `Pay ${money(totals.total)} on terminal`
+              ? t('webPosPayOnTerminal').replace('{amount}', money(totals.total))
               : cart.length
-                ? `Charge ${money(totals.total)}`
-                : 'Add items to charge'}
+                ? t('webPosCharge').replace('{amount}', money(totals.total))
+                : t('webPosAddItemsToCharge')}
         </button>
 
         {lastReceipt ? (
@@ -906,7 +910,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
             }
           >
             <Printer size={15} />
-            Re-print last receipt
+            {t('webPosReprint')}
           </button>
         ) : null}
 
@@ -917,7 +921,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
               className="flex w-full items-center justify-between text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]"
               onClick={() => setRecentOpen((v) => !v)}
             >
-              Recent sales
+              {t('webPosRecentSales')}
               <span>{recentOpen ? '−' : '+'}</span>
             </button>
             {recentOpen ? (
@@ -964,11 +968,11 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
               <span
                 className={`h-1.5 w-1.5 rounded-full ${agentOk ? 'bg-emerald-500' : 'bg-amber-500'}`}
               />
-              {agentOk ? 'Printer ready' : 'Start print agent'}
+              {agentOk ? t('webPosPrinterReady') : t('webPosStartPrintAgent')}
             </span>
           </div>
           <p className="truncate text-[11px] text-[var(--text-muted)]">
-            {merchant?.name || 'Store'}
+            {merchant?.name || t('webPosStore')}
             {appMode ? ` · ${t('webPosEscHint')}` : ''}
           </p>
         </div>
@@ -979,7 +983,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
               type="button"
               className="hidden sm:inline-flex h-10 max-w-[8rem] items-center gap-1.5 truncate rounded-xl border border-[var(--border)] px-2.5 text-xs font-medium"
               onClick={() => setPinModalOpen(true)}
-              title="Switch user"
+              title={t('webPosSwitchUser')}
             >
               <UserCircle2 size={16} className="shrink-0" />
               <span className="truncate">{webposStaff.name}</span>
@@ -988,7 +992,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
           <button
             type="button"
             className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--border)] hover:bg-[var(--bg-muted)] disabled:opacity-40"
-            aria-label="Switch user"
+            aria-label={t('webPosSwitchUser')}
             onClick={() => setPinModalOpen(true)}
           >
             <UserCircle2 size={18} />
@@ -997,8 +1001,8 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
             <button
               type="button"
               className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--border)] hover:bg-[var(--bg-muted)]"
-              aria-label="Open cash drawer"
-              title="Open cash drawer"
+              aria-label={t('webPosOpenDrawer')}
+              title={t('webPosOpenDrawer')}
               onClick={() => void openCashDrawer()}
             >
               <Vault size={18} />
@@ -1017,7 +1021,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
             <button
               type="button"
               className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--border)] hover:bg-[var(--bg-muted)]"
-              aria-label="Printer & tools"
+              aria-label={t('webPosPrinterTools')}
               aria-expanded={settingsOpen}
               onClick={() => setSettingsOpen((v) => !v)}
             >
@@ -1027,21 +1031,21 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
               <div className="absolute right-0 top-[calc(100%+6px)] w-[min(20rem,calc(100vw-1.5rem))] rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-3 shadow-lg space-y-3">
                 <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
                   <Printer size={14} />
-                  Printing
+                  {t('webPosPrinting')}
                 </div>
                 <label className="block space-y-1 text-sm">
-                  <span className="text-xs text-[var(--text-muted)]">Printer</span>
+                  <span className="text-xs text-[var(--text-muted)]">{t('webPosPrinter')}</span>
                   <select
                     className="input"
                     value={printerName}
                     onChange={(e) => setPrinterName(e.target.value)}
                     disabled={!agentOk}
                   >
-                    <option value="">Default printer</option>
+                    <option value="">{t('webPosDefaultPrinter')}</option>
                     {printers.map((p) => (
                       <option key={p.name} value={p.name}>
                         {p.name}
-                        {p.isDefault ? ' (default)' : ''}
+                        {p.isDefault ? t('webPosDefaultSuffix') : ''}
                       </option>
                     ))}
                   </select>
@@ -1053,7 +1057,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
                     checked={autoPrint}
                     onChange={(e) => setAutoPrint(e.target.checked)}
                   />
-                  Auto-print after sale
+                  {t('webPosAutoPrint')}
                 </label>
                 <div className="grid grid-cols-1 gap-1.5">
                   <button
@@ -1061,7 +1065,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
                     className="btn-secondary justify-start text-sm"
                     onClick={() => {
                       void refreshAgent();
-                      toast.success('Printers refreshed');
+                      toast.success(t('webPosPrintersRefreshed'));
                     }}
                   >
                     <RefreshCw size={14} />
@@ -1076,13 +1080,11 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
                     }}
                   >
                     <RefreshCw size={14} />
-                    Reload catalog
+                    {t('webPosReloadCatalog')}
                   </button>
                 </div>
                 <p className="text-[11px] leading-snug text-[var(--text-muted)]">
-                  {agentOk
-                    ? 'Print agent online — receipts print silently to your Windows printer (no popup).'
-                    : 'Start ChaslayReborn Print Agent on this PC: FoodTruckPOS\\print-agent\\start.bat — then Refresh printers. Set your thermal printer as Windows default, or pick it in the list above.'}
+                  {agentOk ? t('webPosAgentOnline') : t('webPosAgentOffline')}
                 </p>
               </div>
             ) : null}
@@ -1096,7 +1098,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
               title={t('webPosShowPanel')}
             >
               <PanelLeft size={16} />
-              <span className="hidden sm:inline">Menus</span>
+              <span className="hidden sm:inline">{t('webPosMenus')}</span>
             </button>
           ) : (
             <button type="button" className="btn-primary h-10 text-sm" onClick={enterPosApp}>
@@ -1117,7 +1119,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
               />
               <input
                 className="input h-11 rounded-xl pl-9 text-base sm:text-sm"
-                placeholder="Search products…"
+                placeholder={t('webPosSearchProducts')}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 autoComplete="off"
@@ -1133,7 +1135,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
                     : 'bg-[var(--bg-muted)] text-[var(--text)] hover:bg-[var(--border)]'
                 }`}
               >
-                All
+                {t('webPosAllCategories')}
               </button>
               {categories.map((c) => (
                 <button
@@ -1155,7 +1157,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
           <div className="min-h-0 flex-1 overflow-auto p-3 pb-24 sm:p-4 lg:pb-4">
             {visibleProducts.length === 0 ? (
               <div className="flex h-full min-h-[12rem] items-center justify-center text-sm text-[var(--text-muted)]">
-                No products match
+                {t('webPosNoProductsMatch')}
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
@@ -1175,7 +1177,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
                         </span>
                         {(isCombo || hasMods) && (
                           <span className="shrink-0 rounded-md bg-[var(--bg-muted)] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
-                            {isCombo ? 'Combo' : 'Opts'}
+                            {isCombo ? t('webPosCombo') : t('webPosOpts')}
                           </span>
                         )}
                       </div>
@@ -1208,7 +1210,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
               {cartCount}
             </span>
             <span className="min-w-0">
-              <span className="block text-xs text-[var(--text-muted)]">Order total</span>
+              <span className="block text-xs text-[var(--text-muted)]">{t('webPosOrderTotal')}</span>
               <span className="block truncate text-base font-bold tabular-nums">{money(totals.total)}</span>
             </span>
           </button>
@@ -1224,7 +1226,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
             }}
             className="shrink-0 rounded-xl bg-teal-700 px-4 py-3 text-sm font-semibold text-white disabled:opacity-40"
           >
-            {busy && !paymentModalOpen ? '…' : 'Charge'}
+            {busy && !paymentModalOpen ? '…' : t('webPosChargeShort')}
           </button>
         </div>
       </div>
@@ -1235,7 +1237,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
           <button
             type="button"
             className="absolute inset-0 bg-stone-900/40"
-            aria-label="Dismiss cart"
+            aria-label={t('webPosDismissCart')}
             onClick={() => setMobileCartOpen(false)}
           />
           <div className="absolute inset-x-0 bottom-0 flex max-h-[88dvh] flex-col overflow-hidden rounded-t-2xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-2xl">

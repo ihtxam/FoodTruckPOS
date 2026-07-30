@@ -607,7 +607,7 @@ export default function OrderingPage() {
       catalogPrice: number;
     }>;
   }) => {
-    const offerName = result.offerName || pendingOffer?.name || result.offerBadge || 'Offer';
+    const offerName = result.offerName || pendingOffer?.name || result.offerBadge || t('shopOffer');
     setPendingOffer(null);
     const instanceId = newOfferInstanceId();
     const queue = result.lines.map((line) => ({
@@ -852,17 +852,17 @@ export default function OrderingPage() {
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <span className="inline-block rounded-full bg-amber-700 px-2 py-0.5 text-[10px] font-bold uppercase text-white">
-                          {block.offerBadge || 'Offer'}
+                          {block.offerBadge || t('shopOffer')}
                         </span>
                         <p className="mt-1 text-sm font-semibold text-stone-900">{block.offerName}</p>
-                        <p className="text-[11px] text-stone-500">Deal locked — remove as a set</p>
+                        <p className="text-[11px] text-stone-500">{t('shopDealLocked')}</p>
                       </div>
                       <button
                         type="button"
                         className="shrink-0 text-xs font-semibold text-stone-600 underline"
                         onClick={() => removeOfferFromCart(block.offerInstanceId)}
                       >
-                        Remove
+                        {t('shopRemove')}
                       </button>
                     </div>
                     <ul className="space-y-1.5 border-t border-amber-100 pt-2">
@@ -901,7 +901,7 @@ export default function OrderingPage() {
                       ))}
                     </ul>
                     <div className="flex justify-between text-sm font-semibold tabular-nums pt-1 border-t border-amber-100">
-                      <span>Deal total</span>
+                      <span>{t('shopDealTotal')}</span>
                       <span>
                         {block.catalogTotal > block.total + 0.001 ? (
                           <>
@@ -1278,7 +1278,7 @@ export default function OrderingPage() {
         <div>
           {shopOffers.length > 0 ? (
             <div className="mb-5 space-y-2">
-              <h2 className="text-sm font-bold uppercase tracking-wide text-amber-800">Offers</h2>
+              <h2 className="text-sm font-bold uppercase tracking-wide text-amber-800">{t('shopOffers')}</h2>
               <div className="flex gap-2 overflow-x-auto pb-1">
                 {shopOffers.map((o) => {
                   const clickable = isPickableDeal(o.offerType);

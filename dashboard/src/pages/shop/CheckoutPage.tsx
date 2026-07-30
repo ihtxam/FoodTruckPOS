@@ -560,7 +560,7 @@ export default function CheckoutPage() {
       });
       setSelectedAddressId(saved.id);
     } catch (e: any) {
-      setError(e.response?.data?.error || 'Could not save address');
+      setError(e.response?.data?.error || 't('shopCouldNotSaveAddress')');
     } finally {
       setSavingAddress(false);
     }
@@ -1262,7 +1262,7 @@ export default function CheckoutPage() {
 
               {offerDiscount > 0 ? (
                 <p className="text-sm text-amber-800 bg-amber-50 border border-amber-100 px-3 py-2">
-                  {(offerLabels.join(', ') || 'Offer') + `: − CHF ${offerDiscount.toFixed(2)}`}
+                  {(offerLabels.join(', ') || t('shopOffer')) + `: − CHF ${offerDiscount.toFixed(2)}`}
                 </p>
               ) : null}
 
@@ -1550,10 +1550,10 @@ export default function CheckoutPage() {
                         <div className="flex items-start justify-between gap-2">
                           <div>
                             <span className="inline-block rounded-full bg-amber-700 px-2 py-0.5 text-[10px] font-bold uppercase text-white">
-                              {block.offerBadge || 'Offer'}
+                              {block.offerBadge || t('shopOffer')}
                             </span>
                             <p className="mt-1 font-semibold">{block.offerName}</p>
-                            <p className="text-[11px] text-stone-500">Deal locked — remove as a set</p>
+                            <p className="text-[11px] text-stone-500">{t('shopDealLocked')}</p>
                           </div>
                           <button
                             type="button"
@@ -1590,7 +1590,7 @@ export default function CheckoutPage() {
                           ))}
                         </ul>
                         <div className="flex justify-between font-semibold border-t border-amber-100 pt-1">
-                          <span>Deal total</span>
+                          <span>{t('shopDealTotal')}</span>
                           <span>CHF {block.total.toFixed(2)}</span>
                         </div>
                       </li>
@@ -1706,7 +1706,7 @@ export default function CheckoutPage() {
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <span className="inline-block rounded-full bg-amber-700 px-2 py-0.5 text-[10px] font-bold uppercase text-white">
-                          {block.offerBadge || 'Offer'}
+                          {block.offerBadge || t('shopOffer')}
                         </span>
                         <p className="mt-1 font-semibold text-sm">{block.offerName}</p>
                       </div>
@@ -1730,7 +1730,7 @@ export default function CheckoutPage() {
                       </div>
                     ))}
                     <div className="flex justify-between font-semibold border-t border-amber-100 pt-1">
-                      <span>Deal total</span>
+                      <span>{t('shopDealTotal')}</span>
                       <span>CHF {block.total.toFixed(2)}</span>
                     </div>
                   </li>
@@ -1799,7 +1799,7 @@ export default function CheckoutPage() {
             </div>
             {offerDiscount > 0 && (
               <div className="flex justify-between text-amber-800">
-                <span>{offerLabels.join(', ') || 'Offer'}</span>
+                <span>{offerLabels.join(', ') || t('shopOffer')}</span>
                 <span>− CHF {offerDiscount.toFixed(2)}</span>
               </div>
             )}

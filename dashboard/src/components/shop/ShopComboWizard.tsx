@@ -1,4 +1,5 @@
 import { useMemo, useState, type Dispatch, type SetStateAction } from 'react';
+import { useI18n } from '@/lib/i18n';
 import type { ShopSelectedExtra } from '@/lib/shop-cart';
 import { roundMoney2 } from '@/lib/money';
 import type { ShopModifierGroup } from '@/components/shop/ShopProductModifiersModal';
@@ -101,6 +102,7 @@ function productHasComboSlots(product: { productType?: string; comboSlots?: Comb
 export { productHasComboSlots };
 
 export default function ShopComboWizard({ product, onClose, onConfirm }: Props) {
+  const { t } = useI18n();
   const slots = product.comboSlots || [];
   const [phase, setPhase] = useState<Phase>({ kind: 'pick', slotIndex: 0 });
   const [selections, setSelections] = useState<ComboSelection[]>([]);
@@ -348,14 +350,14 @@ export default function ShopComboWizard({ product, onClose, onConfirm }: Props) 
         <div className="px-5 py-4 border-b border-stone-200">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-wide text-teal-800">Combo</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-teal-800">{t('shopCombo')}</p>
               <h2 className="text-lg font-bold tracking-tight truncate">{product.name}</h2>
               <p className="text-sm text-stone-500 mt-0.5">
-                Step {progressLabel} · from CHF {product.price.toFixed(2)}
+                {t('shopStepFrom').replace('{step}', String(progressLabel)).replace('{price}', product.price.toFixed(2))}
               </p>
             </div>
             <button type="button" className="text-sm font-semibold text-stone-600 shrink-0" onClick={onClose}>
-              Close
+              {t('close')}
             </button>
           </div>
           <div className="mt-3 h-1.5 bg-stone-100 overflow-hidden">
@@ -378,7 +380,7 @@ export default function ShopComboWizard({ product, onClose, onConfirm }: Props) 
           {phase.kind === 'pick' && currentSlot && (
             <div>
               <h3 className="text-base font-semibold text-stone-900 mb-1">{currentSlot.name}</h3>
-              <p className="text-sm text-stone-500 mb-4">Choose one to continue</p>
+              <p className="text-sm text-stone-500 mb-4">{t('shopChooseOneContinue')}</p>
               <div className="grid grid-cols-2 gap-3">
                 {currentSlot.options.map((opt) => (
                   <button
@@ -403,7 +405,7 @@ export default function ShopComboWizard({ product, onClose, onConfirm }: Props) 
                     <div className="p-2.5">
                       <div className="text-sm font-semibold text-stone-900 line-clamp-2">{opt.name}</div>
                       <div className="text-xs text-stone-600 mt-1">
-                        {opt.extraPrice > 0 ? `+CHF ${opt.extraPrice.toFixed(2)}` : 'Included'}
+                        {opt.extraPrice > 0 ? `+CHF ${opt.extraPrice.toFixed(2)}` : t('shopIncluded')}
                         {optionHasExtras(opt) ? ' · extras' : ''}
                       </div>
                     </div>
@@ -420,7 +422,7 @@ export default function ShopComboWizard({ product, onClose, onConfirm }: Props) 
                 className="text-sm font-medium text-stone-600 mb-3"
                 onClick={() => setPhase({ kind: 'pick', slotIndex: phase.slotIndex })}
               >
-                ← Back
+                {t('shopBack')}
               </button>
               <div className="flex gap-3 mb-4">
                 <div className="w-16 h-16 bg-stone-100 shrink-0 overflow-hidden">
@@ -430,7 +432,7 @@ export default function ShopComboWizard({ product, onClose, onConfirm }: Props) 
                 </div>
                 <div>
                   <h3 className="font-semibold text-stone-900">{phase.option.name}</h3>
-                  <p className="text-sm text-stone-500">Add free or paid extras</p>
+                  <p className="text-sm text-stone-500">{t('shopAddExtras')}</p>
                 </div>
               </div>
               {renderExtrasEditor(effectiveGroups(phase.option), extraSelection, setExtraSelection)}
@@ -439,15 +441,15 @@ export default function ShopComboWizard({ product, onClose, onConfirm }: Props) 
 
           {phase.kind === 'combo_extras' && (
             <div>
-              <h3 className="font-semibold text-stone-900 mb-1">Combo extras</h3>
-              <p className="text-sm text-stone-500 mb-4">Optional add-ons for the whole meal</p>
+              <h3 className="font-semibold text-stone-900 mb-1">{t('shopComboExtras')}</h3>
+              <p className="text-sm text-stone-500 mb-4">{t('shopComboExtrasHint')}</p>
               {renderExtrasEditor(comboGroups, comboExtraSelection, setComboExtraSelection)}
             </div>
           )}
 
           {phase.kind === 'summary' && (
             <div className="space-y-3">
-              <h3 className="font-semibold text-stone-900">Your combo</h3>
+              <h3 className="font-semibold text-stone-900">{t('shopYourCombo')}</h3>
               <ul className="space-y-3">
                 {selections.map((sel) => (
                   <li key={sel.slotId} className="flex gap-3 border border-stone-200 p-2.5">
@@ -483,7 +485,7 @@ export default function ShopComboWizard({ product, onClose, onConfirm }: Props) 
         <div className="border-t border-stone-200 px-5 py-4 space-y-3">
           {error && <p className="text-sm text-red-600">{error}</p>}
           <div className="flex justify-between text-sm">
-            <span className="text-stone-500">Running total</span>
+            <span className="text-stone-500">{t('shopRunningTotal')}</span>
             <span className="font-semibold">
               CHF {(phase.kind === 'summary' ? unitPrice : runningTotal).toFixed(2)}
             </span>
@@ -495,7 +497,7 @@ export default function ShopComboWizard({ product, onClose, onConfirm }: Props) 
               onClick={confirmSlotExtras}
               className="w-full bg-stone-900 text-white py-3 font-semibold"
             >
-              Continue
+              {t('shopContinue')}
             </button>
           )}
           {phase.kind === 'combo_extras' && (
@@ -504,7 +506,7 @@ export default function ShopComboWizard({ product, onClose, onConfirm }: Props) 
               onClick={confirmComboExtras}
               className="w-full bg-stone-900 text-white py-3 font-semibold"
             >
-              Review combo
+              {t('shopReviewCombo')}
             </button>
           )}
           {phase.kind === 'summary' && (
@@ -517,7 +519,7 @@ export default function ShopComboWizard({ product, onClose, onConfirm }: Props) 
                   setPhase({ kind: 'pick', slotIndex: 0 });
                 }}
               >
-                Restart
+                {t('shopRestart')}
               </button>
               <button
                 type="button"
@@ -541,7 +543,7 @@ export default function ShopComboWizard({ product, onClose, onConfirm }: Props) 
                 }}
                 className="flex-1 bg-stone-900 text-white py-3 font-semibold"
               >
-                Add to basket · CHF {unitPrice.toFixed(2)}
+                {t('shopAddToBasketPrice').replace('{price}', unitPrice.toFixed(2))}
               </button>
             </div>
           )}
@@ -555,7 +557,7 @@ export default function ShopComboWizard({ product, onClose, onConfirm }: Props) 
                 setPhase({ kind: 'pick', slotIndex: prev });
               }}
             >
-              Back
+              {t('shopBack')}
             </button>
           )}
         </div>

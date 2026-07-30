@@ -1,4 +1,5 @@
 import { Loader2, X, RotateCcw, CreditCard } from 'lucide-react';
+import { useI18n } from '@/lib/i18n';
 
 export type WebPosPaymentPhase = 'processing' | 'cancelled' | 'failed';
 
@@ -21,21 +22,22 @@ export default function WebPosPaymentModal({
   onRetry,
   onClose,
 }: Props) {
+  const { t } = useI18n();
   if (!open) return null;
 
   const title =
     phase === 'processing'
-      ? 'Processing payment'
+      ? t('webPosPayProcessing')
       : phase === 'cancelled'
-        ? 'Payment cancelled'
-        : 'Payment failed';
+        ? t('webPosPayCancelled')
+        : t('webPosPayFailed');
 
   const defaultMessage =
     phase === 'processing'
-      ? 'Complete the payment on your terminal…'
+      ? t('webPosPayCompleteOnTerminal')
       : phase === 'cancelled'
-        ? 'The payment was cancelled on the terminal.'
-        : 'The terminal could not complete this payment.';
+        ? t('webPosPayCancelledMsg')
+        : t('webPosPayFailedMsg');
 
   return (
     <div
@@ -70,7 +72,7 @@ export default function WebPosPaymentModal({
               className="w-full rounded-xl border border-[var(--border)] py-2.5 text-sm font-semibold hover:bg-[var(--bg-muted)]"
               onClick={onCancel}
             >
-              Cancel
+              {t('cancel')}
             </button>
           ) : null}
 
@@ -81,7 +83,7 @@ export default function WebPosPaymentModal({
               onClick={onRetry}
             >
               <RotateCcw className="h-4 w-4" />
-              Retry payment
+              {t('webPosRetry')}
             </button>
           ) : null}
 
@@ -92,7 +94,7 @@ export default function WebPosPaymentModal({
               onClick={onClose}
             >
               <X className="h-4 w-4" />
-              Close
+              {t('webPosClose')}
             </button>
           ) : null}
         </div>

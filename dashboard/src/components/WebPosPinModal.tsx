@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Loader2, UserCircle2, X } from 'lucide-react';
 import api from '@/lib/api';
+import { useI18n } from '@/lib/i18n';
 
 export default function WebPosPinModal({
   open,
@@ -17,6 +18,7 @@ export default function WebPosPinModal({
     permissions: string[];
   }) => void;
 }) {
+  const { t } = useI18n();
   const [pin, setPin] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -44,7 +46,7 @@ export default function WebPosPinModal({
 
   const submit = async () => {
     if (pin.length < 4) {
-      setError('Enter at least 4 digits');
+      setError(t('webPosPinHint'));
       return;
     }
     setBusy(true);
@@ -53,7 +55,7 @@ export default function WebPosPinModal({
       onSuccess(res.data.staff);
       onClose();
     } catch (e: any) {
-      setError(e.response?.data?.error || 'Invalid PIN');
+      setError(e.response?.data?.error || t('webPosPinInvalid'));
       setPin('');
     } finally {
       setBusy(false);
@@ -66,7 +68,7 @@ export default function WebPosPinModal({
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <UserCircle2 className="h-5 w-5" />
-            <h2 className="font-semibold">Switch user</h2>
+            <h2 className="font-semibold">{t('webPosPinTitle')}</h2>
           </div>
           <button type="button" onClick={onClose} className="rounded-lg p-1 hover:bg-[var(--bg-muted)]">
             <X className="h-4 w-4" />
