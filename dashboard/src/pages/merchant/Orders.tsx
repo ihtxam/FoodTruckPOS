@@ -33,7 +33,21 @@ interface Order {
   items?: OrderItem[];
 }
 
-type BoardTab = 'new' | 'kitchen' | 'ready' | 'all';
+type BoardTab = 'new' | 'kitchen' | 'ready' | 'programmed' | 'all';
+
+function isProgrammed(o: Order) {
+  const unpaid =
+    o.paymentStatus === 'awaiting_payment' ||
+    o.paymentMethod === 'pay_later' ||
+    o.paymentMethod === 'pay-later';
+  return (
+    o.orderType === 'pos' &&
+    unpaid &&
+    o.status !== 'completed' &&
+    o.status !== 'cancelled' &&
+    o.status !== 'refunded'
+  );
+}
 
 const CHANNEL_STYLE: Record<string, string> = {
   takeaway: 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-200 dark:border-amber-900',
@@ -107,6 +121,7 @@ export default function Orders() {
       new: online.filter((o) => isAwaiting(o.status)),
       kitchen: online.filter((o) => o.status === 'accepted' || o.status === 'preparing'),
       ready: online.filter((o) => o.status === 'ready' || o.status === 'out_for_delivery'),
+      programmed: orders.filter(isProgrammed),
       all: orders,
     }),
     [online, orders]
@@ -135,9 +150,26 @@ export default function Orders() {
     const paid = order.paymentStatus === 'completed' || order.paymentStatus === 'paid';
     const cash =
       order.paymentMethod === 'cash' ||
+      order.paymentMethod === 'pay_later' ||
+      order.paymentMethod === 'pay-later' ||
       order.paymentStatus === 'cash' ||
       order.paymentStatus === 'awaiting_payment';
     const btns: { action: string; label: string; style: string }[] = [];
+
+    if (isProgrammed(order)) {
+      if (s === 'accepted') {
+        btns.push({ action: 'start_preparing', label: 'Start kitchen', style: 'bg-slate-900' });
+      }
+      if (s === 'preparing' || s === 'accepted') {
+        btns.push({ action: 'mark_ready', label: 'Mark ready', style: 'bg-teal-600' });
+      }
+      btns.push({
+        action: 'complete_and_collect',
+        label: t('ordersCollectCash'),
+        style: 'bg-emerald-700',
+      });
+      return btns;
+    }
 
     if (isAwaiting(s)) {
       btns.push({ action: 'accept', label: 'Accept', style: 'bg-emerald-600' });
@@ -184,7 +216,9 @@ export default function Orders() {
         ? board.kitchen
         : tab === 'ready'
           ? board.ready
-          : board.all;
+          : tab === 'programmed'
+            ? board.programmed
+            : board.all;
 
   return (
     <div className="space-y-3">
@@ -217,6 +251,7 @@ export default function Orders() {
             ['new', `To approve (${board.new.length})`],
             ['kitchen', `Kitchen (${board.kitchen.length})`],
             ['ready', `Ready (${board.ready.length})`],
+            ['programmed', `${t('ordersProgrammed')} (${board.programmed.length})`],
             ['all', `All (${board.all.length})`],
           ] as const
         ).map(([id, label]) => (

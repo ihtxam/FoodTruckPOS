@@ -87,6 +87,9 @@ interface SettingsData {
     receiptFooter?: string;
     kitchenTicketHeader?: string;
     kitchenTicketFooter?: string;
+    kitchenItemTextScale?: 1 | 2 | 3;
+    kitchenHeaderTextScale?: 1 | 2 | 3;
+    kitchenBoldText?: boolean;
     receiptShowVatTable?: boolean;
     receiptShowStaffLine?: boolean;
     receiptShowQrCode?: boolean;
@@ -430,6 +433,12 @@ export default function Settings() {
           receiptFooter: ps.receiptFooter || '',
           kitchenTicketHeader: ps.kitchenTicketHeader || '',
           kitchenTicketFooter: ps.kitchenTicketFooter || '',
+          kitchenItemTextScale: ps.kitchenItemTextScale === 1 || ps.kitchenItemTextScale === 3 ? ps.kitchenItemTextScale : 2,
+          kitchenHeaderTextScale:
+            ps.kitchenHeaderTextScale === 1 || ps.kitchenHeaderTextScale === 3
+              ? ps.kitchenHeaderTextScale
+              : 2,
+          kitchenBoldText: ps.kitchenBoldText !== false,
           receiptShowVatTable: ps.receiptShowVatTable !== false,
           receiptShowStaffLine: ps.receiptShowStaffLine !== false,
           receiptShowQrCode: ps.receiptShowQrCode !== false,
@@ -1689,6 +1698,60 @@ export default function Settings() {
                     }
                   />
                 </Field>
+                <Field label={t('kitchenItemTextScale')} hint={t('kitchenTextScaleHint')}>
+                  <select
+                    className="input"
+                    value={settings.posPrintSettings?.kitchenItemTextScale || 2}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        posPrintSettings: {
+                          ...(settings.posPrintSettings || {}),
+                          kitchenItemTextScale: Number(e.target.value) as 1 | 2 | 3,
+                        },
+                      })
+                    }
+                  >
+                    <option value={1}>{t('kitchenScaleNormal')}</option>
+                    <option value={2}>{t('kitchenScaleLarge')}</option>
+                    <option value={3}>{t('kitchenScaleXLarge')}</option>
+                  </select>
+                </Field>
+                <Field label={t('kitchenHeaderTextScale')}>
+                  <select
+                    className="input"
+                    value={settings.posPrintSettings?.kitchenHeaderTextScale || 2}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        posPrintSettings: {
+                          ...(settings.posPrintSettings || {}),
+                          kitchenHeaderTextScale: Number(e.target.value) as 1 | 2 | 3,
+                        },
+                      })
+                    }
+                  >
+                    <option value={1}>{t('kitchenScaleNormal')}</option>
+                    <option value={2}>{t('kitchenScaleLarge')}</option>
+                    <option value={3}>{t('kitchenScaleXLarge')}</option>
+                  </select>
+                </Field>
+                <label className="inline-flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={settings.posPrintSettings?.kitchenBoldText !== false}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        posPrintSettings: {
+                          ...(settings.posPrintSettings || {}),
+                          kitchenBoldText: e.target.checked,
+                        },
+                      })
+                    }
+                  />
+                  {t('kitchenBoldText')}
+                </label>
                 <div className="flex flex-wrap gap-4 text-sm">
                   {(
                     [

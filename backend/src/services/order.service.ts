@@ -257,6 +257,8 @@ export class OrderService {
       order.paymentStatus === "completed" || order.paymentStatus === "paid";
     const isCash =
       order.paymentMethod === "cash" ||
+      order.paymentMethod === "pay_later" ||
+      order.paymentMethod === "pay-later" ||
       order.paymentStatus === "cash" ||
       order.paymentStatus === "awaiting_payment";
 
@@ -315,14 +317,22 @@ export class OrderService {
         return set({ status: "completed", completedAt: new Date() });
       }
       case "complete_and_collect": {
-        // Convenience for pickup cash: collect + complete in one step
-        if (status !== "ready" && status !== "out_for_delivery" && status !== "preparing") {
+        // Convenience for pickup cash / pay-later programmed orders
+        if (
+          status !== "ready" &&
+          status !== "out_for_delivery" &&
+          status !== "preparing" &&
+          status !== "accepted"
+        ) {
           throw new Error("Order is not ready to complete");
         }
         return set({
           status: "completed",
           paymentStatus: "completed",
-          paymentMethod: order.paymentMethod || "cash",
+          paymentMethod:
+            order.paymentMethod === "pay_later" || order.paymentMethod === "pay-later"
+              ? "cash"
+              : order.paymentMethod || "cash",
           completedAt: new Date(),
         });
       }

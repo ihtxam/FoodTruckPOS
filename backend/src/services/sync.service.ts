@@ -31,6 +31,8 @@ export interface SyncSalePayload {
   orderNumber?: string;
   paymentMethod: string;
   paymentStatus?: string;
+  /** Order lifecycle status; defaults completed for paid sales, accepted for pay-later */
+  status?: string;
   subtotal: number;
   taxAmount: number;
   discountAmount?: number;
@@ -38,6 +40,13 @@ export interface SyncSalePayload {
   notes?: string;
   fulfillmentChannel?: "takeaway" | "dine_in" | "delivery";
   completedAt?: string | number;
+  /** ISO / epoch — pickup or delivery time (null/omit = ASAP) */
+  scheduledFor?: string | number | null;
+  customerId?: string | null;
+  customerName?: string | null;
+  customerPhone?: string | null;
+  customerEmail?: string | null;
+  shippingAddress?: string | null;
   tableId?: string | null;
   tableLabel?: string | null;
   guestCount?: number | null;
@@ -304,6 +313,18 @@ export class SyncService {
       const total = roundTo005(
         sale.total != null ? Number(sale.total) : subtotal + taxAmount - discountAmount
       );
+      const payStatus = sale.paymentStatus || "completed";
+      const payLater =
+        payStatus === "awaiting_payment" ||
+        sale.paymentMethod === "pay_later" ||
+        sale.paymentMethod === "pay-later";
+      const scheduledFor =
+        sale.scheduledFor != null && sale.scheduledFor !== ""
+          ? new Date(sale.scheduledFor)
+          : null;
+      const status =
+        sale.status ||
+        (payLater ? (scheduledFor ? "accepted" : "preparing") : "completed");
       const [order] = await db
         .insert(schema.orders)
         .values({
@@ -311,14 +332,20 @@ export class SyncService {
           orderNumber,
           orderType: "pos",
           fulfillmentChannel: sale.fulfillmentChannel || "takeaway",
-          status: "completed",
+          status,
           subtotal: subtotal.toFixed(2),
           taxAmount: taxAmount.toFixed(2),
           discountAmount: discountAmount.toFixed(2),
           total: total.toFixed(2),
           paymentMethod: sale.paymentMethod,
-          paymentStatus: sale.paymentStatus || "completed",
+          paymentStatus: payStatus,
           notes: sale.notes,
+          scheduledFor,
+          customerId: sale.customerId || null,
+          customerName: sale.customerName || null,
+          customerPhone: sale.customerPhone || null,
+          customerEmail: sale.customerEmail || null,
+          shippingAddress: sale.shippingAddress || null,
           tableId: sale.tableId || null,
           tableLabel: sale.tableLabel || null,
           guestCount: sale.guestCount != null ? Number(sale.guestCount) : null,
@@ -326,7 +353,11 @@ export class SyncService {
           clientId: sale.clientId,
           deviceId: sale.deviceId,
           syncedAt: new Date(),
-          completedAt: sale.completedAt ? new Date(sale.completedAt) : new Date(),
+          completedAt: payLater
+            ? null
+            : sale.completedAt
+              ? new Date(sale.completedAt)
+              : new Date(),
         })
         .returning();
 

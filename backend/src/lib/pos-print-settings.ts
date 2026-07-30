@@ -19,6 +19,12 @@ export type PosPrintSettings = {
   receiptFooter?: string;
   kitchenTicketHeader?: string;
   kitchenTicketFooter?: string;
+  /** Kitchen item text scale: 1=normal, 2=double height (~12pt tall), 3=double width+height */
+  kitchenItemTextScale?: 1 | 2 | 3;
+  /** Kitchen header text scale */
+  kitchenHeaderTextScale?: 1 | 2 | 3;
+  /** Bold kitchen item/header text (default true when scale > 1) */
+  kitchenBoldText?: boolean;
   receiptShowVatTable?: boolean;
   receiptShowStaffLine?: boolean;
   receiptShowQrCode?: boolean;
@@ -40,6 +46,9 @@ export const DEFAULT_POS_PRINT_SETTINGS: Required<
   receiptFooter: "Merci / Danke / Thank you",
   kitchenTicketHeader: "",
   kitchenTicketFooter: "",
+  kitchenItemTextScale: 2,
+  kitchenHeaderTextScale: 2,
+  kitchenBoldText: true,
   receiptShowVatTable: true,
   receiptShowStaffLine: true,
   receiptShowQrCode: true,
@@ -85,11 +94,22 @@ export function normalizePosPrintSettings(raw: unknown): PosPrintSettings {
     })
     .filter(Boolean) as PosPrinterProfile[];
 
+  const itemScale = Number(src.kitchenItemTextScale);
+  const headerScale = Number(src.kitchenHeaderTextScale);
+  const kitchenItemTextScale = (itemScale === 1 || itemScale === 3 ? itemScale : 2) as 1 | 2 | 3;
+  const kitchenHeaderTextScale = (headerScale === 1 || headerScale === 3 ? headerScale : 2) as
+    | 1
+    | 2
+    | 3;
+
   return {
     receiptHeader: String(src.receiptHeader ?? "").slice(0, 2000),
     receiptFooter: String(src.receiptFooter ?? DEFAULT_POS_PRINT_SETTINGS.receiptFooter).slice(0, 2000),
     kitchenTicketHeader: String(src.kitchenTicketHeader ?? "").slice(0, 2000),
     kitchenTicketFooter: String(src.kitchenTicketFooter ?? "").slice(0, 2000),
+    kitchenItemTextScale,
+    kitchenHeaderTextScale,
+    kitchenBoldText: src.kitchenBoldText !== false,
     receiptShowVatTable: src.receiptShowVatTable !== false,
     receiptShowStaffLine: src.receiptShowStaffLine !== false,
     receiptShowQrCode: src.receiptShowQrCode !== false,
@@ -106,10 +126,10 @@ export function normalizePosPrintSettings(raw: unknown): PosPrintSettings {
 }
 
 export const POS_CANCEL_REASONS = [
-  { id: "could_not_process", en: "Could not process order", fr: "Commande impossible à traiter", de: "Bestellung konnte nicht verarbeitet werden" },
-  { id: "kitchen_busy", en: "Kitchen too busy", fr: "Cuisine trop occupée", de: "Küche überlastet" },
+  { id: "could_not_process", en: "Could not process order", fr: "Commande impossible  traiter", de: "Bestellung konnte nicht verarbeitet werden" },
+  { id: "kitchen_busy", en: "Kitchen too busy", fr: "Cuisine trop occupe", de: "Kche berlastet" },
   { id: "client_cancel", en: "Client cancellation", fr: "Annulation client", de: "Stornierung durch Gast" },
-  { id: "out_of_stock", en: "Out of stock", fr: "Rupture de stock", de: "Nicht vorrätig" },
+  { id: "out_of_stock", en: "Out of stock", fr: "Rupture de stock", de: "Nicht vorrtig" },
   { id: "wrong_order", en: "Wrong order entered", fr: "Mauvaise commande saisie", de: "Falsche Bestellung erfasst" },
   { id: "other", en: "Other", fr: "Autre", de: "Sonstiges" },
 ] as const;

@@ -23,6 +23,7 @@ import { roundMoney2, roundTo005, roundingAdjustment } from '@/lib/money';
 import { APP_NAME } from '@/lib/brand';
 import {
   filterKitchenItems,
+  generateKitchenTicketEscPos,
   generateKitchenTicketText,
   generateWebPosReceiptText,
   logoUrlToEscPos,
@@ -34,6 +35,13 @@ import {
   type WebPosReceipt,
   type WebPosReceiptItem,
 } from '@/lib/webpos-receipt';
+import WebPosFulfillmentModal, {
+  type FulfillmentWhen,
+} from '@/components/WebPosFulfillmentModal';
+import WebPosCustomerPicker, {
+  type WebPosCustomer,
+} from '@/components/WebPosCustomerPicker';
+import type { StoreHours } from '@/lib/shop-hours';
 import {
   isPrintAgentAvailable,
   listAgentPrinters,
@@ -127,7 +135,7 @@ type SaleRecord = {
   synced: boolean;
 };
 
-type PosPaymentMethod = 'cash' | 'card' | 'terminal';
+type PosPaymentMethod = 'cash' | 'card' | 'terminal' | 'pay_later';
 
 type WebPosTerminal = {
   id: string;
@@ -191,6 +199,13 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
   const [lastReceiptUrl, setLastReceiptUrl] = useState<string>('');
   const [printSettings, setPrintSettings] = useState<PosPrintSettingsClient | null>(null);
   const [ordersOpen, setOrdersOpen] = useState(false);
+  const [fulfillmentWhen, setFulfillmentWhen] = useState<FulfillmentWhen | null>(null);
+  const [selectedCustomer, setSelectedCustomer] = useState<WebPosCustomer | null>(null);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [customerOpen, setCustomerOpen] = useState(false);
+  const [pendingPayMethod, setPendingPayMethod] = useState<PosPaymentMethod | 'express' | null>(
+    null
+  );
   const [pendingProduct, setPendingProduct] = useState<ShopProductForModifiers | null>(null);
   const [pendingCombo, setPendingCombo] = useState<ShopComboProduct | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -498,20 +513,35 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
       };
     });
 
+    const kitchenOpts = {
+      businessName: merchant?.name as string | undefined,
+      channel: saleChannel,
+      language: lang,
+      header: printSettings?.kitchenTicketHeader,
+      footer: printSettings?.kitchenTicketFooter,
+      scheduledFor: fulfillmentWhen?.scheduledFor ?? null,
+      customerName: selectedCustomer
+        ? [selectedCustomer.firstName, selectedCustomer.lastName].filter(Boolean).join(' ')
+        : null,
+      itemTextScale: printSettings?.kitchenItemTextScale || 2,
+      headerTextScale: printSettings?.kitchenHeaderTextScale || 2,
+      boldText: printSettings?.kitchenBoldText !== false,
+    };
+
     if (kitchenPrinters.length) {
       for (const kp of kitchenPrinters) {
         const items = filterKitchenItems(receiptItems, kp);
         if (!items.length) continue;
-        const text = generateKitchenTicketText({
-          businessName: merchant?.name,
-          channel: saleChannel,
+        const escpos = generateKitchenTicketEscPos({
+          ...kitchenOpts,
           items,
-          language: lang,
           paperWidthMm: kp.paperWidthMm || printSettings?.paperWidthMm || 80,
-          header: printSettings?.kitchenTicketHeader,
-          footer: printSettings?.kitchenTicketFooter,
         });
-        const escpos = textToEscPos(text);
+        const text = generateKitchenTicketText({
+          ...kitchenOpts,
+          items,
+          paperWidthMm: kp.paperWidthMm || printSettings?.paperWidthMm || 80,
+        });
         await printViaAgent({
           printerName: kp.name,
           dataBase64: uint8ToBase64(escpos),
@@ -521,58 +551,95 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
       return;
     }
 
-    // Fallback: same Windows printer as receipts
-    const text = generateKitchenTicketText({
-      businessName: merchant?.name,
-      channel: saleChannel,
+    const paperWidthMm = printSettings?.paperWidthMm || 80;
+    const escpos = generateKitchenTicketEscPos({
+      ...kitchenOpts,
       items: receiptItems,
-      language: lang,
-      paperWidthMm: printSettings?.paperWidthMm || 80,
-      header: printSettings?.kitchenTicketHeader,
-      footer: printSettings?.kitchenTicketFooter,
+      paperWidthMm,
     });
-    await printEscPosToTargets(text, { role: 'kitchen' });
+    const text = generateKitchenTicketText({
+      ...kitchenOpts,
+      items: receiptItems,
+      paperWidthMm,
+    });
+    if (!(agentOk || (await isPrintAgentAvailable()))) {
+      throw new Error(t('webPosAgentOffline'));
+    }
+    await printViaAgent({
+      printerName: printerName || undefined,
+      dataBase64: uint8ToBase64(escpos),
+      text,
+    });
   };
 
-  const buildSalePayload = (clientId: string, method: PosPaymentMethod) => ({
-    clientId,
-    paymentMethod: method,
-    paymentStatus: 'completed',
-    subtotal: totals.subtotal,
-    taxAmount: totals.tax,
-    discountAmount: 0,
-    total: totals.total,
-    fulfillmentChannel: channel,
-    completedAt: Date.now(),
-    notes: totals.rounding ? `Rounding ${totals.rounding > 0 ? '+' : ''}${totals.rounding.toFixed(2)}` : undefined,
-    items: cart.map((l) => ({
-      productClientId: l.productId,
-      productId: l.productId,
-      productName: l.name,
-      quantity: l.quantity,
-      unitPrice: l.unitPrice,
-      totalPrice: l.lineTotal,
-      taxAmount: l.taxable ? roundMoney2((l.lineTotal * taxRate) / 100) : 0,
-      selectedExtras: l.selectedExtras.map((e) => ({
-        id: e.id,
-        name: e.name,
-        price: e.price,
-      })),
-      comboSelections: l.comboSelections.map((c) => ({
-        slotId: c.slotId,
-        slotName: c.slotName,
-        productId: c.productId,
-        productName: c.productName,
-        extraPrice: c.extraPrice,
-        selectedExtras: (c.selectedExtras || []).map((e) => ({
+  const buildSalePayload = (clientId: string, method: PosPaymentMethod) => {
+    const payLater = method === 'pay_later';
+    const custName = selectedCustomer
+      ? [selectedCustomer.firstName, selectedCustomer.lastName].filter(Boolean).join(' ')
+      : undefined;
+    const ship = selectedCustomer
+      ? [selectedCustomer.defaultAddress, selectedCustomer.defaultZip, selectedCustomer.defaultCity]
+          .filter(Boolean)
+          .join(', ')
+      : undefined;
+    return {
+      clientId,
+      paymentMethod: method,
+      paymentStatus: payLater ? 'awaiting_payment' : 'completed',
+      status: payLater
+        ? fulfillmentWhen?.scheduledFor
+          ? 'accepted'
+          : 'preparing'
+        : 'completed',
+      subtotal: totals.subtotal,
+      taxAmount: totals.tax,
+      discountAmount: 0,
+      total: totals.total,
+      fulfillmentChannel: channel,
+      completedAt: payLater ? undefined : Date.now(),
+      scheduledFor: fulfillmentWhen?.scheduledFor || null,
+      customerId: selectedCustomer?.id || null,
+      customerName: custName || null,
+      customerPhone: selectedCustomer?.phone || null,
+      customerEmail: selectedCustomer?.email || null,
+      shippingAddress: ship || null,
+      notes: [
+        totals.rounding
+          ? `Rounding ${totals.rounding > 0 ? '+' : ''}${totals.rounding.toFixed(2)}`
+          : '',
+        fulfillmentWhen?.mode === 'later' ? `Pickup/delivery: ${fulfillmentWhen.label}` : '',
+      ]
+        .filter(Boolean)
+        .join(' · ') || undefined,
+      items: cart.map((l) => ({
+        productClientId: l.productId,
+        productId: l.productId,
+        productName: l.name,
+        quantity: l.quantity,
+        unitPrice: l.unitPrice,
+        totalPrice: l.lineTotal,
+        taxAmount: l.taxable ? roundMoney2((l.lineTotal * taxRate) / 100) : 0,
+        selectedExtras: l.selectedExtras.map((e) => ({
           id: e.id,
           name: e.name,
           price: e.price,
         })),
+        comboSelections: l.comboSelections.map((c) => ({
+          slotId: c.slotId,
+          slotName: c.slotName,
+          productId: c.productId,
+          productName: c.productName,
+          extraPrice: c.extraPrice,
+          selectedExtras: (c.selectedExtras || []).map((e) => ({
+            id: e.id,
+            name: e.name,
+            price: e.price,
+          })),
+        })),
+        isOpenPrice: false,
       })),
-      isOpenPrice: false,
-    })),
-  });
+    };
+  };
 
   const closePaymentModal = () => {
     paymentAbortRef.current?.abort();
@@ -648,9 +715,16 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
       ].slice(0, 30)
     );
     setCart([]);
-    toast.success(t('webPosSaleCompleteAmount').replace('{amount}', money(totals.total)));
+    setFulfillmentWhen(null);
+    setSelectedCustomer(null);
+    const payLater = method === 'pay_later';
+    toast.success(
+      payLater
+        ? t('webPosProgrammedSaved')
+        : t('webPosSaleCompleteAmount').replace('{amount}', money(totals.total))
+    );
     const shouldPrintReceipt =
-      autoPrint && printSettings?.autoPrintReceipt !== false;
+      !payLater && autoPrint && printSettings?.autoPrintReceipt !== false;
     if (shouldPrintReceipt) {
       try {
         await printReceipt(receiptText, receiptUrl);
@@ -662,6 +736,49 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
       await printKitchenForCart(cartSnapshot, channelSnapshot);
     } catch (e: any) {
       toast.error(e.message || t('webPosKitchenPrintFailed'));
+    }
+  };
+
+  const beginCheckout = (method: PosPaymentMethod | 'express') => {
+    if (!cart.length || busy || paymentModalOpen) return;
+    const needsSchedule = channel === 'takeaway' || channel === 'delivery';
+    if (needsSchedule && !fulfillmentWhen) {
+      setPendingPayMethod(method);
+      setScheduleOpen(true);
+      return;
+    }
+    if (channel === 'delivery' && !selectedCustomer) {
+      setPendingPayMethod(method);
+      setCustomerOpen(true);
+      return;
+    }
+    void runCheckout(method);
+  };
+
+  const runCheckout = async (method: PosPaymentMethod | 'express') => {
+    if (method === 'express') {
+      setBusy(true);
+      try {
+        await finalizeSale('cash');
+      } catch (e: any) {
+        toast.error(e.response?.data?.error || e.message || t('webPosSaleFailed'));
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+    if (method === 'terminal') {
+      setPaymentMethod('terminal');
+      await runTerminalPayment();
+      return;
+    }
+    setBusy(true);
+    try {
+      await finalizeSale(method);
+    } catch (e: any) {
+      toast.error(e.response?.data?.error || e.message || t('webPosSaleFailed'));
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -747,31 +864,11 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
   };
 
   const completeSale = async () => {
-    if (!cart.length || busy || paymentModalOpen) return;
-    if (paymentMethod === 'terminal') {
-      await runTerminalPayment();
-      return;
-    }
-    setBusy(true);
-    try {
-      await finalizeSale(paymentMethod);
-    } catch (e: any) {
-      toast.error(e.response?.data?.error || e.message || t('webPosSaleFailed'));
-    } finally {
-      setBusy(false);
-    }
+    beginCheckout(paymentMethod);
   };
 
   const expressSale = async () => {
-    if (!cart.length || busy || paymentModalOpen) return;
-    setBusy(true);
-    try {
-      await finalizeSale('cash');
-    } catch (e: any) {
-      toast.error(e.response?.data?.error || e.message || t('webPosSaleFailed'));
-    } finally {
-      setBusy(false);
-    }
+    beginCheckout('express');
   };
 
   const staffPerms = webposStaff?.permissions;
@@ -860,7 +957,11 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
             <button
               key={c.id}
               type="button"
-              onClick={() => setChannel(c.id)}
+              onClick={() => {
+                setChannel(c.id);
+                setFulfillmentWhen(null);
+                setSelectedCustomer(null);
+              }}
               className={`rounded-lg py-2 text-xs font-semibold transition ${
                 channel === c.id
                   ? 'bg-[var(--bg-elevated)] text-[var(--text)] shadow-sm'
@@ -952,6 +1053,40 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
             <span className="text-2xl font-bold tracking-tight tabular-nums">{money(totals.total)}</span>
           </div>
         </div>
+
+        {(channel === 'takeaway' || channel === 'delivery') && (
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-muted)]/50 px-2.5 py-2 text-xs space-y-1">
+            <button
+              type="button"
+              className="w-full text-left font-medium"
+              onClick={() => {
+                setPendingPayMethod(null);
+                setScheduleOpen(true);
+              }}
+            >
+              {t('webPosWhen')}:{' '}
+              <span className="text-teal-800">
+                {fulfillmentWhen?.label || t('webPosTapToSetTime')}
+              </span>
+            </button>
+            {channel === 'delivery' ? (
+              <button
+                type="button"
+                className="w-full text-left font-medium"
+                onClick={() => setCustomerOpen(true)}
+              >
+                {t('webPosCustomer')}:{' '}
+                <span className="text-teal-800">
+                  {selectedCustomer
+                    ? [selectedCustomer.firstName, selectedCustomer.lastName]
+                        .filter(Boolean)
+                        .join(' ') || selectedCustomer.phone
+                    : t('webPosTapToSelectCustomer')}
+                </span>
+              </button>
+            ) : null}
+          </div>
+        )}
 
         {enabledMethods.express ? (
           <button
@@ -1049,6 +1184,17 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
                 ? t('webPosCharge').replace('{amount}', money(totals.total))
                 : t('webPosAddItemsToCharge')}
         </button>
+
+        {(channel === 'takeaway' || channel === 'delivery') && cart.length ? (
+          <button
+            type="button"
+            disabled={busy || paymentModalOpen}
+            onClick={() => beginCheckout('pay_later')}
+            className="w-full rounded-xl border-2 border-violet-500 bg-violet-50 py-2.5 text-sm font-semibold text-violet-900 hover:bg-violet-100 disabled:opacity-40"
+          >
+            {t('webPosPayLater')} · {money(totals.total)}
+          </button>
+        ) : null}
 
         {lastReceipt ? (
           <button
@@ -1483,6 +1629,58 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
             if (data.channel) setChannel(data.channel);
           }
           toast.success(t('webPosOrderResumed'));
+        }}
+      />
+
+      {(channel === 'takeaway' || channel === 'delivery') && (
+        <WebPosFulfillmentModal
+          open={scheduleOpen}
+          channel={channel}
+          storeHours={(merchant?.storeHours || null) as StoreHours | null}
+          leadMinutes={
+            channel === 'delivery'
+              ? Number(merchant?.deliveryEtaMinutes) || 45
+              : Number(merchant?.pickupEtaMinutes) || 20
+          }
+          onClose={() => {
+            setScheduleOpen(false);
+            setPendingPayMethod(null);
+          }}
+          onConfirm={(when) => {
+            setFulfillmentWhen(when);
+            setScheduleOpen(false);
+            if (channel === 'delivery' && !selectedCustomer) {
+              setCustomerOpen(true);
+              return;
+            }
+            if (pendingPayMethod) {
+              const m = pendingPayMethod;
+              setPendingPayMethod(null);
+              void runCheckout(m);
+            }
+          }}
+        />
+      )}
+
+      <WebPosCustomerPicker
+        open={customerOpen}
+        onClose={() => {
+          setCustomerOpen(false);
+          setPendingPayMethod(null);
+        }}
+        onSelect={(c) => {
+          setSelectedCustomer(c);
+          setCustomerOpen(false);
+          if (pendingPayMethod) {
+            const m = pendingPayMethod;
+            setPendingPayMethod(null);
+            if (!fulfillmentWhen && (channel === 'takeaway' || channel === 'delivery')) {
+              setPendingPayMethod(m);
+              setScheduleOpen(true);
+              return;
+            }
+            void runCheckout(m);
+          }
         }}
       />
     </div>

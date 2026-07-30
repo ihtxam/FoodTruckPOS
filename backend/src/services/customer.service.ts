@@ -10,7 +10,12 @@ export class CustomerService {
     email?: string,
     phone?: string,
     firstName?: string,
-    lastName?: string
+    lastName?: string,
+    extra?: {
+      defaultAddress?: string | null;
+      defaultZip?: string | null;
+      defaultCity?: string | null;
+    }
   ) {
     const db = getDb();
 
@@ -19,10 +24,13 @@ export class CustomerService {
         .insert(schema.customers)
         .values({
           merchantId,
-          email,
-          phone,
-          firstName,
-          lastName,
+          email: email || null,
+          phone: phone || null,
+          firstName: firstName || null,
+          lastName: lastName || null,
+          defaultAddress: extra?.defaultAddress || null,
+          defaultZip: extra?.defaultZip || null,
+          defaultCity: extra?.defaultCity || null,
           loyaltyPoints: 0,
           totalSpent: "0",
         })

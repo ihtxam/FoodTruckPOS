@@ -948,13 +948,29 @@ router.get("/customers", async (req: Request, res: Response) => {
 router.post("/customers", async (req: Request, res: Response) => {
   try {
     const merchantId = req.merchantId;
-    const { email, phone, firstName, lastName } = req.body;
+    const { email, phone, firstName, lastName, defaultAddress, defaultZip, defaultCity, name } =
+      req.body;
 
     if (!merchantId) {
       return res.status(400).json({ error: "Merchant ID is required" });
     }
 
-    const customer = await CustomerService.createCustomer(merchantId, email, phone, firstName, lastName);
+    let first = firstName;
+    let last = lastName;
+    if (!first && !last && name) {
+      const parts = String(name).trim().split(/\s+/);
+      first = parts[0] || "";
+      last = parts.slice(1).join(" ") || "";
+    }
+    if (!phone && !email && !first) {
+      return res.status(400).json({ error: "Name or phone is required" });
+    }
+
+    const customer = await CustomerService.createCustomer(merchantId, email, phone, first, last, {
+      defaultAddress,
+      defaultZip,
+      defaultCity,
+    });
 
     res.status(201).json({
       success: true,
