@@ -106,9 +106,11 @@ async function printRaw({ printerName, dataBase64 }) {
 app.get("/health", (_req, res) => {
   res.json({
     ok: true,
+    version: "1.1.0",
     port: PORT,
     platform: process.platform,
     windows: isWindows(),
+    features: ["print", "printers", "drawer"],
   });
 });
 

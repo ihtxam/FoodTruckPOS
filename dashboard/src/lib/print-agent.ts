@@ -83,10 +83,31 @@ export async function printViaAgent(opts: {
   });
 }
 
+/** ESC/POS initialize + cash drawer kick (pin 2): 1B 40 1B 70 00 19 FA */
+const DRAWER_KICK_BASE64 = 'G0AbcAAZ+g==';
+
+/**
+ * Open cash drawer via print agent.
+ * Prefers POST /drawer; falls back to POST /print with kick bytes for older agents.
+ */
 export async function openCashDrawerViaAgent(opts?: { printerName?: string }): Promise<void> {
-  await agentFetch('/drawer', {
-    method: 'POST',
-    body: JSON.stringify({ printerName: opts?.printerName || undefined }),
+  const printerName = opts?.printerName || undefined;
+  try {
+    await agentFetch('/drawer', {
+      method: 'POST',
+      body: JSON.stringify({ printerName }),
+    });
+    return;
+  } catch (e: any) {
+    const msg = String(e?.message || '');
+    // Older print-agent builds have /print but not /drawer.
+    if (!/HTTP 404|Cannot POST \/drawer|Not Found/i.test(msg)) {
+      throw e;
+    }
+  }
+  await printViaAgent({
+    printerName,
+    dataBase64: DRAWER_KICK_BASE64,
   });
 }
 
