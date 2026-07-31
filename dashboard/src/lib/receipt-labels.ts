@@ -49,6 +49,8 @@ export type ReceiptLabels = {
   asap: string;
   payLater: string;
   totalItems: string;
+  customer: string;
+  deliveryAddress: string;
 };
 
 const EN: ReceiptLabels = {
@@ -100,6 +102,8 @@ const EN: ReceiptLabels = {
   asap: 'ASAP',
   payLater: 'Pay later',
   totalItems: 'Items',
+  customer: 'Customer',
+  deliveryAddress: 'Delivery address',
 };
 
 const FR: ReceiptLabels = {
@@ -151,6 +155,8 @@ const FR: ReceiptLabels = {
   asap: 'Des que possible',
   payLater: 'Payer plus tard',
   totalItems: 'Articles',
+  customer: 'Client',
+  deliveryAddress: 'Adresse de livraison',
 };
 
 const DE: ReceiptLabels = {
@@ -202,6 +208,8 @@ const DE: ReceiptLabels = {
   asap: 'Sofort',
   payLater: 'Spaeter zahlen',
   totalItems: 'Artikel',
+  customer: 'Kunde',
+  deliveryAddress: 'Lieferadresse',
 };
 
 export function receiptLabels(lang: string | null | undefined): ReceiptLabels {

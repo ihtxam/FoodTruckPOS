@@ -830,6 +830,14 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
     const paperWidthMm = printSettings?.paperWidthMm || 80;
     const cartSnapshot = [...cart];
     const channelSnapshot = channel;
+    const shipAddr =
+      sale.shippingAddress ||
+      (selectedCustomer
+        ? [selectedCustomer.defaultAddress, selectedCustomer.defaultZip, selectedCustomer.defaultCity]
+            .filter(Boolean)
+            .join(', ')
+        : '') ||
+      undefined;
     const receiptPayload: WebPosReceipt = {
       businessName: merchant?.name || APP_NAME,
       address: [merchant?.address, merchant?.city].filter(Boolean).join(', '),
@@ -839,6 +847,9 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
       completedAt: Date.now(),
       channel,
       paymentMethod: method,
+      customerName: sale.customerName || undefined,
+      customerPhone: sale.customerPhone || undefined,
+      shippingAddress: channel === 'delivery' ? shipAddr : undefined,
       items: cart.map((l) => {
         const detail = lineExtrasLabel(l);
         return {
@@ -855,7 +866,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
       taxAmount: totals.tax,
       taxRate,
       rounding: totals.rounding,
-      total: totals.total,
+      total: sale.total,
       receiptUrl,
       includeQr: printSettings?.receiptShowQrCode !== false,
       staffName: webposStaff?.name,
@@ -922,8 +933,9 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
 
   const beginCheckout = (method: PosPaymentMethod | 'express') => {
     if (!cart.length || busy || paymentModalOpen || checkoutOpen) return;
-    const needsSchedule = channel === 'takeaway' || channel === 'delivery';
-    if (needsSchedule && !fulfillmentWhen) {
+    // Takeaway defaults to ASAP — only open the time popup via "Tap to set time".
+    // Delivery still asks for a time if none was chosen yet.
+    if (channel === 'delivery' && !fulfillmentWhen) {
       setPendingPayMethod(method);
       setScheduleOpen(true);
       return;
@@ -1295,8 +1307,13 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
             >
               {t('webPosWhen')}:{' '}
               <span className="text-teal-800">
-                {fulfillmentWhen?.label || t('webPosTapToSetTime')}
+                {fulfillmentWhen?.label || t('webPosAsap')}
               </span>
+              {!fulfillmentWhen ? (
+                <span className="ml-1 font-normal text-[var(--text-muted)]">
+                  ({t('webPosTapToSetTime')})
+                </span>
+              ) : null}
             </button>
             {channel === 'delivery' ? (
               <button
@@ -1934,7 +1951,8 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
           if (pendingPayMethod) {
             const m = pendingPayMethod;
             setPendingPayMethod(null);
-            if (!fulfillmentWhen && (channel === 'takeaway' || channel === 'delivery')) {
+            // Delivery still needs a time if not set; takeaway stays ASAP by default.
+            if (!fulfillmentWhen && channel === 'delivery') {
               setPendingPayMethod(m);
               setScheduleOpen(true);
               return;

@@ -49,7 +49,9 @@ export default function WebPosFulfillmentModal({
 
   useEffect(() => {
     if (!open) return;
-    setMode('asap');
+    // Opened from "Tap to set time" — start on Later so they can pick a slot quickly.
+    // ASAP remains available as a one-tap confirm.
+    setMode(days.some((d) => d.slots.length > 0) ? 'later' : 'asap');
     setDayOffset(days[0]?.offset ?? 0);
     setSlotValue(days[0]?.slots[0]?.value ?? null);
   }, [open, days]);

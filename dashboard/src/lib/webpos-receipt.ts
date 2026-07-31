@@ -95,6 +95,10 @@ export type WebPosReceipt = {
   completedAt: number;
   channel?: string;
   paymentMethod: string;
+  /** Delivery customer (printed on delivery receipts) */
+  customerName?: string | null;
+  customerPhone?: string | null;
+  shippingAddress?: string | null;
   items: WebPosReceiptItem[];
   subtotal: number;
   discount: number;
@@ -196,6 +200,21 @@ export function generateWebPosReceiptText(tx: WebPosReceipt, panelLang?: string)
     r += `${L.table} ${tx.tableLabel}`;
     if (tx.guestCount) r += ` · ${tx.guestCount} ${L.pax}`;
     r += '\n';
+  }
+  if (tx.channel === 'delivery') {
+    if (tx.customerName?.trim()) r += `${L.customer}: ${tx.customerName.trim()}\n`;
+    if (tx.customerPhone?.trim()) r += `Tel: ${tx.customerPhone.trim()}\n`;
+    if (tx.shippingAddress?.trim()) {
+      r += `${L.deliveryAddress}:\n`;
+      for (const line of tx.shippingAddress.trim().split(/\r?\n/)) {
+        const chunk = line.trim();
+        if (!chunk) continue;
+        // wrap long address lines
+        for (let i = 0; i < chunk.length; i += width) {
+          r += chunk.slice(i, i + width) + '\n';
+        }
+      }
+    }
   }
   if (tx.showStaff !== false && tx.staffName) r += `${L.staff} ${tx.staffName}\n`;
   r += thin + '\n';

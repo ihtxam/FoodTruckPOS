@@ -678,6 +678,23 @@ class BluetoothPrinterService @Inject constructor(
                 sb.appendLine(center(line, lineWidth))
             }
         }
+        if (context.fulfillmentType == FulfillmentType.DELIVERY ||
+            cart.fulfillmentType == FulfillmentType.DELIVERY
+        ) {
+            cart.deliveryName?.takeIf { it.isNotBlank() }?.let { name ->
+                sb.appendLine("Customer: $name")
+            }
+            cart.deliveryPhone?.takeIf { it.isNotBlank() }?.let { phone ->
+                sb.appendLine("Tel: $phone")
+            }
+            val addr = listOfNotNull(cart.deliveryAddress, cart.deliveryZip)
+                .filter { it.isNotBlank() }
+                .joinToString(", ")
+            if (addr.isNotBlank()) {
+                sb.appendLine("Delivery address:")
+                wrapText(addr, lineWidth).forEach { sb.appendLine(it) }
+            }
+        }
 
         sb.appendLine(center(sepEq, lineWidth))
         cart.items.forEach { item ->
