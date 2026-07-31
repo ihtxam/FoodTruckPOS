@@ -28,6 +28,7 @@ import {
   generateKitchenTicketText,
   generateWebPosReceiptText,
   logoUrlToEscPos,
+  nextWebPosTicketNumber,
   printersForRole,
   resolveReceiptLanguage,
   textToEscPos,
@@ -42,7 +43,7 @@ import WebPosFulfillmentModal, {
 import WebPosCustomerPicker, {
   type WebPosCustomer,
 } from '@/components/WebPosCustomerPicker';
-import type { StoreHours } from '@/lib/shop-hours';
+import { localDateTimeToIso, type StoreHours } from '@/lib/shop-hours';
 import {
   isPrintAgentAvailable,
   listAgentPrinters,
@@ -577,7 +578,10 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
   const printKitchenForCart = async (
     lines: CartLine[],
     saleChannel: Channel,
-    orderNumber?: string | null
+    opts?: {
+      orderNumber?: string | null;
+      when?: FulfillmentWhen | null;
+    }
   ) => {
     if (printSettings?.autoPrintKitchen === false) return;
     const lang = resolveReceiptLanguage(printSettings, printSettings?.receiptLanguage === 'panel' ? locale : printSettings?.receiptLanguage || locale);
@@ -602,14 +606,21 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
       (webposStaff?.name || '').trim() ||
       customerName ||
       null;
+    const when = opts?.when !== undefined ? opts.when : fulfillmentWhen;
+    const scheduledRaw = when?.mode === 'later' ? when.scheduledFor : null;
+    const scheduledFor =
+      scheduledRaw != null && scheduledRaw !== ''
+        ? localDateTimeToIso(String(scheduledRaw)) || scheduledRaw
+        : null;
 
     const kitchenOpts = {
       channel: saleChannel,
       language: lang,
-      orderNumber: orderNumber || null,
+      orderNumber: opts?.orderNumber || null,
       orderedAt: Date.now(),
-      scheduledFor: fulfillmentWhen?.scheduledFor ?? null,
+      scheduledFor,
       userName,
+      orderSource: 'WEBPOS' as const,
       itemTextScale: printSettings?.kitchenItemTextScale || 2,
       headerTextScale: printSettings?.kitchenHeaderTextScale || 2,
       boldText: printSettings?.kitchenBoldText !== false,
@@ -659,8 +670,19 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
     });
   };
 
-  const buildSalePayload = (clientId: string, method: PosPaymentMethod) => {
+  const buildSalePayload = (
+    clientId: string,
+    method: PosPaymentMethod,
+    whenOverride?: FulfillmentWhen | null,
+    orderNumber?: string
+  ) => {
     const payLater = method === 'pay_later';
+    const when = whenOverride !== undefined ? whenOverride : fulfillmentWhen;
+    const scheduledRaw = when?.mode === 'later' ? when.scheduledFor : null;
+    const scheduledFor =
+      scheduledRaw != null && scheduledRaw !== ''
+        ? localDateTimeToIso(String(scheduledRaw)) || scheduledRaw
+        : null;
     const custName = selectedCustomer
       ? [selectedCustomer.firstName, selectedCustomer.lastName].filter(Boolean).join(' ')
       : undefined;
@@ -671,20 +693,17 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
       : undefined;
     return {
       clientId,
+      orderNumber,
       paymentMethod: method,
       paymentStatus: payLater ? 'awaiting_payment' : 'completed',
-      status: payLater
-        ? fulfillmentWhen?.scheduledFor
-          ? 'accepted'
-          : 'preparing'
-        : 'completed',
+      status: payLater ? (scheduledFor ? 'accepted' : 'preparing') : 'completed',
       subtotal: totals.subtotal,
       taxAmount: totals.tax,
       discountAmount: 0,
       total: totals.total,
       fulfillmentChannel: channel,
       completedAt: payLater ? undefined : Date.now(),
-      scheduledFor: fulfillmentWhen?.scheduledFor || null,
+      scheduledFor,
       customerId: selectedCustomer?.id || null,
       customerName: custName || null,
       customerPhone: selectedCustomer?.phone || null,
@@ -694,7 +713,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
         totals.rounding
           ? `Rounding ${totals.rounding > 0 ? '+' : ''}${totals.rounding.toFixed(2)}`
           : '',
-        fulfillmentWhen?.mode === 'later' ? `Pickup/delivery: ${fulfillmentWhen.label}` : '',
+        when?.mode === 'later' ? `Pickup/delivery: ${when.label}` : '',
       ]
         .filter(Boolean)
         .join(' · ') || undefined,
@@ -735,9 +754,16 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
     setPaymentMessage('');
   };
 
-  const finalizeSale = async (method: PosPaymentMethod, presetClientId?: string) => {
+  const finalizeSale = async (
+    method: PosPaymentMethod,
+    presetClientId?: string,
+    whenOverride?: FulfillmentWhen | null
+  ) => {
+    const ticket = nextWebPosTicketNumber(merchant?.id);
     const clientId = presetClientId || `webpos-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const sale = buildSalePayload(clientId, method);
+    const whenSnapshot =
+      whenOverride !== undefined ? whenOverride : fulfillmentWhen;
+    const sale = buildSalePayload(clientId, method, whenSnapshot, ticket.orderNumber);
 
     await api.post('/sync/push-sales', { sales: [sale] });
 
@@ -820,7 +846,10 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
       }
     }
     try {
-      await printKitchenForCart(cartSnapshot, channelSnapshot, clientId);
+      await printKitchenForCart(cartSnapshot, channelSnapshot, {
+        orderNumber: ticket.display,
+        when: whenSnapshot,
+      });
     } catch (e: any) {
       toast.error(e.message || t('webPosKitchenPrintFailed'));
     }
@@ -842,11 +871,14 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
     void runCheckout(method);
   };
 
-  const runCheckout = async (method: PosPaymentMethod | 'express') => {
+  const runCheckout = async (
+    method: PosPaymentMethod | 'express',
+    whenOverride?: FulfillmentWhen | null
+  ) => {
     if (method === 'express') {
       setBusy(true);
       try {
-        await finalizeSale('cash');
+        await finalizeSale('cash', undefined, whenOverride);
       } catch (e: any) {
         toast.error(e.response?.data?.error || e.message || t('webPosSaleFailed'));
       } finally {
@@ -856,12 +888,12 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
     }
     if (method === 'terminal') {
       setPaymentMethod('terminal');
-      await runTerminalPayment();
+      await runTerminalPayment(whenOverride);
       return;
     }
     setBusy(true);
     try {
-      await finalizeSale(method);
+      await finalizeSale(method, undefined, whenOverride);
     } catch (e: any) {
       toast.error(e.response?.data?.error || e.message || t('webPosSaleFailed'));
     } finally {
@@ -882,11 +914,11 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
       });
       if (sendToKitchen) {
         try {
-          await printKitchenForCart(
-            cart,
-            channel,
-            `hold-${Date.now().toString(36)}`
-          );
+          const ticket = nextWebPosTicketNumber(merchant?.id);
+          await printKitchenForCart(cart, channel, {
+            orderNumber: ticket.display,
+            when: fulfillmentWhen,
+          });
         } catch {
           /* kitchen optional on hold */
         }
@@ -898,7 +930,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
     }
   };
 
-  const runTerminalPayment = async () => {
+  const runTerminalPayment = async (whenOverride?: FulfillmentWhen | null) => {
     if (!selectedTerminalId) {
       toast.error(t('webPosSelectTerminal'));
       return;
@@ -928,7 +960,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
 
       if (result.status === 'approved') {
         closePaymentModal();
-        await finalizeSale('terminal', clientId);
+        await finalizeSale('terminal', clientId, whenOverride);
         return;
       }
 
@@ -1777,7 +1809,8 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
             if (pendingPayMethod) {
               const m = pendingPayMethod;
               setPendingPayMethod(null);
-              void runCheckout(m);
+              // Pass `when` directly — setState is async and would otherwise print ASAP
+              void runCheckout(m, when);
             }
           }}
         />
