@@ -124,6 +124,10 @@ class TerminalSyncRepository @Inject constructor(
             )
         }
 
+        config.features?.let { features ->
+            merged = merged.copy(coursesEnabled = features.coursesEnabled)
+        }
+
         return merged
     }
 }

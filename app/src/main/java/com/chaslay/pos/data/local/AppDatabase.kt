@@ -90,7 +90,7 @@ import com.chaslay.pos.data.local.entity.UserEntity
         HeldOrderItemEntity::class,
         CustomerEntity::class
     ],
-    version = 35,
+    version = 36,
     exportSchema = true
 )
 @TypeConverters(Converters::class)

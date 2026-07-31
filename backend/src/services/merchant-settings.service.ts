@@ -97,6 +97,7 @@ export class MerchantSettingsService {
       scheduledOrdersEnabled: merchant.scheduledOrdersEnabled !== false,
       floorPlanEnabled: merchant.floorPlanEnabled,
       paxOrderingEnabled: merchant.paxOrderingEnabled,
+      coursesEnabled: !!merchant.coursesEnabled,
       storeHours: merchant.storeHours || {},
       shopLogoUrl: merchant.shopLogoUrl,
       shopBannerUrl: merchant.shopBannerUrl,
@@ -162,6 +163,7 @@ export class MerchantSettingsService {
       scheduledOrdersEnabled?: boolean;
       floorPlanEnabled?: boolean;
       paxOrderingEnabled?: boolean;
+      coursesEnabled?: boolean;
       storeHours?: Record<string, unknown>;
       shopLogoUrl?: string | null;
       shopBannerUrl?: string | null;
@@ -231,6 +233,7 @@ export class MerchantSettingsService {
     }
     if (updates.floorPlanEnabled !== undefined) patch.floorPlanEnabled = !!updates.floorPlanEnabled;
     if (updates.paxOrderingEnabled !== undefined) patch.paxOrderingEnabled = !!updates.paxOrderingEnabled;
+    if (updates.coursesEnabled !== undefined) patch.coursesEnabled = !!updates.coursesEnabled;
     if (updates.storeHours !== undefined) patch.storeHours = updates.storeHours;
     if (updates.shopLogoUrl !== undefined) patch.shopLogoUrl = updates.shopLogoUrl;
     if (updates.shopBannerUrl !== undefined) patch.shopBannerUrl = updates.shopBannerUrl;

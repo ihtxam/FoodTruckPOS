@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import { getDb, schema } from "@/db";
-import { and, eq, gt, inArray } from "drizzle-orm";
+import { and, eq, gt, inArray, sql } from "drizzle-orm";
 import { AuthService } from "./auth.service";
 import { MerchantSettingsService } from "./merchant-settings.service";
 
@@ -171,11 +171,15 @@ export class ChaslayCompatService {
 
   static async posLogin(email: string, password: string, tenantSlug?: string | null) {
     const db = getDb();
-    const merchant = await db.query.merchants.findFirst({
-      where: tenantSlug
-        ? and(eq(schema.merchants.email, email), eq(schema.merchants.slug, tenantSlug))
-        : eq(schema.merchants.email, email),
-    });
+    const normalizedEmail = String(email || "").trim().toLowerCase();
+    // Match by email only (case-insensitive). A stale device tenantSlug must not
+    // block a valid merchant login — slug is updated from the returned user.
+    const merchants = await db
+      .select()
+      .from(schema.merchants)
+      .where(sql`lower(${schema.merchants.email}) = ${normalizedEmail}`)
+      .limit(1);
+    const merchant = merchants[0];
 
     if (!merchant) {
       throw new Error("Invalid credentials");
@@ -189,6 +193,8 @@ export class ChaslayCompatService {
     if (merchant.status !== "active" && merchant.status !== "trial") {
       throw new Error(`Account is ${merchant.status}`);
     }
+
+    void tenantSlug; // accepted for API compat; not used to reject login
 
     return {
       user: {
@@ -274,6 +280,11 @@ export class ChaslayCompatService {
         cash: merchant.webposCashEnabled !== false,
         card: merchant.webposCardEnabled !== false,
         terminal: merchant.webposTerminalEnabled !== false && terminalReady,
+      },
+      features: {
+        courses_enabled: !!merchant.coursesEnabled,
+        floor_plan_enabled: !!merchant.floorPlanEnabled,
+        pax_ordering_enabled: !!merchant.paxOrderingEnabled,
       },
     };
   }

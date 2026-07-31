@@ -1,7 +1,7 @@
 import bcrypt from "bcrypt";
 import jwt, { type SignOptions } from "jsonwebtoken";
 import { getDb, schema } from "@/db";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 export interface JWTPayload {
   id: string;
@@ -120,10 +120,14 @@ export class AuthService {
 
   static async loginMerchantOwner(email: string, password: string) {
     const db = getDb();
+    const normalizedEmail = String(email || "").trim().toLowerCase();
 
-    const merchant = await db.query.merchants.findFirst({
-      where: eq(schema.merchants.email, email),
-    });
+    const merchants = await db
+      .select()
+      .from(schema.merchants)
+      .where(sql`lower(${schema.merchants.email}) = ${normalizedEmail}`)
+      .limit(1);
+    const merchant = merchants[0];
 
     if (!merchant) {
       throw new Error("Invalid email or password");

@@ -143,6 +143,11 @@ export const merchants = pgTable(
     floorPlanEnabled: boolean("floor_plan_enabled").default(false).notNull(),
     // When true: order & bill per person (Person 1…) at a table; kitchen tickets split by seat
     paxOrderingEnabled: boolean("pax_ordering_enabled").default(false).notNull(),
+    /**
+     * Dine-in course firing (starter/main/…). Off by default — many venues only need
+     * send-to-kitchen / kitchen message without multi-course workflow.
+     */
+    coursesEnabled: boolean("courses_enabled").default(false).notNull(),
     /** Online / phone restaurant table reservations */
     reservationsEnabled: boolean("reservations_enabled").default(false).notNull(),
     /**

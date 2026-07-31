@@ -1,6 +1,7 @@
 package com.chaslay.pos.data.remote.dto
 
 import com.google.gson.JsonElement
+import com.google.gson.annotations.SerializedName
 
 data class SyncCategoryDto(
     val id: String,
@@ -100,13 +101,20 @@ data class SyncPaymentMethodsDto(
     val terminal: Boolean = false
 )
 
+data class SyncFeaturesDto(
+    @SerializedName("courses_enabled") val coursesEnabled: Boolean = false,
+    @SerializedName("floor_plan_enabled") val floorPlanEnabled: Boolean = false,
+    @SerializedName("pax_ordering_enabled") val paxOrderingEnabled: Boolean = false
+)
+
 data class PaymentConfigResponse(
     val serverTime: Long = 0L,
     val adyen: SyncAdyenConfigDto? = null,
     val default_terminal_id: String? = null,
     val terminals: List<SyncPaymentTerminalDto> = emptyList(),
     val terminal_ready: Boolean = false,
-    val methods: SyncPaymentMethodsDto? = null
+    val methods: SyncPaymentMethodsDto? = null,
+    val features: SyncFeaturesDto? = null
 )
 
 data class PushTerminalItemDto(

@@ -60,6 +60,8 @@ export default function Merchants() {
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [issuedKeys, setIssuedKeys] = useState<IssuedLicense[]>([]);
+  const [resetPassword, setResetPassword] = useState('');
+  const [resettingPassword, setResettingPassword] = useState(false);
 
   useEffect(() => {
     fetchMerchants();
@@ -81,11 +83,32 @@ export default function Merchants() {
 
   const openDetail = async (merchant: Merchant) => {
     setShowDetail(merchant);
+    setResetPassword('');
     try {
       const res = await api.get(`/superadmin/merchants/${merchant.id}`);
       setDetailFull(res.data.merchant);
     } catch {
       toast.error('Failed to load merchant details');
+    }
+  };
+
+  const handleResetPassword = async () => {
+    if (!showDetail) return;
+    if (resetPassword.length < 6) {
+      toast.error('Password must be at least 6 characters');
+      return;
+    }
+    setResettingPassword(true);
+    try {
+      await api.post(`/superadmin/merchants/${showDetail.id}/reset-password`, {
+        password: resetPassword,
+      });
+      toast.success('Password reset — merchant can log in to panel and POS with the new password');
+      setResetPassword('');
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to reset password');
+    } finally {
+      setResettingPassword(false);
     }
   };
 
@@ -604,16 +627,45 @@ export default function Merchants() {
                   </ul>
                 </div>
               )}
-              <div className="pt-3 border-t flex justify-end">
-                <button
-                  type="button"
-                  className="btn-primary"
-                  disabled={openingId === showDetail.id}
-                  onClick={() => void openMerchantPanel(showDetail)}
-                >
-                  <LogIn className="w-4 h-4" />
-                  {openingId === showDetail.id ? 'Opening…' : 'Open merchant panel'}
-                </button>
+              <div className="pt-3 border-t space-y-3">
+                <div>
+                  <p className="font-semibold mb-2 flex items-center gap-2">
+                    <KeyRound className="w-4 h-4" /> Reset password
+                  </p>
+                  <p className="text-xs text-gray-500 mb-2">
+                    Sets a new password for panel + Android POS email login (
+                    {showDetail.email}).
+                  </p>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      className="input flex-1"
+                      placeholder="New password (min 6)"
+                      value={resetPassword}
+                      onChange={(e) => setResetPassword(e.target.value)}
+                      autoComplete="new-password"
+                    />
+                    <button
+                      type="button"
+                      className="btn-secondary whitespace-nowrap"
+                      disabled={resettingPassword || resetPassword.length < 6}
+                      onClick={() => void handleResetPassword()}
+                    >
+                      {resettingPassword ? 'Saving…' : 'Reset'}
+                    </button>
+                  </div>
+                </div>
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    disabled={openingId === showDetail.id}
+                    onClick={() => void openMerchantPanel(showDetail)}
+                  >
+                    <LogIn className="w-4 h-4" />
+                    {openingId === showDetail.id ? 'Opening…' : 'Open merchant panel'}
+                  </button>
+                </div>
               </div>
             </div>
           </div>

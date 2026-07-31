@@ -36,6 +36,7 @@ interface SettingsData {
   shopCustomDomainUrl?: string | null;
   floorPlanEnabled?: boolean;
   paxOrderingEnabled?: boolean;
+  coursesEnabled?: boolean;
   shopPathUrl?: string | null;
   shopSubdomainUrl?: string | null;
   panelLanguage?: string | null;
@@ -323,6 +324,7 @@ export default function Settings() {
         acceptingReservations: settings.acceptingReservations !== false,
         floorPlanEnabled: !!settings.floorPlanEnabled,
         paxOrderingEnabled: !!settings.paxOrderingEnabled,
+        coursesEnabled: !!settings.coursesEnabled,
         panelLanguage: settings.panelLanguage || locale,
         emailSmtpSettings: {
           enabled: !!settings.emailSmtpSettings?.enabled,
@@ -1072,6 +1074,24 @@ export default function Settings() {
                   <span>
                     <span className="font-medium block">{t('paxOrderingEnabled')}</span>
                     <span className="text-xs muted">{t('paxOrderingHint')}</span>
+                  </span>
+                </label>
+                <label className="flex items-start gap-2.5 rounded-md border border-[var(--border)] px-3 py-2.5 text-sm">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={!!settings.coursesEnabled}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        coursesEnabled: e.target.checked,
+                        floorPlanEnabled: e.target.checked ? true : settings.floorPlanEnabled,
+                      })
+                    }
+                  />
+                  <span>
+                    <span className="font-medium block">{t('coursesEnabled')}</span>
+                    <span className="text-xs muted">{t('coursesEnabledHint')}</span>
                   </span>
                 </label>
               </Section>

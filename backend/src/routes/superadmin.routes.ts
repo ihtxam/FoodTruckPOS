@@ -197,6 +197,31 @@ router.put("/merchants/:merchantId", async (req: Request, res: Response) => {
 });
 
 /**
+ * POST /api/superadmin/merchants/:merchantId/reset-password
+ * Set a new password for the merchant owner account (POS + panel login).
+ */
+router.post("/merchants/:merchantId/reset-password", async (req: Request, res: Response) => {
+  try {
+    const { merchantId } = req.params;
+    const password = String(req.body?.password || "");
+    if (password.length < 6) {
+      return res.status(400).json({ error: "Password must be at least 6 characters" });
+    }
+    const existing = await MerchantService.getMerchantById(merchantId);
+    if (!existing) {
+      return res.status(404).json({ error: "Merchant not found" });
+    }
+    await AuthService.updateMerchantPassword(merchantId, password);
+    res.json({ success: true, message: "Password updated" });
+  } catch (error) {
+    console.error("Error resetting merchant password:", error);
+    res
+      .status(400)
+      .json({ error: error instanceof Error ? error.message : "Failed to reset password" });
+  }
+});
+
+/**
  * POST /api/superadmin/merchants/:merchantId/suspend
  * Suspend merchant account
  */

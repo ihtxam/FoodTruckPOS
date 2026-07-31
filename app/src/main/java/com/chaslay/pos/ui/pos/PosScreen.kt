@@ -334,7 +334,25 @@ fun PosScreen(
             }
         }
 
-        OdooPosNavBar(businessName = state.settings.businessName)
+        val coursesEnabled = state.settings.coursesEnabled
+        OdooPosNavBar(
+            businessName = state.settings.businessName,
+            isRestaurantMode = isRestaurantMode,
+            selectedTab = mainTab,
+            onTabSelected = { tab ->
+                when (tab) {
+                    PosMainTab.REGISTER -> {
+                        mainTab = PosMainTab.REGISTER
+                        viewModel.showNewOrderDialog()
+                    }
+                    PosMainTab.ORDERS -> mainTab = PosMainTab.ORDERS
+                    PosMainTab.TABLES -> mainTab = PosMainTab.TABLES
+                }
+            },
+            userAccess = userAccess,
+            onNavigate = onNavigate,
+            onLogout = onLogout
+        )
         LicenseRenewalBanner(licenseState)
 
         Row(modifier = Modifier.weight(1f)) {
@@ -342,13 +360,12 @@ fun PosScreen(
             CartActionSidebar(
                 isRestaurantMode = isRestaurantMode,
                 isTableMode = isRestaurantMode && state.activeTableName != null,
+                coursesEnabled = coursesEnabled,
                 activeTableName = state.activeTableName,
                 activeCourse = state.cart.activeCourse,
                 activeCourseHasItems = state.cart.items.any { it.courseNumber == state.cart.activeCourse },
                 hasUnsentItems = orderingItemsForRail.isNotEmpty(),
                 unsentCourseCount = orderingItemsForRail.map { it.courseNumber }.distinct().size,
-                selectedTab = mainTab,
-                onTabSelected = { mainTab = it },
                 onPickup = {
                     mainTab = PosMainTab.REGISTER
                     viewModel.showPickupOrderDialog()
@@ -357,9 +374,7 @@ fun PosScreen(
                     mainTab = PosMainTab.REGISTER
                     viewModel.showDeliveryOrderDialog()
                 },
-                onNewOrder = viewModel::showNewOrderDialog,
                 onHold = { viewModel.holdOrder(false) },
-                onHoldAndSend = { viewModel.holdOrder(true) },
                 onAddCourse = viewModel::addCourse,
                 onSendActiveCourse = viewModel::sendActiveCourseToKitchen,
                 onSendAllCourses = viewModel::sendAllCoursesToKitchen,
@@ -423,6 +438,7 @@ fun PosScreen(
                         onPickup = viewModel::showPickupOrderDialog,
                         onDelivery = viewModel::showDeliveryOrderDialog,
                         isRestaurantMode = isRestaurantMode,
+                        coursesEnabled = coursesEnabled,
                         onMoveEntireTable = viewModel::startMoveEntireTable,
                         onMoveDishes = viewModel::startMoveDishes,
                         modifier = Modifier
@@ -467,20 +483,6 @@ fun PosScreen(
                 }
             }
         }
-
-        PosBottomActionBar(
-            isRestaurantMode = isRestaurantMode,
-            selectedTab = mainTab,
-            onTabSelected = { tab ->
-                when (tab) {
-                    PosMainTab.ORDERS -> mainTab = PosMainTab.ORDERS
-                    PosMainTab.REGISTER, PosMainTab.TABLES -> mainTab = tab
-                }
-            },
-            userAccess = userAccess,
-            onNavigate = onNavigate,
-            onLogout = onLogout
-        )
     }
 
     if (state.showGuestCountDialog) {
@@ -720,28 +722,8 @@ fun PosScreen(
 }
 
 @Composable
-private fun OdooPosNavBar(businessName: String) {
-    val vc = vectronColors()
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(vc.header)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            businessName,
-            color = vc.textPrimary,
-            fontWeight = FontWeight.Bold,
-            fontSize = 15.sp,
-            textAlign = TextAlign.Center
-        )
-    }
-}
-
-@Composable
-private fun PosBottomActionBar(
+private fun OdooPosNavBar(
+    businessName: String,
     isRestaurantMode: Boolean,
     selectedTab: PosMainTab,
     onTabSelected: (PosMainTab) -> Unit,
@@ -754,13 +736,14 @@ private fun PosBottomActionBar(
         modifier = Modifier
             .fillMaxWidth()
             .background(vc.header)
-            .padding(horizontal = 8.dp, vertical = 4.dp),
+            .padding(horizontal = 8.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.weight(1f)
         ) {
             if (isRestaurantMode) {
                 PosBottomTabChip(
@@ -776,7 +759,22 @@ private fun PosBottomActionBar(
                 selected = selectedTab == PosMainTab.REGISTER,
                 onClick = { onTabSelected(PosMainTab.REGISTER) }
             )
+            PosBottomTabChip(
+                label = stringResource(R.string.pos_orders),
+                icon = Icons.Default.ReceiptLong,
+                selected = selectedTab == PosMainTab.ORDERS,
+                onClick = { onTabSelected(PosMainTab.ORDERS) }
+            )
         }
+        Text(
+            businessName,
+            color = vc.textPrimary,
+            fontWeight = FontWeight.Bold,
+            fontSize = 14.sp,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            modifier = Modifier.padding(horizontal = 8.dp)
+        )
         Row(
             horizontalArrangement = Arrangement.spacedBy(2.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -1116,11 +1114,13 @@ private fun VectronOrderPanel(
     onPickup: () -> Unit,
     onDelivery: () -> Unit,
     isRestaurantMode: Boolean,
+    coursesEnabled: Boolean = false,
     onMoveEntireTable: () -> Unit = {},
     onMoveDishes: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val isTableMode = isRestaurantMode && activeTableName != null
+    val showCourses = isTableMode && coursesEnabled
     val displayTotal = applyCashRounding(cart.displayTotal, roundingStep)
     val orderingItems = cart.items.filter { !it.sentToKitchen }
     val orderedItems = cart.items.filter { it.sentToKitchen }
@@ -1142,7 +1142,7 @@ private fun VectronOrderPanel(
         showCartTabs -> orderingItems
         else -> cart.items
     }
-    val cartRows = buildCartRows(displayItems, isTableMode, cart.activeCourse)
+    val cartRows = buildCartRows(displayItems, showCourses, cart.activeCourse)
     val unsentCourses = orderingItems.map { it.courseNumber }.distinct().sorted()
     val keypadHint = when (keypadMode) {
         KeypadMode.QTY -> stringResource(R.string.keypad_hint_qty)
@@ -1231,7 +1231,7 @@ private fun VectronOrderPanel(
             }
         }
 
-        if (isTableMode && cartTab != TableCartTab.ORDERED) {
+        if (showCourses && cartTab != TableCartTab.ORDERED) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1533,18 +1533,15 @@ private fun CartCancelOrderDialog(
 private fun CartActionSidebar(
     isRestaurantMode: Boolean,
     isTableMode: Boolean,
+    coursesEnabled: Boolean,
     activeTableName: String?,
     activeCourse: Int,
     activeCourseHasItems: Boolean,
     hasUnsentItems: Boolean,
     unsentCourseCount: Int,
-    selectedTab: PosMainTab,
-    onTabSelected: (PosMainTab) -> Unit,
     onPickup: () -> Unit,
     onDelivery: () -> Unit,
-    onNewOrder: () -> Unit,
     onHold: () -> Unit,
-    onHoldAndSend: () -> Unit,
     onAddCourse: () -> Unit,
     onSendActiveCourse: () -> Unit,
     onSendAllCourses: () -> Unit,
@@ -1575,20 +1572,6 @@ private fun CartActionSidebar(
             color = Color(0xFF6A1B9A),
             onClick = onDelivery
         )
-        CartSidebarButton(
-            label = stringResource(R.string.new_order),
-            shortLabel = stringResource(R.string.new_short),
-            color = Color(0xFF8B0000),
-            onClick = onNewOrder
-        )
-        HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp), color = vc.textSecondary.copy(alpha = 0.3f))
-        CartTabButton(
-            label = stringResource(R.string.pos_orders),
-            icon = Icons.Default.ReceiptLong,
-            baseColor = Color(0xFFEF6C00),
-            selected = selectedTab == PosMainTab.ORDERS,
-            onClick = { onTabSelected(PosMainTab.ORDERS) }
-        )
         HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp), color = vc.textSecondary.copy(alpha = 0.3f))
         CartSidebarButton(
             label = stringResource(R.string.save_hold_order),
@@ -1598,28 +1581,38 @@ private fun CartActionSidebar(
             onClick = onHold
         )
         if (isRestaurantMode && isTableMode) {
-            CartSidebarButton(
-                label = stringResource(R.string.add_course),
-                shortLabel = "C+",
-                icon = Icons.Default.Restaurant,
-                color = Color(0xFF455A64),
-                onClick = onAddCourse
-            )
-            HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp), color = vc.textSecondary.copy(alpha = 0.3f))
-            if (activeCourseHasItems) {
+            if (coursesEnabled) {
                 CartSidebarButton(
-                    label = stringResource(R.string.fire_course_n, activeCourse),
-                    shortLabel = "Fire",
+                    label = stringResource(R.string.add_course),
+                    shortLabel = "C+",
+                    icon = Icons.Default.Restaurant,
+                    color = Color(0xFF455A64),
+                    onClick = onAddCourse
+                )
+                HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp), color = vc.textSecondary.copy(alpha = 0.3f))
+                if (activeCourseHasItems) {
+                    CartSidebarButton(
+                        label = stringResource(R.string.fire_course_n, activeCourse),
+                        shortLabel = "Fire",
+                        icon = Icons.Default.Send,
+                        color = VectronColors.CashGreen,
+                        onClick = onSendActiveCourse
+                    )
+                }
+                if (hasUnsentItems && unsentCourseCount > 1) {
+                    CartSidebarButton(
+                        label = stringResource(R.string.send_all_courses),
+                        shortLabel = "All",
+                        color = Color(0xFF2E7D32),
+                        onClick = onSendAllCourses
+                    )
+                }
+            } else if (hasUnsentItems) {
+                CartSidebarButton(
+                    label = stringResource(R.string.send_to_kitchen),
+                    shortLabel = "Send",
                     icon = Icons.Default.Send,
                     color = VectronColors.CashGreen,
-                    onClick = onSendActiveCourse
-                )
-            }
-            if (hasUnsentItems && unsentCourseCount > 1) {
-                CartSidebarButton(
-                    label = stringResource(R.string.send_all_courses),
-                    shortLabel = "All",
-                    color = Color(0xFF2E7D32),
                     onClick = onSendAllCourses
                 )
             }

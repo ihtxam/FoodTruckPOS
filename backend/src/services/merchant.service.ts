@@ -159,7 +159,7 @@ export class MerchantService {
       const merchant = await db
         .insert(schema.merchants)
         .values({
-          email,
+          email: String(email || "").trim().toLowerCase(),
           passwordHash,
           passwordSetAt: hasPassword ? now : null,
           name: businessName,

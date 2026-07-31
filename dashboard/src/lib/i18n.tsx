@@ -122,6 +122,9 @@ const en: Dict = {
   reservationsNoShow: 'No-show',
   floorPlanEnabled: 'Enable floor plan / table service',
   paxOrderingEnabled: 'PAX per-person ordering & billing',
+  coursesEnabled: 'Enable dine-in course firing',
+  coursesEnabledHint:
+    'Show course chips and Fire course on Android POS. Kitchen message still works when this is off.',
   webPos: 'WebPOS',
   settings: 'Settings',
   save: 'Save',
@@ -718,6 +721,9 @@ const fr: Dict = {
   reservationsNoShow: 'No-show',
   floorPlanEnabled: 'Activer plan de salle / tables',
   paxOrderingEnabled: 'Commande & addition par personne (PAX)',
+  coursesEnabled: 'Activer le service par services (courses)',
+  coursesEnabledHint:
+    'Affiche les courses et « Fire » sur le POS Android. Le message cuisine reste disponible si désactivé.',
   webPos: 'WebPOS',
   settings: 'Paramètres',
   save: 'Enregistrer',
@@ -1314,6 +1320,9 @@ const de: Dict = {
   reservationsNoShow: 'No-show',
   floorPlanEnabled: 'Tischplan / Tischservice aktivieren',
   paxOrderingEnabled: 'PAX-Bestellung & Rechnung pro Person',
+  coursesEnabled: 'Gang-Steuerung (Courses) aktivieren',
+  coursesEnabledHint:
+    'Zeigt Gänge und «Fire» auf dem Android-POS. Küchen-Nachricht bleibt auch ohne Courses verfügbar.',
   webPos: 'WebPOS',
   settings: 'Einstellungen',
   save: 'Speichern',
