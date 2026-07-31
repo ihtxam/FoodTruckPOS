@@ -1,12 +1,15 @@
 package com.chaslay.pos.sync
 
-import com.chaslay.pos.BuildConfig
 import com.chaslay.pos.data.local.dao.CategoryDao
 import com.chaslay.pos.data.local.dao.ProductDao
 import com.chaslay.pos.data.local.entity.CategoryEntity
 import com.chaslay.pos.data.local.entity.ProductEntity
+import com.chaslay.pos.data.preferences.SyncApiKeyStore
 import com.chaslay.pos.data.preferences.SyncPreferences
 import com.chaslay.pos.data.remote.SyncApi
+import com.chaslay.pos.data.remote.dto.PushCatalogCategoryDto
+import com.chaslay.pos.data.remote.dto.PushCatalogProductDto
+import com.chaslay.pos.data.remote.dto.PushCatalogRequest
 import com.chaslay.pos.data.remote.dto.SyncCategoryDto
 import com.chaslay.pos.data.remote.dto.SyncProductDto
 import java.time.Instant
@@ -15,40 +18,118 @@ import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+enum class MenuSyncMode {
+    /** Upsert cloud items; keep local-only rows */
+    MERGE,
+    /** Deactivate local catalog, then full bootstrap from cloud */
+    REPLACE
+}
+
 @Singleton
 class MenuSyncRepository @Inject constructor(
     private val syncApi: SyncApi,
     private val syncPreferences: SyncPreferences,
+    private val syncApiKeyStore: SyncApiKeyStore,
     private val categoryDao: CategoryDao,
     private val productDao: ProductDao
 ) {
-    suspend fun syncMenu(): MenuSyncResult = withContext(Dispatchers.IO) {
-        if (BuildConfig.SYNC_API_KEY.isBlank()) {
-            return@withContext MenuSyncResult(skipped = true)
-        }
-        val lastSync = syncPreferences.getLastMenuSyncMs()
-        val (serverTime, categories, products) = if (lastSync <= 0L) {
-            val bootstrap = syncApi.bootstrap()
-            Triple(bootstrap.serverTime, bootstrap.categories, bootstrap.products)
-        } else {
-            val changes = syncApi.menuChanges(lastSync)
-            Triple(changes.serverTime, changes.categories, changes.products)
+    suspend fun syncMenu(mode: MenuSyncMode = MenuSyncMode.MERGE): MenuSyncResult =
+        withContext(Dispatchers.IO) {
+            if (!syncApiKeyStore.hasKey()) {
+                return@withContext MenuSyncResult(skipped = true, message = "No sync API key")
+            }
+            if (mode == MenuSyncMode.REPLACE) {
+                productDao.deactivateAll()
+                categoryDao.deactivateAll()
+                syncPreferences.resetMenuSyncCursor()
+            }
+
+            val lastSync = syncPreferences.getLastMenuSyncMs()
+            val forceBootstrap = mode == MenuSyncMode.REPLACE || lastSync <= 0L
+            val (serverTime, categories, products) = if (forceBootstrap) {
+                val bootstrap = syncApi.bootstrap()
+                Triple(bootstrap.serverTime, bootstrap.categories, bootstrap.products)
+            } else {
+                val changes = syncApi.menuChanges(lastSync)
+                Triple(changes.serverTime, changes.categories, changes.products)
+            }
+
+            val categoryIdByRemote = mutableMapOf<String, Long>()
+            categories.forEach { dto ->
+                val localId = upsertCategory(dto)
+                if (localId != null) categoryIdByRemote[dto.id] = localId
+            }
+            products.forEach { dto ->
+                upsertProduct(dto, categoryIdByRemote)
+            }
+
+            syncPreferences.setLastMenuSyncMs(serverTime)
+            MenuSyncResult(
+                categories = categories.size,
+                products = products.size,
+                serverTime = serverTime,
+                mode = mode,
+                message = "Pulled ${categories.size} categories, ${products.size} products"
+            )
         }
 
-        val categoryIdByRemote = mutableMapOf<String, Long>()
-        categories.forEach { dto ->
-            val localId = upsertCategory(dto)
-            if (localId != null) categoryIdByRemote[dto.id] = localId
+    /** Push local active catalog to merchant panel. */
+    suspend fun pushMenuToCloud(): MenuSyncResult = withContext(Dispatchers.IO) {
+        if (!syncApiKeyStore.hasKey()) {
+            return@withContext MenuSyncResult(skipped = true, message = "No sync API key")
         }
-        products.forEach { dto ->
-            upsertProduct(dto, categoryIdByRemote)
+        val categories = categoryDao.getActive()
+        val products = productDao.getAllActive()
+        if (categories.isEmpty() && products.isEmpty()) {
+            return@withContext MenuSyncResult(message = "Local menu is empty")
         }
 
-        syncPreferences.setLastMenuSyncMs(serverTime)
+        val catClientIds = categories.associate { cat ->
+            cat.id to (cat.remoteId?.takeIf { it.isNotBlank() } ?: "local-cat-${cat.id}")
+        }
+        val payload = PushCatalogRequest(
+            categories = categories.map { cat ->
+                PushCatalogCategoryDto(
+                    clientId = catClientIds[cat.id]!!,
+                    name = cat.name,
+                    sortOrder = cat.sortOrder,
+                    color = cat.colorHex
+                )
+            },
+            products = products.map { p ->
+                PushCatalogProductDto(
+                    clientId = p.remoteId?.takeIf { it.isNotBlank() } ?: "local-prod-${p.id}",
+                    name = p.name,
+                    price = p.price,
+                    categoryClientId = p.categoryId?.let { catClientIds[it] },
+                    sku = p.sku,
+                    barcode = p.barcode,
+                    isTaxable = p.taxRate > 0.0,
+                    sortOrder = p.sortOrder
+                )
+            }
+        )
+        val response = syncApi.pushCatalog(payload)
+
+        // Persist server clientIds as remoteId for future sync
+        categories.forEach { cat ->
+            val clientId = catClientIds[cat.id] ?: return@forEach
+            if (cat.remoteId != clientId) {
+                categoryDao.update(cat.copy(remoteId = clientId))
+            }
+        }
+        products.forEach { p ->
+            val clientId = p.remoteId?.takeIf { it.isNotBlank() } ?: "local-prod-${p.id}"
+            if (p.remoteId != clientId) {
+                productDao.update(p.copy(remoteId = clientId))
+            }
+        }
+
         MenuSyncResult(
             categories = categories.size,
             products = products.size,
-            serverTime = serverTime
+            serverTime = response.serverTime,
+            message = "Pushed ${categories.size} categories, ${products.size} products to panel"
         )
     }
 
@@ -103,5 +184,7 @@ data class MenuSyncResult(
     val categories: Int = 0,
     val products: Int = 0,
     val serverTime: Long = 0L,
-    val skipped: Boolean = false
+    val skipped: Boolean = false,
+    val mode: MenuSyncMode = MenuSyncMode.MERGE,
+    val message: String? = null
 )

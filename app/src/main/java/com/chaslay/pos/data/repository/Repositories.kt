@@ -78,7 +78,9 @@ class AuthRepository @Inject constructor(
     private val roleDao: com.chaslay.pos.data.local.dao.RoleDao,
     private val posAuthApi: PosAuthApi,
     private val syncApi: SyncApi,
-    private val licenseManager: LicenseManager
+    private val licenseManager: LicenseManager,
+    private val syncApiKeyStore: com.chaslay.pos.data.preferences.SyncApiKeyStore,
+    private val syncPreferences: com.chaslay.pos.data.preferences.SyncPreferences
 ) {
     data class AuthSession(
         val user: UserEntity,
@@ -158,9 +160,18 @@ class AuthRepository @Inject constructor(
             if (!response.isSuccessful) {
                 return LoginResult.Failure(readPosAuthError(response.code(), response.errorBody()?.string()))
             }
-            val cloudUser = response.body()?.user
+            val body = response.body()
+            val cloudUser = body?.user
                 ?: return LoginResult.Failure("Invalid credentials")
             cloudUser.tenantSlug?.trim()?.takeIf { it.isNotEmpty() }?.let { licenseManager.setTenantSlug(it) }
+            // Bind this device to the merchant's sync key so catalog pull/push hits the right panel.
+            body.syncApiKey?.trim()?.takeIf { it.isNotEmpty() }?.let { key ->
+                syncApiKeyStore.setKey(key)
+            }
+            body.merchantId?.trim()?.takeIf { it.isNotEmpty() }?.let { id ->
+                syncPreferences.setMerchantId(id)
+            }
+            syncPreferences.resetMenuSyncCursor()
             val permissions = PosPermission.all()
             val role = com.chaslay.pos.data.local.entity.RoleEntity(
                 id = 1L,

@@ -1,6 +1,7 @@
 package com.chaslay.pos.di
 
 import com.chaslay.pos.BuildConfig
+import com.chaslay.pos.data.preferences.SyncApiKeyStore
 import com.chaslay.pos.data.remote.FloorApi
 import com.chaslay.pos.data.remote.LicenseApi
 import com.chaslay.pos.data.remote.PosAuthApi
@@ -22,11 +23,12 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideOkHttpClient(): OkHttpClient {
+    fun provideOkHttpClient(syncApiKeyStore: SyncApiKeyStore): OkHttpClient {
         val apiKeyInterceptor = Interceptor { chain ->
             val requestBuilder = chain.request().newBuilder()
-            if (BuildConfig.SYNC_API_KEY.isNotBlank()) {
-                requestBuilder.header("X-Api-Key", BuildConfig.SYNC_API_KEY)
+            val key = syncApiKeyStore.current().ifBlank { syncApiKeyStore.currentBlocking() }
+            if (key.isNotBlank()) {
+                requestBuilder.header("X-Api-Key", key)
             }
             chain.proceed(requestBuilder.build())
         }

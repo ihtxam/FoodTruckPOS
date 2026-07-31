@@ -1,17 +1,21 @@
 package com.chaslay.pos.ui.auth
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.chaslay.pos.data.preferences.SessionManager
 import com.chaslay.pos.data.repository.AuthRepository
 import com.chaslay.pos.domain.model.LoginResult
+import com.chaslay.pos.sync.MenuSyncMode
+import com.chaslay.pos.sync.MenuSyncRepository
+import com.chaslay.pos.sync.SyncService
 import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import javax.inject.Inject
 
 data class AuthUiState(
     val isLoggedIn: Boolean = false,
@@ -26,7 +30,9 @@ enum class PinSetupStep { ENTER, CONFIRM }
 @HiltViewModel
 class AuthViewModel @Inject constructor(
     private val authRepository: AuthRepository,
-    private val sessionManager: SessionManager
+    private val sessionManager: SessionManager,
+    private val menuSyncRepository: MenuSyncRepository,
+    private val syncService: SyncService
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AuthUiState())
@@ -35,12 +41,14 @@ class AuthViewModel @Inject constructor(
     private var pendingSession: AuthRepository.AuthSession? = null
     private var pinSetupBuffer: String = ""
     private var pinSetupFirst: String = ""
+    /** True when finishing a cloud email login (replace local demo menu). */
+    private var pendingPullCloudMenu: Boolean = false
 
     fun loginWithPin(pin: String) {
         viewModelScope.launch {
             val session = authRepository.loginWithPin(pin)
             if (session != null) {
-                finishLogin(session)
+                finishLogin(session, pullCloudMenu = false)
             } else {
                 _uiState.update { it.copy(errorMessage = "Invalid PIN") }
             }
@@ -53,6 +61,7 @@ class AuthViewModel @Inject constructor(
                 is LoginResult.Success -> {
                     if (result.needsPinSetup) {
                         pendingSession = result.session
+                        pendingPullCloudMenu = true
                         resetPinSetupBuffers()
                         _uiState.update {
                             it.copy(
@@ -63,7 +72,7 @@ class AuthViewModel @Inject constructor(
                             )
                         }
                     } else {
-                        finishLogin(result.session)
+                        finishLogin(result.session, pullCloudMenu = true)
                     }
                 }
                 is LoginResult.Failure -> {
@@ -125,6 +134,7 @@ class AuthViewModel @Inject constructor(
 
     fun cancelPinSetup() {
         pendingSession = null
+        pendingPullCloudMenu = false
         resetPinSetupBuffers()
         _uiState.update {
             it.copy(
@@ -138,11 +148,13 @@ class AuthViewModel @Inject constructor(
 
     private fun savePinAndLogin(pin: String) {
         val session = pendingSession ?: return
+        val pull = pendingPullCloudMenu
         viewModelScope.launch {
             authRepository.resetUserPin(session.user.id, pin)
             pendingSession = null
+            pendingPullCloudMenu = false
             resetPinSetupBuffers()
-            finishLogin(session)
+            finishLogin(session, pullCloudMenu = pull)
         }
     }
 
@@ -151,16 +163,23 @@ class AuthViewModel @Inject constructor(
         pinSetupFirst = ""
     }
 
-    private suspend fun finishLogin(session: AuthRepository.AuthSession) {
+    private suspend fun finishLogin(session: AuthRepository.AuthSession, pullCloudMenu: Boolean) {
         val access = authRepository.toUserAccess(session)
         sessionManager.saveSession(session.user.id, session.user.name, access)
         _uiState.update { AuthUiState(isLoggedIn = true) }
+        if (pullCloudMenu) {
+            runCatching {
+                menuSyncRepository.syncMenu(MenuSyncMode.REPLACE)
+                syncService.syncAll(force = true)
+            }.onFailure { Log.w("AuthViewModel", "Post-login menu sync failed", it) }
+        }
     }
 
     fun logout() {
         viewModelScope.launch {
             sessionManager.clearSession()
             pendingSession = null
+            pendingPullCloudMenu = false
             resetPinSetupBuffers()
             _uiState.update { AuthUiState() }
         }

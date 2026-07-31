@@ -25,6 +25,17 @@ router.get("/menu", async (req: Request, res: Response) => {
   }
 });
 
+/** Push local POS catalog → merchant panel (two-way menu sync). */
+router.post("/push-catalog", async (req: Request, res: Response) => {
+  try {
+    const { SyncService } = await import("@/services/sync.service");
+    const data = await SyncService.pushCatalog(req.chaslayMerchantId!, req.body || {});
+    res.json({ ok: true, serverTime: Date.now(), ...data });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Catalog push failed" });
+  }
+});
+
 router.get("/payment-config", async (req: Request, res: Response) => {
   try {
     const data = await ChaslayCompatService.getPaymentConfig(req.chaslayMerchantId!);

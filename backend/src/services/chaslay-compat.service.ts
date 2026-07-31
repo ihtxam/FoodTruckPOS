@@ -196,6 +196,16 @@ export class ChaslayCompatService {
 
     void tenantSlug; // accepted for API compat; not used to reject login
 
+    // Ensure every merchant has a sync API key so the POS can pull/push catalog.
+    let syncApiKey = merchant.syncApiKey?.trim() || "";
+    if (!syncApiKey) {
+      syncApiKey = generateSyncApiKey();
+      await db
+        .update(schema.merchants)
+        .set({ syncApiKey })
+        .where(eq(schema.merchants.id, merchant.id));
+    }
+
     return {
       user: {
         id: merchant.id,
@@ -204,6 +214,8 @@ export class ChaslayCompatService {
         role: "MERCHANT",
         tenantSlug: merchant.slug,
       },
+      merchantId: merchant.id,
+      syncApiKey,
     };
   }
 
@@ -222,6 +234,9 @@ export class ChaslayCompatService {
       where: and(eq(schema.products.merchantId, merchantId), eq(schema.products.isActive, true)),
     });
 
+    const categoryClientById = new Map(
+      categories.map((c) => [c.id, c.clientId || c.id] as const)
+    );
     return {
       serverTime: Date.now(),
       tenant: {
@@ -231,7 +246,7 @@ export class ChaslayCompatService {
         currency_symbol: "CHF",
       },
       categories: categories.map((c) => this.mapCategory(c)),
-      products: products.map((p) => this.mapProduct(p)),
+      products: products.map((p) => this.mapProduct(p, false, categoryClientById)),
       paymentConfig: await this.getPaymentConfigPayload(merchantId),
     };
   }
@@ -394,10 +409,18 @@ export class ChaslayCompatService {
       where: and(eq(schema.products.merchantId, merchantId), gt(schema.products.updatedAt, sinceDate)),
     });
 
+    // Full category map so product.category_id matches mapCategory ids (clientId || id).
+    const allCategories = await db.query.categories.findMany({
+      where: eq(schema.categories.merchantId, merchantId),
+    });
+    const categoryClientById = new Map(
+      allCategories.map((c) => [c.id, c.clientId || c.id] as const)
+    );
+
     return {
       serverTime: Date.now(),
       categories: categories.map((c) => this.mapCategory(c, true)),
-      products: products.map((p) => this.mapProduct(p, true)),
+      products: products.map((p) => this.mapProduct(p, true, categoryClientById)),
     };
   }
 
@@ -475,10 +498,17 @@ export class ChaslayCompatService {
     };
   }
 
-  static mapProduct(p: typeof schema.products.$inferSelect, includeDeleted = false) {
+  static mapProduct(
+    p: typeof schema.products.$inferSelect,
+    includeDeleted = false,
+    categoryClientById?: Map<string, string>
+  ) {
+    const categoryId = p.categoryId
+      ? categoryClientById?.get(p.categoryId) || p.categoryId
+      : null;
     return {
       id: p.clientId || p.id,
-      category_id: p.categoryId,
+      category_id: categoryId,
       name: p.name,
       description: p.description,
       price: parseFloat(String(p.price)),

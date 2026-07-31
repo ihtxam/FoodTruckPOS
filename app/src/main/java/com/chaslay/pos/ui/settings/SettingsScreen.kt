@@ -145,6 +145,40 @@ fun SettingsScreen(
         ) {
         if (state.selectedSection == SettingsSection.GENERAL) {
         Text(stringResource(R.string.general_settings), fontWeight = FontWeight.Bold, fontSize = 18.sp)
+
+        Text(stringResource(R.string.menu_sync_title), fontWeight = FontWeight.SemiBold)
+        Text(stringResource(R.string.menu_sync_help), style = MaterialTheme.typography.bodySmall)
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Button(
+                onClick = viewModel::pullOnlineMenuReplace,
+                enabled = !state.isMenuSyncing,
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(
+                    if (state.isMenuSyncing) stringResource(R.string.menu_syncing)
+                    else stringResource(R.string.menu_sync_replace)
+                )
+            }
+            OutlinedButton(
+                onClick = viewModel::pullOnlineMenuMerge,
+                enabled = !state.isMenuSyncing,
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(stringResource(R.string.menu_sync_merge))
+            }
+        }
+        OutlinedButton(
+            onClick = viewModel::pushMenuToPanel,
+            enabled = !state.isMenuSyncing,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(stringResource(R.string.menu_sync_push))
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+
         OutlinedTextField(
             value = state.businessName,
             onValueChange = viewModel::updateBusinessName,

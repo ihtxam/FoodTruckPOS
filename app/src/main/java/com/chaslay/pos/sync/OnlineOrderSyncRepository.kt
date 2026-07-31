@@ -1,10 +1,10 @@
 package com.chaslay.pos.sync
 
-import com.chaslay.pos.BuildConfig
 import com.chaslay.pos.data.local.dao.HeldOrderDao
 import com.chaslay.pos.data.local.dao.HeldOrderItemDao
 import com.chaslay.pos.data.local.entity.HeldOrderEntity
 import com.chaslay.pos.data.local.entity.HeldOrderItemEntity
+import com.chaslay.pos.data.preferences.SyncApiKeyStore
 import com.chaslay.pos.data.preferences.SyncPreferences
 import com.chaslay.pos.data.remote.SyncApi
 import com.chaslay.pos.data.remote.dto.IncomingOnlineOrderDto
@@ -24,13 +24,14 @@ import kotlinx.coroutines.withContext
 class OnlineOrderSyncRepository @Inject constructor(
     private val syncApi: SyncApi,
     private val syncPreferences: SyncPreferences,
+    private val syncApiKeyStore: SyncApiKeyStore,
     private val heldOrderDao: HeldOrderDao,
     private val heldOrderItemDao: HeldOrderItemDao
 ) {
     private val gson = Gson()
 
     suspend fun syncIncomingOrders(): OnlineOrderSyncResult = withContext(Dispatchers.IO) {
-        if (BuildConfig.SYNC_API_KEY.isBlank()) {
+        if (!syncApiKeyStore.hasKey()) {
             return@withContext OnlineOrderSyncResult(skipped = true)
         }
         val since = syncPreferences.getLastOrdersSyncMs()

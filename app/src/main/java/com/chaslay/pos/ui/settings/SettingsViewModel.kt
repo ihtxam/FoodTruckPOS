@@ -127,6 +127,7 @@ data class SettingsUiState(
     val scaleDevices: List<com.chaslay.pos.scale.ScaleUsbDevice> = emptyList(),
     val scaleTestReading: String? = null,
     val message: String? = null,
+    val isMenuSyncing: Boolean = false,
     val selectedSection: SettingsSection = SettingsSection.GENERAL,
     val posThemeMode: PosThemeMode = PosThemeMode.LIGHT,
     val crashLogs: List<CrashLogEntry> = emptyList(),
@@ -163,7 +164,8 @@ class SettingsViewModel @Inject constructor(
     private val adyenTerminalService: com.chaslay.pos.payment.AdyenTerminalService,
     private val scaleService: com.chaslay.pos.scale.AclasScaleService,
     private val floorSyncRepository: com.chaslay.pos.sync.FloorSyncRepository,
-    private val terminalSyncRepository: com.chaslay.pos.sync.TerminalSyncRepository
+    private val terminalSyncRepository: com.chaslay.pos.sync.TerminalSyncRepository,
+    private val syncService: com.chaslay.pos.sync.SyncService
 ) : ViewModel() {
 
     private var currentSettings = BusinessSettingsEntity()
@@ -433,6 +435,63 @@ class SettingsViewModel @Inject constructor(
     fun updatePosMode(mode: PosMode) = _uiState.update { it.copy(posMode = mode) }
     fun updateTrackCoversFromSeatingPlan(enabled: Boolean) =
         _uiState.update { it.copy(trackCoversFromSeatingPlan = enabled) }
+
+    fun pullOnlineMenuReplace() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isMenuSyncing = true, message = null) }
+            val result = runCatching { syncService.pullMenuReplace() }
+            _uiState.update {
+                it.copy(
+                    isMenuSyncing = false,
+                    message = result.fold(
+                        onSuccess = { r ->
+                            if (r.skipped) r.message ?: "Menu sync skipped (no API key — log in with panel email)"
+                            else r.message ?: "Replaced local menu with online menu (${r.products} products)"
+                        },
+                        onFailure = { e -> e.message ?: "Pull menu failed" }
+                    )
+                )
+            }
+        }
+    }
+
+    fun pullOnlineMenuMerge() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isMenuSyncing = true, message = null) }
+            val result = runCatching { syncService.pullMenuMerge() }
+            _uiState.update {
+                it.copy(
+                    isMenuSyncing = false,
+                    message = result.fold(
+                        onSuccess = { r ->
+                            if (r.skipped) r.message ?: "Menu sync skipped (no API key — log in with panel email)"
+                            else r.message ?: "Merged online menu (${r.products} products)"
+                        },
+                        onFailure = { e -> e.message ?: "Merge menu failed" }
+                    )
+                )
+            }
+        }
+    }
+
+    fun pushMenuToPanel() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isMenuSyncing = true, message = null) }
+            val result = runCatching { syncService.pushMenuToPanel() }
+            _uiState.update {
+                it.copy(
+                    isMenuSyncing = false,
+                    message = result.fold(
+                        onSuccess = { r ->
+                            if (r.skipped) r.message ?: "Push skipped (no API key — log in with panel email)"
+                            else r.message ?: "Pushed menu to panel"
+                        },
+                        onFailure = { e -> e.message ?: "Push menu failed" }
+                    )
+                )
+            }
+        }
+    }
 
     fun updateFloorSyncEnabled(enabled: Boolean) {
         _uiState.update { it.copy(floorSyncEnabled = enabled) }

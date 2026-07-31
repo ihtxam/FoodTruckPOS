@@ -5,6 +5,8 @@ import com.chaslay.pos.data.remote.dto.IncomingOrdersResponse
 import com.chaslay.pos.data.remote.dto.MenuBootstrapResponse
 import com.chaslay.pos.data.remote.dto.MenuChangesResponse
 import com.chaslay.pos.data.remote.dto.PaymentConfigResponse
+import com.chaslay.pos.data.remote.dto.PushCatalogRequest
+import com.chaslay.pos.data.remote.dto.PushCatalogResponse
 import com.chaslay.pos.data.remote.dto.PushTerminalsRequest
 import com.chaslay.pos.data.remote.dto.PushTerminalsResponse
 import com.chaslay.pos.data.remote.dto.StaffSyncResponse
@@ -22,6 +24,9 @@ interface SyncApi {
 
     @GET("v1/sync/menu")
     suspend fun menuChanges(@Query("since") since: Long): MenuChangesResponse
+
+    @POST("v1/sync/push-catalog")
+    suspend fun pushCatalog(@Body body: PushCatalogRequest): PushCatalogResponse
 
     @GET("v1/sync/payment-config")
     suspend fun paymentConfig(): PaymentConfigResponse

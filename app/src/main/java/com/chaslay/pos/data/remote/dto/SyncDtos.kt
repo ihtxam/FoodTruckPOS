@@ -196,3 +196,33 @@ data class SyncStaffProfileDto(
     val roleName: String,
     val permissions: List<String> = emptyList()
 )
+
+data class PushCatalogCategoryDto(
+    val clientId: String,
+    val name: String,
+    val sortOrder: Int = 0,
+    val color: String? = null
+)
+
+data class PushCatalogProductDto(
+    val clientId: String,
+    val name: String,
+    val price: Double,
+    val categoryClientId: String? = null,
+    val sku: String? = null,
+    val barcode: String? = null,
+    val isTaxable: Boolean = true,
+    val sortOrder: Int = 0
+)
+
+data class PushCatalogRequest(
+    val categories: List<PushCatalogCategoryDto> = emptyList(),
+    val products: List<PushCatalogProductDto> = emptyList()
+)
+
+data class PushCatalogResponse(
+    val ok: Boolean = true,
+    val serverTime: Long = 0L,
+    val categoryMap: Map<String, String> = emptyMap(),
+    val productMap: Map<String, String> = emptyMap()
+)

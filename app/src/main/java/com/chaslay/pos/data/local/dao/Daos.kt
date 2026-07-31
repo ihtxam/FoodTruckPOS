@@ -83,6 +83,9 @@ interface CategoryDao {
     @Query("SELECT * FROM categories WHERE isActive = 1 ORDER BY sortOrder, name")
     fun observeActive(): Flow<List<CategoryEntity>>
 
+    @Query("SELECT * FROM categories WHERE isActive = 1 ORDER BY sortOrder, name")
+    suspend fun getActive(): List<CategoryEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(category: CategoryEntity): Long
 
@@ -131,6 +134,9 @@ interface ProductDao {
 
     @Query("SELECT * FROM products WHERE isActive = 1 ORDER BY sortOrder, name")
     fun observeAllActive(): Flow<List<ProductEntity>>
+
+    @Query("SELECT * FROM products WHERE isActive = 1 ORDER BY sortOrder, name")
+    suspend fun getAllActive(): List<ProductEntity>
 
     @Query("SELECT * FROM products WHERE isActive = 1 AND isCombo = 1 ORDER BY sortOrder, name")
     fun observeCombos(): Flow<List<ProductEntity>>

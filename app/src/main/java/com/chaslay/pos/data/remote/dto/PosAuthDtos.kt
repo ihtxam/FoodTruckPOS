@@ -9,7 +9,9 @@ data class PosLoginRequest(
 )
 
 data class PosLoginResponse(
-    @SerializedName("user") val user: PosLoginUserDto
+    @SerializedName("user") val user: PosLoginUserDto,
+    @SerializedName("syncApiKey") val syncApiKey: String? = null,
+    @SerializedName("merchantId") val merchantId: String? = null
 )
 
 data class PosLoginUserDto(

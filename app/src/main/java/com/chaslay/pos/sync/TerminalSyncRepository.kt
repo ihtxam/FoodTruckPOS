@@ -1,9 +1,9 @@
 package com.chaslay.pos.sync
 
-import com.chaslay.pos.BuildConfig
 import com.chaslay.pos.data.local.dao.DiscountPresetDao
 import com.chaslay.pos.data.local.entity.BusinessSettingsEntity
 import com.chaslay.pos.data.local.entity.DiscountPresetEntity
+import com.chaslay.pos.data.preferences.SyncApiKeyStore
 import com.chaslay.pos.data.remote.SyncApi
 import com.chaslay.pos.data.remote.dto.PaymentConfigResponse
 import com.chaslay.pos.data.remote.dto.PushTerminalItemDto
@@ -19,10 +19,11 @@ import kotlinx.coroutines.withContext
 class TerminalSyncRepository @Inject constructor(
     private val syncApi: SyncApi,
     private val settingsRepository: SettingsRepository,
-    private val discountPresetDao: DiscountPresetDao
+    private val discountPresetDao: DiscountPresetDao,
+    private val syncApiKeyStore: SyncApiKeyStore
 ) {
     suspend fun syncTerminals(): TerminalSyncResult = withContext(Dispatchers.IO) {
-        if (BuildConfig.SYNC_API_KEY.isBlank()) {
+        if (!syncApiKeyStore.hasKey()) {
             return@withContext TerminalSyncResult(skipped = true)
         }
         val pulled = runCatching { pullFromServer() }.getOrElse {
@@ -35,7 +36,7 @@ class TerminalSyncRepository @Inject constructor(
     }
 
     suspend fun pushLocalTerminalOnly(): TerminalSyncResult = withContext(Dispatchers.IO) {
-        if (BuildConfig.SYNC_API_KEY.isBlank()) {
+        if (!syncApiKeyStore.hasKey()) {
             return@withContext TerminalSyncResult(skipped = true)
         }
         val pushed = runCatching { pushLocalToServer() }.getOrElse {
@@ -94,7 +95,7 @@ class TerminalSyncRepository @Inject constructor(
                 terminals = listOf(
                     PushTerminalItemDto(
                         terminalId = terminalId,
-                        terminalName = "POS ∑ $terminalId",
+                        terminalName = "POS ù $terminalId",
                         serialNumber = terminalId,
                         status = if (settings.adyenTerminalEnabled) "active" else "inactive"
                     )

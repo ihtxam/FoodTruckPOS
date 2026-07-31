@@ -23,7 +23,7 @@ class SyncService @Inject constructor(
         if (!force && now - lastFullSyncAt < MIN_SYNC_INTERVAL_MS) {
             return FullSyncResult(skipped = true)
         }
-        val menu = runCatching { menuSyncRepository.syncMenu() }
+        val menu = runCatching { menuSyncRepository.syncMenu(MenuSyncMode.MERGE) }
             .onFailure { Log.w(TAG, "Menu sync failed", it) }
             .getOrDefault(MenuSyncResult())
         val terminals = runCatching { terminalSyncRepository.syncTerminals() }
@@ -41,6 +41,15 @@ class SyncService @Inject constructor(
         lastFullSyncAt = now
         FullSyncResult(menu = menu, terminals = terminals, staff = staff, orders = orders, transactions = tx)
     }
+
+    suspend fun pullMenuReplace(): MenuSyncResult =
+        menuSyncRepository.syncMenu(MenuSyncMode.REPLACE)
+
+    suspend fun pullMenuMerge(): MenuSyncResult =
+        menuSyncRepository.syncMenu(MenuSyncMode.MERGE)
+
+    suspend fun pushMenuToPanel(): MenuSyncResult =
+        menuSyncRepository.pushMenuToCloud()
 
     suspend fun syncOnlineOrdersOnly(): OnlineOrderSyncResult =
         runCatching { onlineOrderSyncRepository.syncIncomingOrders() }
