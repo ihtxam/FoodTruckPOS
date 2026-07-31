@@ -87,23 +87,53 @@ export default function Orders() {
   const [tab, setTab] = useState<BoardTab>('new');
   const [busyId, setBusyId] = useState<string | null>(null);
   const [selected, setSelected] = useState<Order | null>(null);
+  const knownNewIdsRef = useRef<Set<string> | null>(null);
 
   const load = useCallback(async () => {
     try {
       const response = await api.get('/merchant/orders?limit=100');
-      setOrders(response.data.orders || []);
+      const next = (response.data.orders || []) as Order[];
+      setOrders(next);
+
+      const newIds = next
+        .filter(
+          (o) =>
+            o.orderType === 'web_shop' &&
+            (o.status === 'pending' || o.status === 'pending_approval')
+        )
+        .map((o) => o.id);
+
+      if (knownNewIdsRef.current == null) {
+        knownNewIdsRef.current = new Set(newIds);
+      } else {
+        const fresh = newIds.filter((id) => !knownNewIdsRef.current!.has(id));
+        for (const id of newIds) knownNewIdsRef.current.add(id);
+        if (fresh.length > 0) {
+          playOrderAlertOnce();
+          startOrderAlertLoop(5000);
+          toast(t('webPosNewOrderAlert'), { icon: '🔔', duration: 5000 });
+        }
+        if (newIds.length === 0) stopOrderAlertLoop();
+      }
     } catch (error: any) {
       toast.error(error.response?.data?.error || 'Failed to load orders');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void load();
     const id = setInterval(() => void load(), 10000);
-    return () => clearInterval(id);
+    return () => {
+      clearInterval(id);
+      stopOrderAlertLoop();
+    };
   }, [load]);
+
+  useEffect(() => {
+    if (tab === 'new') stopOrderAlertLoop();
+  }, [tab]);
 
   const channelLabel = (channel?: string | null) => {
     if (channel === 'dine_in') return t('dineIn');

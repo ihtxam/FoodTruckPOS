@@ -35,6 +35,7 @@ export type ReceiptLabels = {
   deliveryTime: string;
   asap: string;
   payLater: string;
+  totalItems: string;
 };
 
 const EN: ReceiptLabels = {
@@ -72,6 +73,7 @@ const EN: ReceiptLabels = {
   deliveryTime: 'Delivery:',
   asap: 'ASAP',
   payLater: 'Pay later',
+  totalItems: 'Items',
 };
 
 const FR: ReceiptLabels = {
@@ -87,28 +89,29 @@ const FR: ReceiptLabels = {
   payment: 'Paiement',
   note: 'Note',
   staff: 'Personnel',
-  scanDigitalReceipt: 'Scannez pour le reùu digital',
+  scanDigitalReceipt: 'Scannez pour le reÁu digital',
   thankYou: 'Merci',
   kitchen: 'CUISINE',
   dineIn: 'SUR PLACE',
   takeaway: 'EMPORTER',
   delivery: 'LIVRAISON',
-  cash: 'Espùces',
+  cash: 'EspËces',
   card: 'Carte',
   terminal: 'Terminal',
   express: 'Express',
   pax: 'Couverts',
-  endOfDay: 'RAPPORT DE FIN DE JOURNùE',
+  endOfDay: 'RAPPORT DE FIN DE JOURN…E',
   salesCount: 'Ventes',
-  revenue: 'Chiffre dùaffaires',
+  revenue: "Chiffre d'affaires",
   productsSold: 'Produits vendus',
-  cancelled: 'Annulùes',
+  cancelled: 'AnnulÈes',
   refunds: 'Remboursements',
   covers: 'Couverts',
   pickupTime: 'Retrait :',
   deliveryTime: 'Livraison :',
-  asap: 'Dùs que possible',
+  asap: 'DËs que possible',
   payLater: 'Payer plus tard',
+  totalItems: 'Articles',
 };
 
 const DE: ReceiptLabels = {
@@ -124,9 +127,9 @@ const DE: ReceiptLabels = {
   payment: 'Zahlung',
   note: 'Notiz',
   staff: 'Personal',
-  scanDigitalReceipt: 'Scannen fùr digitalen Beleg',
+  scanDigitalReceipt: 'Scannen f¸r digitalen Beleg',
   thankYou: 'Danke',
-  kitchen: 'KùCHE',
+  kitchen: 'K‹CHE',
   dineIn: 'VOR ORT',
   takeaway: 'ZUM MITNEHMEN',
   delivery: 'LIEFERUNG',
@@ -134,18 +137,19 @@ const DE: ReceiptLabels = {
   card: 'Karte',
   terminal: 'Terminal',
   express: 'Express',
-  pax: 'Gùste',
+  pax: 'G‰ste',
   endOfDay: 'TAGESABSCHLUSS',
-  salesCount: 'Verkùufe',
+  salesCount: 'Verk‰ufe',
   revenue: 'Umsatz',
   productsSold: 'Verkaufte Produkte',
   cancelled: 'Storniert',
-  refunds: 'Rùckerstattungen',
+  refunds: 'R¸ckerstattungen',
   covers: 'Gedecke',
   pickupTime: 'Abholung:',
   deliveryTime: 'Lieferung:',
   asap: 'Sofort',
   payLater: 'Sp‰ter zahlen',
+  totalItems: 'Artikel',
 };
 
 export function receiptLabels(lang: string | null | undefined): ReceiptLabels {

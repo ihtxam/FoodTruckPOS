@@ -166,78 +166,94 @@ export function generateWebPosReceiptText(tx: WebPosReceipt, panelLang?: string)
 }
 
 export type KitchenTicketOpts = {
-  businessName?: string;
   channel?: string;
-  tableLabel?: string | null;
   items: WebPosReceiptItem[];
-  notes?: string;
-  header?: string;
-  footer?: string;
   language?: string;
   paperWidthMm?: 58 | 80;
-  completedAt?: number;
+  /** Order / sale reference printed under KITCHEN */
+  orderNumber?: string | null;
+  /** When the order was placed */
+  orderedAt?: number;
   /** Pickup / delivery scheduled time (ISO or epoch). Null/omit = ASAP */
   scheduledFor?: string | number | null;
-  customerName?: string | null;
+  /** Staff or customer name at footer */
+  userName?: string | null;
   itemTextScale?: 1 | 2 | 3;
   headerTextScale?: 1 | 2 | 3;
   boldText?: boolean;
 };
 
-function formatScheduleLabel(
+/** e.g. "TAKEAWAY : ASAP" or "TAKEAWAY : Fri 31.07., 14:30" */
+function formatChannelWhen(
   L: ReturnType<typeof receiptLabels>,
   channel: string | undefined,
   scheduledFor?: string | number | null
 ): string {
-  const isDelivery = channel === 'delivery';
-  const prefix = isDelivery ? L.deliveryTime : L.pickupTime;
-  if (scheduledFor == null || scheduledFor === '') return `${prefix} ${L.asap}`;
+  const ch = channelLabel(L, channel);
+  if (scheduledFor == null || scheduledFor === '') return `${ch} : ${L.asap}`;
   const d = new Date(scheduledFor);
-  if (Number.isNaN(d.getTime())) return `${prefix} ${L.asap}`;
-  return `${prefix} ${d.toLocaleString('de-CH', {
+  if (Number.isNaN(d.getTime())) return `${ch} : ${L.asap}`;
+  const when = d.toLocaleString('de-CH', {
     weekday: 'short',
     day: 'numeric',
     month: 'short',
     hour: '2-digit',
     minute: '2-digit',
-  })}`;
+  });
+  return `${ch} : ${when}`;
+}
+
+function kitchenItemCount(items: WebPosReceiptItem[]): number {
+  return items.reduce((s, i) => s + (Number(i.quantity) || 0), 0);
+}
+
+function buildKitchenTicketLines(opts: KitchenTicketOpts): {
+  width: number;
+  L: ReturnType<typeof receiptLabels>;
+  lines: Array<{ kind: 'header' | 'item' | 'normal'; text: string }>;
+} {
+  const width = lineWidthForPaper(opts.paperWidthMm);
+  const L = receiptLabels(opts.language);
+  const thin = '-'.repeat(width);
+  const orderedAt = new Date(opts.orderedAt || Date.now());
+  const timeStr = orderedAt.toLocaleTimeString('de-CH', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+  const totalQty = kitchenItemCount(opts.items);
+  const user = (opts.userName || '').trim() || '—';
+
+  const lines: Array<{ kind: 'header' | 'item' | 'normal'; text: string }> = [
+    { kind: 'header', text: 'KITCHEN\n' },
+    { kind: 'header', text: `${(opts.orderNumber || '—').slice(0, width)}\n` },
+    { kind: 'header', text: `${formatChannelWhen(L, opts.channel, opts.scheduledFor)}\n` },
+    { kind: 'normal', text: `${thin}\n` },
+  ];
+
+  for (const item of opts.items) {
+    lines.push({
+      kind: 'item',
+      text: `${item.quantity}x ${item.name}`.slice(0, width) + '\n',
+    });
+  }
+
+  lines.push({ kind: 'normal', text: `${thin}\n` });
+  lines.push({
+    kind: 'normal',
+    text: padLine(L.totalItems, String(totalQty), width) + '\n',
+  });
+  lines.push({ kind: 'normal', text: `${thin}\n` });
+  lines.push({ kind: 'normal', text: `${user}, ${timeStr}\n` });
+  lines.push({ kind: 'normal', text: '\n\n\n' });
+
+  return { width, L, lines };
 }
 
 /** Plain-text kitchen ticket (fallback / preview). */
 export function generateKitchenTicketText(opts: KitchenTicketOpts): string {
-  const width = lineWidthForPaper(opts.paperWidthMm);
-  const L = receiptLabels(opts.language);
-  const sep = '='.repeat(width);
-  const thin = '-'.repeat(width);
-  const when = new Date(opts.completedAt || Date.now());
-  let r = '';
-  r += sep + '\n';
-  r += L.kitchen + '\n';
-  if (opts.header?.trim()) {
-    for (const line of opts.header.trim().split(/\r?\n/)) r += line.slice(0, width) + '\n';
-  } else if (opts.businessName) {
-    r += opts.businessName.toUpperCase().slice(0, width) + '\n';
-  }
-  r += sep + '\n';
-  r += `${when.toLocaleTimeString('de-CH')}\n`;
-  if (opts.channel) r += `${channelLabel(L, opts.channel)}\n`;
-  r += formatScheduleLabel(L, opts.channel, opts.scheduledFor) + '\n';
-  if (opts.customerName) r += `${opts.customerName}\n`;
-  if (opts.tableLabel) r += `${L.table} ${opts.tableLabel}\n`;
-  r += thin + '\n';
-  for (const item of opts.items) {
-    r += `${item.quantity}x ${item.name}`.slice(0, width) + '\n';
-  }
-  if (opts.notes) {
-    r += thin + '\n';
-    r += `${L.note} ${opts.notes}\n`;
-  }
-  if (opts.footer?.trim()) {
-    r += thin + '\n';
-    r += opts.footer.trim() + '\n';
-  }
-  r += '\n\n\n';
-  return r;
+  return buildKitchenTicketLines(opts)
+    .lines.map((l) => l.text)
+    .join('');
 }
 
 function escKitchenSize(scale: 1 | 2 | 3): Uint8Array {
@@ -252,8 +268,7 @@ function escBold(on: boolean): Uint8Array {
 
 /** Kitchen ticket as ESC/POS with bold + enlarged text (default scale 2 ≈ 12pt tall). */
 export function generateKitchenTicketEscPos(opts: KitchenTicketOpts): Uint8Array {
-  const width = lineWidthForPaper(opts.paperWidthMm);
-  const L = receiptLabels(opts.language);
+  const { lines } = buildKitchenTicketLines(opts);
   const headerScale = (opts.headerTextScale === 1 || opts.headerTextScale === 3
     ? opts.headerTextScale
     : 2) as 1 | 2 | 3;
@@ -263,47 +278,20 @@ export function generateKitchenTicketEscPos(opts: KitchenTicketOpts): Uint8Array
   const bold = opts.boldText !== false;
   const enc = new TextEncoder();
   const parts: Uint8Array[] = [
-    new Uint8Array([0x1b, 0x40]), // init
-    new Uint8Array([0x1b, 0x61, 0x00]), // left
+    new Uint8Array([0x1b, 0x40]),
+    new Uint8Array([0x1b, 0x61, 0x00]),
   ];
 
-  const pushNormal = (s: string) => {
-    parts.push(escKitchenSize(1), escBold(false), enc.encode(s));
-  };
-  const pushHeader = (s: string) => {
-    parts.push(escKitchenSize(headerScale), escBold(bold || headerScale > 1), enc.encode(s));
-  };
-  const pushItem = (s: string) => {
-    parts.push(escKitchenSize(itemScale), escBold(bold || itemScale > 1), enc.encode(s));
-  };
+  for (const line of lines) {
+    if (line.kind === 'header') {
+      parts.push(escKitchenSize(headerScale), escBold(bold || headerScale > 1), enc.encode(line.text));
+    } else if (line.kind === 'item') {
+      parts.push(escKitchenSize(itemScale), escBold(bold || itemScale > 1), enc.encode(line.text));
+    } else {
+      parts.push(escKitchenSize(1), escBold(false), enc.encode(line.text));
+    }
+  }
 
-  const sep = '='.repeat(width) + '\n';
-  const thin = '-'.repeat(width) + '\n';
-  pushHeader(sep);
-  pushHeader(L.kitchen + '\n');
-  if (opts.header?.trim()) {
-    for (const line of opts.header.trim().split(/\r?\n/)) pushHeader(line.slice(0, width) + '\n');
-  } else if (opts.businessName) {
-    pushHeader(opts.businessName.toUpperCase().slice(0, width) + '\n');
-  }
-  pushHeader(sep);
-  pushNormal(`${new Date(opts.completedAt || Date.now()).toLocaleTimeString('de-CH')}\n`);
-  if (opts.channel) pushHeader(`${channelLabel(L, opts.channel)}\n`);
-  pushHeader(formatScheduleLabel(L, opts.channel, opts.scheduledFor) + '\n');
-  if (opts.customerName) pushItem(`${opts.customerName}\n`);
-  if (opts.tableLabel) pushNormal(`${L.table} ${opts.tableLabel}\n`);
-  pushNormal(thin);
-  for (const item of opts.items) {
-    pushItem(`${item.quantity}x ${item.name}`.slice(0, width) + '\n');
-  }
-  if (opts.notes) {
-    pushNormal(thin);
-    pushNormal(`${L.note} ${opts.notes}\n`);
-  }
-  if (opts.footer?.trim()) {
-    pushNormal(thin);
-    pushNormal(opts.footer.trim() + '\n');
-  }
   parts.push(
     escKitchenSize(1),
     escBold(false),

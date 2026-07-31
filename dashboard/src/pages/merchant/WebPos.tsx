@@ -574,7 +574,11 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
     await printEscPosToTargets(receiptText, { qrUrl: receiptUrl, role: 'receipt' });
   };
 
-  const printKitchenForCart = async (lines: CartLine[], saleChannel: Channel) => {
+  const printKitchenForCart = async (
+    lines: CartLine[],
+    saleChannel: Channel,
+    orderNumber?: string | null
+  ) => {
     if (printSettings?.autoPrintKitchen === false) return;
     const lang = resolveReceiptLanguage(printSettings, printSettings?.receiptLanguage === 'panel' ? locale : printSettings?.receiptLanguage || locale);
     const kitchenPrinters = (printSettings?.printers || []).filter(
@@ -591,17 +595,21 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
         categoryId: l.categoryId,
       };
     });
+    const customerName = selectedCustomer
+      ? [selectedCustomer.firstName, selectedCustomer.lastName].filter(Boolean).join(' ')
+      : '';
+    const userName =
+      (webposStaff?.name || '').trim() ||
+      customerName ||
+      null;
 
     const kitchenOpts = {
-      businessName: merchant?.name as string | undefined,
       channel: saleChannel,
       language: lang,
-      header: printSettings?.kitchenTicketHeader,
-      footer: printSettings?.kitchenTicketFooter,
+      orderNumber: orderNumber || null,
+      orderedAt: Date.now(),
       scheduledFor: fulfillmentWhen?.scheduledFor ?? null,
-      customerName: selectedCustomer
-        ? [selectedCustomer.firstName, selectedCustomer.lastName].filter(Boolean).join(' ')
-        : null,
+      userName,
       itemTextScale: printSettings?.kitchenItemTextScale || 2,
       headerTextScale: printSettings?.kitchenHeaderTextScale || 2,
       boldText: printSettings?.kitchenBoldText !== false,
@@ -812,7 +820,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
       }
     }
     try {
-      await printKitchenForCart(cartSnapshot, channelSnapshot);
+      await printKitchenForCart(cartSnapshot, channelSnapshot, clientId);
     } catch (e: any) {
       toast.error(e.message || t('webPosKitchenPrintFailed'));
     }
@@ -874,7 +882,11 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
       });
       if (sendToKitchen) {
         try {
-          await printKitchenForCart(cart, channel);
+          await printKitchenForCart(
+            cart,
+            channel,
+            `hold-${Date.now().toString(36)}`
+          );
         } catch {
           /* kitchen optional on hold */
         }
