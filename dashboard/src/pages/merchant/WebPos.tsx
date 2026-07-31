@@ -4,6 +4,7 @@ import {
   Banknote,
   ClipboardList,
   CreditCard,
+  Globe2,
   MoreHorizontal,
   PanelLeft,
   PauseCircle,
@@ -67,6 +68,14 @@ import ShopComboWizard, {
 import WebPosPaymentModal, { type WebPosPaymentPhase } from '@/components/WebPosPaymentModal';
 import WebPosPinModal from '@/components/WebPosPinModal';
 import WebPosOrdersPanel from '@/components/WebPosOrdersPanel';
+import WebPosOnlineOrdersPanel, {
+  type OnlineOrder,
+} from '@/components/WebPosOnlineOrdersPanel';
+import {
+  playOrderAlertOnce,
+  startOrderAlertLoop,
+  stopOrderAlertLoop,
+} from '@/lib/order-alert';
 import {
   hasPermission,
   loadWebPosStaffSession,
@@ -199,6 +208,10 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
   const [lastReceiptUrl, setLastReceiptUrl] = useState<string>('');
   const [printSettings, setPrintSettings] = useState<PosPrintSettingsClient | null>(null);
   const [ordersOpen, setOrdersOpen] = useState(false);
+  const [onlineOrdersOpen, setOnlineOrdersOpen] = useState(false);
+  const [onlineOrders, setOnlineOrders] = useState<OnlineOrder[]>([]);
+  const knownOnlineIdsRef = useRef<Set<string> | null>(null);
+  const onlinePanelOpenRef = useRef(false);
   const [fulfillmentWhen, setFulfillmentWhen] = useState<FulfillmentWhen | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<WebPosCustomer | null>(null);
   const [scheduleOpen, setScheduleOpen] = useState(false);
@@ -363,6 +376,72 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
   useEffect(() => {
     load();
   }, [load]);
+
+  const pollOnlineOrders = useCallback(async () => {
+    try {
+      const res = await api.get('/merchant/orders', { params: { limit: 80 } });
+      const all = (res.data.orders || []) as OnlineOrder[];
+      const online = all.filter((o) => o.orderType === 'web_shop');
+      setOnlineOrders(online);
+
+      const newOnes = online.filter(
+        (o) => o.status === 'pending' || o.status === 'pending_approval'
+      );
+      const newIds = newOnes.map((o) => o.id);
+
+      if (knownOnlineIdsRef.current == null) {
+        knownOnlineIdsRef.current = new Set(newIds);
+        return;
+      }
+
+      const fresh = newIds.filter((id) => !knownOnlineIdsRef.current!.has(id));
+      for (const id of newIds) knownOnlineIdsRef.current.add(id);
+
+      if (fresh.length > 0) {
+        playOrderAlertOnce();
+        toast(t('webPosNewOrderAlert'), { icon: '🔔', duration: 5000 });
+        if (!onlinePanelOpenRef.current) {
+          startOrderAlertLoop(5000);
+        }
+      }
+
+      if (newIds.length === 0) {
+        stopOrderAlertLoop();
+      }
+    } catch {
+      /* ignore poll errors */
+    }
+  }, [t]);
+
+  useEffect(() => {
+    onlinePanelOpenRef.current = onlineOrdersOpen;
+    if (onlineOrdersOpen) stopOrderAlertLoop();
+  }, [onlineOrdersOpen]);
+
+  useEffect(() => {
+    void pollOnlineOrders();
+    const id = setInterval(() => void pollOnlineOrders(), 8000);
+    return () => {
+      clearInterval(id);
+      stopOrderAlertLoop();
+    };
+  }, [pollOnlineOrders]);
+
+  // Browsers block audio until a user gesture — unlock AudioContext on first tap
+  useEffect(() => {
+    const softUnlock = () => {
+      try {
+        const AC =
+          window.AudioContext ||
+          (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        if (AC) void new AC().resume();
+      } catch {
+        /* ignore */
+      }
+    };
+    window.addEventListener('pointerdown', softUnlock, { once: true });
+    return () => window.removeEventListener('pointerdown', softUnlock);
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('manupos_webpos_printer', printerName || '');
@@ -1277,6 +1356,29 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
         <div className="flex shrink-0 items-center gap-1.5">
           <button
             type="button"
+            className="relative inline-flex h-10 items-center gap-1.5 rounded-xl border border-[var(--border)] px-2.5 text-xs font-medium hover:bg-[var(--bg-muted)]"
+            onClick={() => {
+              setOnlineOrdersOpen(true);
+              stopOrderAlertLoop();
+            }}
+            title={t('webPosOnlineOrders')}
+          >
+            <Globe2 size={16} />
+            <span className="hidden sm:inline">{t('webPosOnlineOrders')}</span>
+            {onlineOrders.filter(
+              (o) => o.status === 'pending' || o.status === 'pending_approval'
+            ).length > 0 ? (
+              <span className="absolute -right-1 -top-1 inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-amber-600 px-1 text-[10px] font-bold text-white">
+                {
+                  onlineOrders.filter(
+                    (o) => o.status === 'pending' || o.status === 'pending_approval'
+                  ).length
+                }
+              </span>
+            ) : null}
+          </button>
+          <button
+            type="button"
             className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-[var(--border)] px-2.5 text-xs font-medium hover:bg-[var(--bg-muted)]"
             onClick={() => setOrdersOpen(true)}
             title={t('webPosOrders')}
@@ -1630,6 +1732,13 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
           }
           toast.success(t('webPosOrderResumed'));
         }}
+      />
+
+      <WebPosOnlineOrdersPanel
+        open={onlineOrdersOpen}
+        onClose={() => setOnlineOrdersOpen(false)}
+        orders={onlineOrders}
+        onRefresh={() => void pollOnlineOrders()}
       />
 
       {(channel === 'takeaway' || channel === 'delivery') && (
