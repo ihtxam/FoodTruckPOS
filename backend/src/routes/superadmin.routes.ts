@@ -4,12 +4,108 @@ import { MerchantService } from "@/services/merchant.service";
 import { LicenseAdminService } from "@/services/license-admin.service";
 import { AnalyticsService } from "@/services/analytics.service";
 import { AuthService } from "@/services/auth.service";
+import { SubscriptionPlansService } from "@/services/subscription-plans.service";
+import { PlatformSettingsService } from "@/services/platform-settings.service";
 
 const router = Router();
 
 // Apply superadmin middleware to all routes
 router.use(verifyToken);
 router.use(requireSuperadmin);
+
+// ============================================================================
+// SUBSCRIPTION PLANS (packages)
+// ============================================================================
+
+/**
+ * GET /api/superadmin/plans
+ * List all subscription plans/packages
+ */
+router.get("/plans", async (_req: Request, res: Response) => {
+  try {
+    const plans = await SubscriptionPlansService.listAll(true);
+    res.json({ success: true, plans });
+  } catch (error) {
+    console.error("Error listing plans:", error);
+    res.status(500).json({ error: error instanceof Error ? error.message : "Failed to list plans" });
+  }
+});
+
+/**
+ * POST /api/superadmin/plans
+ * Create a subscription plan/package
+ */
+router.post("/plans", async (req: Request, res: Response) => {
+  try {
+    const plan = await SubscriptionPlansService.create(req.body || {});
+    res.status(201).json({ success: true, plan });
+  } catch (error) {
+    console.error("Error creating plan:", error);
+    res.status(400).json({ error: error instanceof Error ? error.message : "Failed to create plan" });
+  }
+});
+
+/**
+ * PUT /api/superadmin/plans/:planId
+ * Update a subscription plan/package
+ */
+router.put("/plans/:planId", async (req: Request, res: Response) => {
+  try {
+    const plan = await SubscriptionPlansService.update(req.params.planId, req.body || {});
+    res.json({ success: true, plan });
+  } catch (error) {
+    console.error("Error updating plan:", error);
+    res.status(400).json({ error: error instanceof Error ? error.message : "Failed to update plan" });
+  }
+});
+
+/**
+ * DELETE /api/superadmin/plans/:planId
+ * Soft-deactivate a subscription plan/package
+ */
+router.delete("/plans/:planId", async (req: Request, res: Response) => {
+  try {
+    const plan = await SubscriptionPlansService.remove(req.params.planId);
+    res.json({ success: true, plan });
+  } catch (error) {
+    console.error("Error deactivating plan:", error);
+    res.status(400).json({ error: error instanceof Error ? error.message : "Failed to deactivate plan" });
+  }
+});
+
+// ============================================================================
+// PLATFORM SETTINGS
+// ============================================================================
+
+/**
+ * GET /api/superadmin/platform-settings/adyen
+ */
+router.get("/platform-settings/adyen", async (_req: Request, res: Response) => {
+  try {
+    const adyen = await PlatformSettingsService.getAdyenSettingsPublic();
+    res.json({ success: true, adyen });
+  } catch (error) {
+    console.error("Error getting platform Adyen settings:", error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to load Adyen settings",
+    });
+  }
+});
+
+/**
+ * PUT /api/superadmin/platform-settings/adyen
+ */
+router.put("/platform-settings/adyen", async (req: Request, res: Response) => {
+  try {
+    const adyen = await PlatformSettingsService.updateAdyenSettings(req.body || {});
+    res.json({ success: true, adyen });
+  } catch (error) {
+    console.error("Error updating platform Adyen settings:", error);
+    res.status(400).json({
+      error: error instanceof Error ? error.message : "Failed to save Adyen settings",
+    });
+  }
+});
 
 // ============================================================================
 // MERCHANT MANAGEMENT
