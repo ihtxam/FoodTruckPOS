@@ -876,12 +876,12 @@ class BluetoothPrinterService @Inject constructor(
         val sb = StringBuilder()
 
         sb.appendLine(divider)
-        appendCenteredLines(sb, settings.businessName, lineWidth, bold = true)
+        appendCenteredLines(sb, settings.businessName, lineWidth, bold = false)
         sb.appendLine(divider)
         sb.appendLine("")
-        appendCenteredLines(sb, "END OF DAY", lineWidth, bold = true)
+        appendCenteredLines(sb, "END OF DAY", lineWidth, bold = false)
         sb.appendLine("")
-        appendCenteredLines(sb, "Report Period", lineWidth, bold = true)
+        appendCenteredLines(sb, "Report Period", lineWidth, bold = false)
         val periodLabel = if (report.periodStart > 0) {
             "${dateFmt.format(Date(report.periodStart))} to ${dateFmt.format(Date(report.periodEnd))}"
         } else {
@@ -920,7 +920,7 @@ class BluetoothPrinterService @Inject constructor(
         sb.appendLine(dashes)
         appendReceiptTotal(sb, "TOTAL", report.brutTotal, sym, lineWidth)
         if (report.tipsTotal > 0.0) {
-            sb.appendLine(leftRight("Tips", formatMoney(report.tipsTotal, sym), lineWidth))
+            sb.appendLine(leftRight("Tips (not taxable)", formatMoney(report.tipsTotal, sym), lineWidth))
             sb.appendLine(leftRight("GRAND TOTAL", formatMoney(report.grandTotal, sym), lineWidth))
         }
         sb.appendLine(leftRight("Orders", report.salesCount.toString(), lineWidth))

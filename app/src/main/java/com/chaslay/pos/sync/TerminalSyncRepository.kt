@@ -1,11 +1,14 @@
 package com.chaslay.pos.sync
 
 import com.chaslay.pos.BuildConfig
+import com.chaslay.pos.data.local.dao.DiscountPresetDao
 import com.chaslay.pos.data.local.entity.BusinessSettingsEntity
+import com.chaslay.pos.data.local.entity.DiscountPresetEntity
 import com.chaslay.pos.data.remote.SyncApi
 import com.chaslay.pos.data.remote.dto.PaymentConfigResponse
 import com.chaslay.pos.data.remote.dto.PushTerminalItemDto
 import com.chaslay.pos.data.remote.dto.PushTerminalsRequest
+import com.chaslay.pos.data.remote.dto.SyncCheckoutDto
 import com.chaslay.pos.data.repository.SettingsRepository
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -15,7 +18,8 @@ import kotlinx.coroutines.withContext
 @Singleton
 class TerminalSyncRepository @Inject constructor(
     private val syncApi: SyncApi,
-    private val settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository,
+    private val discountPresetDao: DiscountPresetDao
 ) {
     suspend fun syncTerminals(): TerminalSyncResult = withContext(Dispatchers.IO) {
         if (BuildConfig.SYNC_API_KEY.isBlank()) {
@@ -44,11 +48,33 @@ class TerminalSyncRepository @Inject constructor(
         val config = syncApi.paymentConfig()
         val current = settingsRepository.getSettings()
         val merged = mergePaymentConfig(current, config)
+        var changed = merged != current
         if (merged != current) {
             settingsRepository.saveSettings(merged)
-            return true
         }
-        return false
+        config.checkout?.let { checkout ->
+            if (mergeDiscountPresets(checkout)) changed = true
+        }
+        return changed
+    }
+
+    private suspend fun mergeDiscountPresets(checkout: SyncCheckoutDto): Boolean {
+        val presets = checkout.discountPresets
+            .filter { !it.name.isNullOrBlank() || it.percent > 0 }
+            .take(20)
+        if (presets.isEmpty()) return false
+        discountPresetDao.deactivateAll()
+        discountPresetDao.insertAll(
+            presets.mapIndexed { index, p ->
+                DiscountPresetEntity(
+                    name = (p.name?.trim().orEmpty().ifBlank { "${p.percent.toInt()}%" }).take(40),
+                    percent = p.percent.coerceIn(0.0, 100.0),
+                    isActive = true,
+                    sortOrder = index
+                )
+            }
+        )
+        return true
     }
 
     private suspend fun pushLocalToServer(): Boolean {
@@ -126,6 +152,32 @@ class TerminalSyncRepository @Inject constructor(
 
         config.features?.let { features ->
             merged = merged.copy(coursesEnabled = features.coursesEnabled)
+        }
+
+        config.checkout?.let { checkout ->
+            val tipCsv = checkout.tipPresetsPercent
+                .filter { it >= 0 }
+                .take(8)
+                .joinToString(",") { if (it == it.toLong().toDouble()) it.toLong().toString() else it.toString() }
+                .ifBlank { "0,5,10,15" }
+            val densCsv = checkout.quickCashDenominations
+                .filter { it > 0 }
+                .take(12)
+                .joinToString(",") { if (it == it.toLong().toDouble()) it.toLong().toString() else it.toString() }
+                .ifBlank { "10,20,50,100" }
+            val step = checkout.roundingStep
+            val roundingStep = if (step in listOf(0.0, 0.05, 0.1, 0.5, 1.0)) step else merged.roundingStep
+            merged = merged.copy(
+                tipsEnabled = checkout.tipsEnabled,
+                allowCustomTip = checkout.allowCustomTip,
+                tipPresetsPercentCsv = tipCsv,
+                discountsEnabled = checkout.discountsEnabled,
+                roundingStep = roundingStep,
+                quickCashEnabled = checkout.quickCashEnabled,
+                quickCashDenominationsCsv = densCsv,
+                splitBillsEnabled = checkout.splitBillsEnabled,
+                maxSplitParts = checkout.maxSplitParts.coerceIn(2, 20)
+            )
         }
 
         return merged

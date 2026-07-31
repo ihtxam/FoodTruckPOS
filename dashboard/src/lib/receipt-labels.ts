@@ -25,12 +25,25 @@ export type ReceiptLabels = {
   express: string;
   pax: string;
   endOfDay: string;
+  reportPeriod: string;
+  salesSummary: string;
   salesCount: string;
   revenue: string;
   productsSold: string;
   cancelled: string;
   refunds: string;
   covers: string;
+  tipsNotTaxable: string;
+  grandTotal: string;
+  orders: string;
+  guestsServed: string;
+  paymentMethods: string;
+  orderTypes: string;
+  tva: string;
+  type: string;
+  net: string;
+  brut: string;
+  totalQty: string;
   pickupTime: string;
   deliveryTime: string;
   asap: string;
@@ -62,13 +75,26 @@ const EN: ReceiptLabels = {
   terminal: 'Terminal',
   express: 'Express',
   pax: 'PAX',
-  endOfDay: 'END OF DAY REPORT',
+  endOfDay: 'END OF DAY',
+  reportPeriod: 'Report Period',
+  salesSummary: 'SALES SUMMARY',
   salesCount: 'Sales',
   revenue: 'Revenue',
-  productsSold: 'Products sold',
+  productsSold: 'PRODUCTS SOLD',
   cancelled: 'Cancelled',
   refunds: 'Refunds',
   covers: 'Covers',
+  tipsNotTaxable: 'Tips (not taxable)',
+  grandTotal: 'GRAND TOTAL',
+  orders: 'Orders',
+  guestsServed: 'Guests served',
+  paymentMethods: 'PAYMENT METHODS',
+  orderTypes: 'ORDER TYPES',
+  tva: 'TVA',
+  type: 'Type',
+  net: 'Net',
+  brut: 'Brut',
+  totalQty: 'Total qty',
   pickupTime: 'Pickup:',
   deliveryTime: 'Delivery:',
   asap: 'ASAP',
@@ -89,27 +115,40 @@ const FR: ReceiptLabels = {
   payment: 'Paiement',
   note: 'Note',
   staff: 'Personnel',
-  scanDigitalReceipt: 'Scannez pour le reçu digital',
+  scanDigitalReceipt: 'Scannez pour le recu digital',
   thankYou: 'Merci',
   kitchen: 'CUISINE',
   dineIn: 'SUR PLACE',
   takeaway: 'EMPORTER',
   delivery: 'LIVRAISON',
-  cash: 'Espèces',
+  cash: 'Especes',
   card: 'Carte',
   terminal: 'Terminal',
   express: 'Express',
   pax: 'Couverts',
-  endOfDay: 'RAPPORT DE FIN DE JOURNÉE',
+  endOfDay: 'FIN DE JOURNEE',
+  reportPeriod: 'Periode du rapport',
+  salesSummary: 'RESUME DES VENTES',
   salesCount: 'Ventes',
   revenue: "Chiffre d'affaires",
-  productsSold: 'Produits vendus',
-  cancelled: 'Annulées',
+  productsSold: 'PRODUITS VENDUS',
+  cancelled: 'Annulees',
   refunds: 'Remboursements',
   covers: 'Couverts',
+  tipsNotTaxable: 'Pourboires (non taxables)',
+  grandTotal: 'TOTAL GENERAL',
+  orders: 'Commandes',
+  guestsServed: 'Couverts servis',
+  paymentMethods: 'MODES DE PAIEMENT',
+  orderTypes: 'TYPES DE COMMANDE',
+  tva: 'TVA',
+  type: 'Type',
+  net: 'Net',
+  brut: 'Brut',
+  totalQty: 'Qte totale',
   pickupTime: 'Retrait :',
   deliveryTime: 'Livraison :',
-  asap: 'Dès que possible',
+  asap: 'Des que possible',
   payLater: 'Payer plus tard',
   totalItems: 'Articles',
 };
@@ -127,9 +166,9 @@ const DE: ReceiptLabels = {
   payment: 'Zahlung',
   note: 'Notiz',
   staff: 'Personal',
-  scanDigitalReceipt: 'Scannen für digitalen Beleg',
+  scanDigitalReceipt: 'Scannen fuer digitalen Beleg',
   thankYou: 'Danke',
-  kitchen: 'KÜCHE',
+  kitchen: 'KUECHE',
   dineIn: 'VOR ORT',
   takeaway: 'ZUM MITNEHMEN',
   delivery: 'LIEFERUNG',
@@ -137,18 +176,31 @@ const DE: ReceiptLabels = {
   card: 'Karte',
   terminal: 'Terminal',
   express: 'Express',
-  pax: 'Gäste',
+  pax: 'Gaeste',
   endOfDay: 'TAGESABSCHLUSS',
-  salesCount: 'Verkäufe',
+  reportPeriod: 'Berichtszeitraum',
+  salesSummary: 'VERKAUFSUEBERSICHT',
+  salesCount: 'Verkaeufe',
   revenue: 'Umsatz',
-  productsSold: 'Verkaufte Produkte',
+  productsSold: 'VERKAUFTE PRODUKTE',
   cancelled: 'Storniert',
-  refunds: 'Rückerstattungen',
+  refunds: 'Rueckerstattungen',
   covers: 'Gedecke',
+  tipsNotTaxable: 'Trinkgeld (nicht steuerpflichtig)',
+  grandTotal: 'GESAMTSUMME',
+  orders: 'Bestellungen',
+  guestsServed: 'Gaeste bedient',
+  paymentMethods: 'ZAHLUNGSARTEN',
+  orderTypes: 'BESTELLARTEN',
+  tva: 'MwSt.',
+  type: 'Typ',
+  net: 'Netto',
+  brut: 'Brutto',
+  totalQty: 'Menge gesamt',
   pickupTime: 'Abholung:',
   deliveryTime: 'Lieferung:',
   asap: 'Sofort',
-  payLater: 'Später zahlen',
+  payLater: 'Spaeter zahlen',
   totalItems: 'Artikel',
 };
 

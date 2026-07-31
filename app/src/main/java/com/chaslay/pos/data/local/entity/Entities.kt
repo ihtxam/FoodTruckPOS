@@ -217,6 +217,17 @@ data class BusinessSettingsEntity(
     val adyenLiveRegion: String = "EU",
     val adyenUseLegacyEndpoint: Boolean = false,
     val roundingStep: Double = 0.05,
+    /** Synced from merchant panel posCheckoutSettings */
+    val tipsEnabled: Boolean = true,
+    val allowCustomTip: Boolean = true,
+    /** Comma-separated tip preset percents, e.g. "0,5,10,15" */
+    val tipPresetsPercentCsv: String = "0,5,10,15",
+    val discountsEnabled: Boolean = true,
+    val quickCashEnabled: Boolean = true,
+    /** Comma-separated quick-cash denominations, e.g. "10,20,50,100" */
+    val quickCashDenominationsCsv: String = "10,20,50,100",
+    val splitBillsEnabled: Boolean = true,
+    val maxSplitParts: Int = 8,
     val openHour: Int = 10,
     val openMinute: Int = 0,
     val closeHour: Int = 22,

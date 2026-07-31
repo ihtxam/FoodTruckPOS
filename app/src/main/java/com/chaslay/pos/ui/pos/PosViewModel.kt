@@ -1435,6 +1435,7 @@ class PosViewModel @Inject constructor(
     fun showSplitDialog() = openSplitBillScreen()
 
     fun openSplitBillScreen() {
+        if (!cachedSettings.splitBillsEnabled) return
         val cart = cartManager.snapshot()
         if (cart.isEmpty) return
         if (cartManager.snapshot().splitCount <= 1) {

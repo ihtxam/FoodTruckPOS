@@ -1063,7 +1063,9 @@ router.get("/webpos-config", async (req: Request, res: Response) => {
       activeTerminals.length > 0;
 
     const { normalizePosPrintSettings } = await import("@/lib/pos-print-settings");
+    const { normalizePosCheckoutSettings } = await import("@/lib/pos-checkout-settings");
     const posPrintSettings = normalizePosPrintSettings(merchant.posPrintSettings);
+    const posCheckoutSettings = normalizePosCheckoutSettings(merchant.posCheckoutSettings);
 
     res.json({
       success: true,
@@ -1086,6 +1088,7 @@ router.get("/webpos-config", async (req: Request, res: Response) => {
           status: t.status,
         })),
         posPrintSettings,
+        posCheckoutSettings,
         shopLogoUrl: merchant.shopLogoUrl || null,
         panelLanguage: merchant.panelLanguage || "en",
       },
@@ -1125,7 +1128,7 @@ router.put("/settings", async (req: Request, res: Response) => {
 /**
  * GET /api/merchant/reports/eod
  * End-of-day / sales report (POS + synced sales in orders table)
- * Query: preset=today|yesterday|last_week|last_month|custom&from=&to=
+ * Query: preset=today|yesterday|last_week|last_month|last_3_months|custom&from=&to=
  */
 router.get("/reports/eod", async (req: Request, res: Response) => {
   try {
@@ -1137,6 +1140,7 @@ router.get("/reports/eod", async (req: Request, res: Response) => {
       | "yesterday"
       | "last_week"
       | "last_month"
+      | "last_3_months"
       | "custom";
     const report = await PosReportsService.getEndOfDayReport(merchantId, {
       preset,

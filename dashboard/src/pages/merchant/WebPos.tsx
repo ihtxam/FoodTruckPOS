@@ -37,12 +37,22 @@ import {
   type WebPosReceipt,
   type WebPosReceiptItem,
 } from '@/lib/webpos-receipt';
+import {
+  normalizePosCheckoutSettings,
+  type PosCheckoutSettings,
+} from '@/lib/pos-checkout';
 import WebPosFulfillmentModal, {
   type FulfillmentWhen,
 } from '@/components/WebPosFulfillmentModal';
 import WebPosCustomerPicker, {
   type WebPosCustomer,
 } from '@/components/WebPosCustomerPicker';
+import WebPosCheckoutModal, {
+  type CheckoutResult,
+} from '@/components/WebPosCheckoutModal';
+import WebPosSplitBillModal, {
+  type SplitPart,
+} from '@/components/WebPosSplitBillModal';
 import { localDateTimeToIso, type StoreHours } from '@/lib/shop-hours';
 import {
   isPrintAgentAvailable,
@@ -166,9 +176,12 @@ type WebPosPaymentConfig = {
   defaultTerminalId: string | null;
   terminals: WebPosTerminal[];
   posPrintSettings?: PosPrintSettingsClient | null;
+  posCheckoutSettings?: PosCheckoutSettings | null;
   shopLogoUrl?: string | null;
   panelLanguage?: string | null;
 };
+
+type CheckoutExtras = CheckoutResult;
 
 function money(n: number) {
   return `CHF ${n.toFixed(2)}`;
@@ -217,6 +230,14 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
   const [selectedCustomer, setSelectedCustomer] = useState<WebPosCustomer | null>(null);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [customerOpen, setCustomerOpen] = useState(false);
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [checkoutSeedMethod, setCheckoutSeedMethod] = useState<
+    PosPaymentMethod | 'express'
+  >('cash');
+  const [checkoutExtras, setCheckoutExtras] = useState<CheckoutExtras | null>(null);
+  const [splitOpen, setSplitOpen] = useState(false);
+  const [splitQueue, setSplitQueue] = useState<SplitPart[]>([]);
+  const [splitIndex, setSplitIndex] = useState(0);
   const [pendingPayMethod, setPendingPayMethod] = useState<PosPaymentMethod | 'express' | null>(
     null
   );
@@ -670,11 +691,17 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
     });
   };
 
+  const checkoutSettings = useMemo(
+    () => normalizePosCheckoutSettings(paymentConfig?.posCheckoutSettings),
+    [paymentConfig?.posCheckoutSettings]
+  );
+
   const buildSalePayload = (
     clientId: string,
     method: PosPaymentMethod,
     whenOverride?: FulfillmentWhen | null,
-    orderNumber?: string
+    orderNumber?: string,
+    extras?: CheckoutExtras | null
   ) => {
     const payLater = method === 'pay_later';
     const when = whenOverride !== undefined ? whenOverride : fulfillmentWhen;
@@ -691,6 +718,16 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
           .filter(Boolean)
           .join(', ')
       : undefined;
+    const discPct = extras?.discountPercent || 0;
+    const discountAmount = roundMoney2((totals.subtotal * discPct) / 100);
+    const tipAmount = roundMoney2(extras?.tipAmount || 0);
+    const roundingAmount = roundMoney2(
+      extras?.roundingAmount != null ? extras.roundingAmount : totals.rounding
+    );
+    const saleTotal =
+      extras?.total != null
+        ? roundMoney2(extras.total)
+        : roundTo005(totals.subtotal - discountAmount + totals.tax + tipAmount);
     return {
       clientId,
       orderNumber,
@@ -699,8 +736,13 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
       status: payLater ? (scheduledFor ? 'accepted' : 'preparing') : 'completed',
       subtotal: totals.subtotal,
       taxAmount: totals.tax,
-      discountAmount: 0,
-      total: totals.total,
+      discountAmount,
+      tipAmount,
+      roundingAmount,
+      amountTendered: extras?.amountTendered ?? null,
+      changeDue: extras?.changeDue ?? null,
+      staffName: webposStaff?.name || null,
+      total: saleTotal,
       fulfillmentChannel: channel,
       completedAt: payLater ? undefined : Date.now(),
       scheduledFor,
@@ -710,9 +752,14 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
       customerEmail: selectedCustomer?.email || null,
       shippingAddress: ship || null,
       notes: [
-        totals.rounding
-          ? `Rounding ${totals.rounding > 0 ? '+' : ''}${totals.rounding.toFixed(2)}`
+        roundingAmount
+          ? `Rounding ${roundingAmount > 0 ? '+' : ''}${roundingAmount.toFixed(2)}`
           : '',
+        tipAmount > 0 ? `Tip CHF ${tipAmount.toFixed(2)}` : '',
+        extras?.amountTendered != null
+          ? `Tendered CHF ${extras.amountTendered.toFixed(2)}`
+          : '',
+        extras?.changeDue != null ? `Change CHF ${extras.changeDue.toFixed(2)}` : '',
         when?.mode === 'later' ? `Pickup/delivery: ${when.label}` : '',
       ]
         .filter(Boolean)
@@ -757,13 +804,21 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
   const finalizeSale = async (
     method: PosPaymentMethod,
     presetClientId?: string,
-    whenOverride?: FulfillmentWhen | null
+    whenOverride?: FulfillmentWhen | null,
+    extrasOverride?: CheckoutExtras | null
   ) => {
     const ticket = nextWebPosTicketNumber(merchant?.id);
     const clientId = presetClientId || `webpos-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const whenSnapshot =
       whenOverride !== undefined ? whenOverride : fulfillmentWhen;
-    const sale = buildSalePayload(clientId, method, whenSnapshot, ticket.orderNumber);
+    const extras = extrasOverride !== undefined ? extrasOverride : checkoutExtras;
+    const sale = buildSalePayload(
+      clientId,
+      method,
+      whenSnapshot,
+      ticket.orderNumber,
+      extras
+    );
 
     await api.post('/sync/push-sales', { sales: [sale] });
 
@@ -818,7 +873,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
       [
         {
           id: clientId,
-          total: totals.total,
+          total: sale.total,
           paymentMethod: method,
           channel,
           completedAt: Date.now(),
@@ -827,14 +882,22 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
         ...prev,
       ].slice(0, 30)
     );
-    setCart([]);
-    setFulfillmentWhen(null);
-    setSelectedCustomer(null);
+    const moreSplits = splitQueue.length > 0 && splitIndex + 1 < splitQueue.length;
+    if (!moreSplits) {
+      setCart([]);
+      setFulfillmentWhen(null);
+      setSelectedCustomer(null);
+      setSplitQueue([]);
+      setSplitIndex(0);
+    }
+    setCheckoutExtras(null);
+    setCheckoutOpen(false);
     const payLater = method === 'pay_later';
+    const paidTotal = sale.total;
     toast.success(
       payLater
         ? t('webPosProgrammedSaved')
-        : t('webPosSaleCompleteAmount').replace('{amount}', money(totals.total))
+        : t('webPosSaleCompleteAmount').replace('{amount}', money(paidTotal))
     );
     const shouldPrintReceipt =
       !payLater && autoPrint && printSettings?.autoPrintReceipt !== false;
@@ -845,18 +908,20 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
         toast.error(e.message || t('webPosPrintFailed'));
       }
     }
-    try {
-      await printKitchenForCart(cartSnapshot, channelSnapshot, {
-        orderNumber: ticket.display,
-        when: whenSnapshot,
-      });
-    } catch (e: any) {
-      toast.error(e.message || t('webPosKitchenPrintFailed'));
+    if (!moreSplits || splitIndex === 0) {
+      try {
+        await printKitchenForCart(cartSnapshot, channelSnapshot, {
+          orderNumber: ticket.display,
+          when: whenSnapshot,
+        });
+      } catch (e: any) {
+        toast.error(e.message || t('webPosKitchenPrintFailed'));
+      }
     }
   };
 
   const beginCheckout = (method: PosPaymentMethod | 'express') => {
-    if (!cart.length || busy || paymentModalOpen) return;
+    if (!cart.length || busy || paymentModalOpen || checkoutOpen) return;
     const needsSchedule = channel === 'takeaway' || channel === 'delivery';
     if (needsSchedule && !fulfillmentWhen) {
       setPendingPayMethod(method);
@@ -875,10 +940,19 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
     method: PosPaymentMethod | 'express',
     whenOverride?: FulfillmentWhen | null
   ) => {
+    if (whenOverride !== undefined) setFulfillmentWhen(whenOverride);
     if (method === 'express') {
       setBusy(true);
       try {
-        await finalizeSale('cash', undefined, whenOverride);
+        await finalizeSale('cash', undefined, whenOverride, {
+          method: 'cash',
+          discountPercent: 0,
+          tipAmount: 0,
+          roundingAmount: totals.rounding,
+          total: totals.total,
+          amountTendered: totals.total,
+          changeDue: 0,
+        });
       } catch (e: any) {
         toast.error(e.response?.data?.error || e.message || t('webPosSaleFailed'));
       } finally {
@@ -886,16 +960,45 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
       }
       return;
     }
-    if (method === 'terminal') {
+    setCheckoutSeedMethod(method);
+    setCheckoutOpen(true);
+  };
+
+  const completeFromCheckout = async (result: CheckoutResult) => {
+    const part = splitQueue[splitIndex];
+    const adjusted: CheckoutResult = part
+      ? {
+          ...result,
+          total: part.amount,
+          amountTendered:
+            result.method === 'cash'
+              ? result.amountTendered ?? part.amount
+              : result.amountTendered,
+          changeDue:
+            result.method === 'cash' && result.amountTendered != null
+              ? roundMoney2(result.amountTendered - part.amount)
+              : result.changeDue,
+        }
+      : result;
+    setCheckoutExtras(adjusted);
+    setCheckoutOpen(false);
+    if (adjusted.method === 'terminal') {
       setPaymentMethod('terminal');
-      await runTerminalPayment(whenOverride);
+      await runTerminalPayment(undefined, adjusted);
       return;
     }
     setBusy(true);
     try {
-      await finalizeSale(method, undefined, whenOverride);
+      const remaining = splitQueue.length > 0 && splitIndex + 1 < splitQueue.length;
+      await finalizeSale(adjusted.method, undefined, undefined, adjusted);
+      if (remaining) {
+        setSplitIndex((i) => i + 1);
+        setCheckoutSeedMethod('cash');
+        setCheckoutOpen(true);
+      }
     } catch (e: any) {
       toast.error(e.response?.data?.error || e.message || t('webPosSaleFailed'));
+      setCheckoutOpen(true);
     } finally {
       setBusy(false);
     }
@@ -930,7 +1033,10 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
     }
   };
 
-  const runTerminalPayment = async (whenOverride?: FulfillmentWhen | null) => {
+  const runTerminalPayment = async (
+    whenOverride?: FulfillmentWhen | null,
+    extras?: CheckoutExtras | null
+  ) => {
     if (!selectedTerminalId) {
       toast.error(t('webPosSelectTerminal'));
       return;
@@ -960,7 +1066,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
 
       if (result.status === 'approved') {
         closePaymentModal();
-        await finalizeSale('terminal', clientId, whenOverride);
+        await finalizeSale('terminal', clientId, whenOverride, extras);
         return;
       }
 
@@ -1835,6 +1941,54 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
             }
             void runCheckout(m);
           }
+        }}
+      />
+
+      <WebPosCheckoutModal
+        open={checkoutOpen}
+        subtotal={splitQueue[splitIndex] ? splitQueue[splitIndex]!.amount : totals.subtotal}
+        taxAmount={splitQueue[splitIndex] ? 0 : totals.tax}
+        settings={checkoutSettings}
+        methods={{
+          cash: paymentConfig?.methods.cash !== false,
+          card: paymentConfig?.methods.card !== false,
+          terminal: paymentConfig?.methods.terminal === true,
+          payLater: true,
+        }}
+        initialMethod={checkoutSeedMethod}
+        onClose={() => {
+          setCheckoutOpen(false);
+          setSplitQueue([]);
+          setSplitIndex(0);
+        }}
+        onConfirm={(r) => void completeFromCheckout(r)}
+        onSplit={
+          checkoutSettings.splitBillsEnabled && !splitQueue.length
+            ? () => {
+                setCheckoutOpen(false);
+                setSplitOpen(true);
+              }
+            : undefined
+        }
+      />
+
+      <WebPosSplitBillModal
+        open={splitOpen}
+        lines={cart.map((l) => ({
+          id: l.id,
+          name: l.name,
+          quantity: l.quantity,
+          lineTotal: l.lineTotal,
+        }))}
+        total={totals.total}
+        maxParts={checkoutSettings.maxSplitParts}
+        onClose={() => setSplitOpen(false)}
+        onConfirm={(parts) => {
+          setSplitOpen(false);
+          setSplitQueue(parts);
+          setSplitIndex(0);
+          setCheckoutSeedMethod('cash');
+          setCheckoutOpen(true);
         }}
       />
     </div>

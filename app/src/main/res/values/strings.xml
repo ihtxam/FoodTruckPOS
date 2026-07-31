@@ -41,6 +41,8 @@
     <string name="license_activate_early_body">You can activate now with the code from support. Internet is required once.</string>
     <string name="discount">Discount</string>
     <string name="tip">Tip</string>
+    <string name="enter_tip_amount">Enter tip amount</string>
+    <string name="custom_tip">Amount</string>
     <string name="rounding">Rounding</string>
     <string name="total">Total</string>
     <string name="cash">Cash</string>

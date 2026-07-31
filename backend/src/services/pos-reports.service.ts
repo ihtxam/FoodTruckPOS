@@ -1,15 +1,17 @@
 import { getDb, schema } from "@/db";
 import { and, eq, gte, lte, desc } from "drizzle-orm";
 
-export type ReportPreset = "today" | "yesterday" | "last_week" | "last_month" | "custom";
+export type ReportPreset =
+  | "today"
+  | "yesterday"
+  | "last_week"
+  | "last_month"
+  | "last_3_months"
+  | "custom";
 
 function zurichDayBounds(ymd: string): { start: Date; end: Date } {
-  // Treat YYYY-MM-DD as Europe/Zurich calendar day via UTC offset approximation (+02/+01).
-  // Use noon UTC parse then local day - more reliable: construct with explicit timezone via Temporal if available.
   const start = new Date(`${ymd}T00:00:00+02:00`);
   const end = new Date(`${ymd}T23:59:59.999+02:00`);
-  // Correct for CET (winter): if offset wrong by 1h it's still within report window for practical POS use.
-  // Prefer Intl to get Zurich offset for that date:
   try {
     const fmt = new Intl.DateTimeFormat("en-CA", {
       timeZone: "Europe/Zurich",
@@ -21,7 +23,6 @@ function zurichDayBounds(ymd: string): { start: Date; end: Date } {
       second: "2-digit",
       hour12: false,
     });
-    // Find UTC instant that is 00:00 Zurich on ymd
     let guess = new Date(`${ymd}T00:00:00Z`);
     for (let i = 0; i < 48; i++) {
       const parts = Object.fromEntries(
@@ -57,6 +58,21 @@ function addDaysYmd(ymd: string, delta: number): string {
   return ymdInZurich(next);
 }
 
+function round2(n: number) {
+  return Math.round(n * 100) / 100;
+}
+
+function channelLabel(ch: string): string {
+  switch (ch) {
+    case "dine_in":
+      return "Dine-in";
+    case "delivery":
+      return "Delivery";
+    default:
+      return "Takeaway";
+  }
+}
+
 export function resolveReportRange(
   preset: ReportPreset,
   from?: string,
@@ -68,7 +84,7 @@ export function resolveReportRange(
     const t = (to || f).slice(0, 10);
     const a = zurichDayBounds(f);
     const b = zurichDayBounds(t);
-    return { start: a.start, end: b.end, label: `${f} ? ${t}`, from: f, to: t };
+    return { start: a.start, end: b.end, label: `${f} to ${t}`, from: f, to: t };
   }
   if (preset === "yesterday") {
     const y = addDaysYmd(today, -1);
@@ -79,13 +95,19 @@ export function resolveReportRange(
     const f = addDaysYmd(today, -6);
     const a = zurichDayBounds(f);
     const b = zurichDayBounds(today);
-    return { start: a.start, end: b.end, label: `${f} ? ${today}`, from: f, to: today };
+    return { start: a.start, end: b.end, label: `${f} to ${today}`, from: f, to: today };
   }
   if (preset === "last_month") {
     const f = addDaysYmd(today, -29);
     const a = zurichDayBounds(f);
     const b = zurichDayBounds(today);
-    return { start: a.start, end: b.end, label: `${f} ? ${today}`, from: f, to: today };
+    return { start: a.start, end: b.end, label: `${f} to ${today}`, from: f, to: today };
+  }
+  if (preset === "last_3_months") {
+    const f = addDaysYmd(today, -89);
+    const a = zurichDayBounds(f);
+    const b = zurichDayBounds(today);
+    return { start: a.start, end: b.end, label: `${f} to ${today}`, from: f, to: today };
   }
   const b = zurichDayBounds(today);
   return { start: b.start, end: b.end, label: today, from: today, to: today };
@@ -98,6 +120,17 @@ export class PosReportsService {
   ) {
     const db = getDb();
     const range = resolveReportRange(opts.preset || "today", opts.from, opts.to);
+
+    const merchant = await db.query.merchants.findFirst({
+      where: eq(schema.merchants.id, merchantId),
+    });
+
+    const money = (n: unknown) => Number(n) || 0;
+    const rateTakeaway =
+      money(merchant?.taxTakeawayRate) || money(merchant?.vatRate) || 2.6;
+    const rateDineIn = money(merchant?.taxDineInRate) || money(merchant?.vatRate) || 8.1;
+    const rateDelivery =
+      money(merchant?.taxDeliveryRate) || money(merchant?.taxTakeawayRate) || money(merchant?.vatRate) || 2.6;
 
     const conditions = [
       eq(schema.orders.merchantId, merchantId),
@@ -125,7 +158,10 @@ export class PosReportsService {
         Number(o.refundAmount || 0) > 0
     );
 
-    const money = (n: unknown) => Number(n) || 0;
+    /** Taxable gross (excl. tips). Tips are not taxable. */
+    const brutOf = (o: (typeof completed)[0]) =>
+      Math.max(0, money(o.total) - money(o.tipAmount));
+
     let revenue = 0;
     let taxTotal = 0;
     let subtotal = 0;
@@ -137,26 +173,41 @@ export class PosReportsService {
     const payments: Record<string, { count: number; total: number }> = {};
     const channels: Record<string, { count: number; total: number }> = {};
     const products = new Map<string, { name: string; qty: number; total: number }>();
+    const staffMap = new Map<string, { name: string; count: number; total: number }>();
+    const vatByChannel: Record<string, { brut: number; tva: number }> = {};
 
     for (const o of completed) {
-      const total = money(o.total);
-      revenue += total;
-      taxTotal += money(o.taxAmount);
+      const tip = money(o.tipAmount);
+      const brut = brutOf(o);
+      const tax = money(o.taxAmount);
+      revenue += brut;
+      taxTotal += tax;
       subtotal += money(o.subtotal);
       discountTotal += money(o.discountAmount) + money(o.pointsDiscount);
-      tipsTotal += money(o.tipAmount);
+      tipsTotal += tip;
       refundTotal += money(o.refundAmount);
       if (o.guestCount) covers += Number(o.guestCount) || 0;
 
+      // Payment buckets: money received (incl. tips)
       const pm = String(o.paymentMethod || "other");
       payments[pm] = payments[pm] || { count: 0, total: 0 };
       payments[pm].count += 1;
-      payments[pm].total += total;
+      payments[pm].total += money(o.total);
 
       const ch = String(o.fulfillmentChannel || "takeaway");
       channels[ch] = channels[ch] || { count: 0, total: 0 };
       channels[ch].count += 1;
-      channels[ch].total += total;
+      channels[ch].total += brut;
+
+      vatByChannel[ch] = vatByChannel[ch] || { brut: 0, tva: 0 };
+      vatByChannel[ch]!.brut += brut;
+      vatByChannel[ch]!.tva += tax;
+
+      const staff = (o.staffName || "Unknown").trim() || "Unknown";
+      const st = staffMap.get(staff) || { name: staff, count: 0, total: 0 };
+      st.count += 1;
+      st.total += brut;
+      staffMap.set(staff, st);
 
       for (const item of o.items || []) {
         const key = item.productId || item.productName || "open";
@@ -175,14 +226,57 @@ export class PosReportsService {
       if (!completed.includes(o)) refundTotal += money(o.refundAmount || o.total);
     }
 
+    const rateFor = (ch: string) => {
+      if (ch === "dine_in") return rateDineIn;
+      if (ch === "delivery") return rateDelivery;
+      return rateTakeaway;
+    };
+
+    const vatRows = Object.entries(vatByChannel)
+      .map(([ch, v]) => {
+        const brut = round2(v.brut);
+        const tva = round2(v.tva);
+        const rate = rateFor(ch);
+        return {
+          label: `${channelLabel(ch)} ${rate.toFixed(1)}%`,
+          channel: ch,
+          rate,
+          net: round2(brut - tva),
+          tva,
+          brut,
+        };
+      })
+      .sort((a, b) => b.brut - a.brut);
+
+    const netTotal = round2(revenue - taxTotal);
+    const grandTotal = round2(revenue + tipsTotal);
+
     const productsSold = [...products.values()]
       .sort((a, b) => b.total - a.total)
       .slice(0, 100)
       .map((p) => ({
         name: p.name,
         quantity: Math.round(p.qty * 1000) / 1000,
-        total: Math.round(p.total * 100) / 100,
+        total: round2(p.total),
       }));
+
+    const userPerformance = [...staffMap.values()]
+      .sort((a, b) => b.total - a.total)
+      .map((u) => ({
+        name: u.name,
+        salesCount: u.count,
+        total: round2(u.total),
+      }));
+
+    const orderTypeRows = Object.entries(channels).map(([channel, v]) => ({
+      channel,
+      label: channelLabel(channel),
+      count: v.count,
+      percent: completed.length
+        ? round2((v.count / completed.length) * 100)
+        : 0,
+      total: round2(v.total),
+    }));
 
     return {
       range: {
@@ -196,29 +290,38 @@ export class PosReportsService {
       salesCount: completed.length,
       cancelledCount: cancelled.length,
       refundCount: refunded.length,
-      revenue: Math.round(revenue * 100) / 100,
-      subtotal: Math.round(subtotal * 100) / 100,
-      taxTotal: Math.round(taxTotal * 100) / 100,
-      discountTotal: Math.round(discountTotal * 100) / 100,
-      tipsTotal: Math.round(tipsTotal * 100) / 100,
-      refundTotal: Math.round(refundTotal * 100) / 100,
-      cancelledTotal: Math.round(cancelledTotal * 100) / 100,
-      grandTotal: Math.round((revenue - refundTotal) * 100) / 100,
+      /** Taxable revenue (tips excluded) */
+      revenue: round2(revenue),
+      subtotal: round2(subtotal),
+      taxTotal: round2(taxTotal),
+      netTotal,
+      brutTotal: round2(revenue),
+      discountTotal: round2(discountTotal),
+      tipsTotal: round2(tipsTotal),
+      refundTotal: round2(refundTotal),
+      cancelledTotal: round2(cancelledTotal),
+      /** Taxable revenue + tips */
+      grandTotal,
       coversServed: covers || null,
+      vatRows,
       paymentRows: Object.entries(payments).map(([method, v]) => ({
         method,
         count: v.count,
-        total: Math.round(v.total * 100) / 100,
+        total: round2(v.total),
+        percent: grandTotal > 0 ? round2((v.total / grandTotal) * 100) : 0,
       })),
       channelRows: Object.entries(channels).map(([channel, v]) => ({
         channel,
         count: v.count,
-        total: Math.round(v.total * 100) / 100,
+        total: round2(v.total),
       })),
+      orderTypeRows,
       productsSold,
-      cashTotal: Math.round((payments.cash?.total || 0) * 100) / 100,
-      cardTotal: Math.round((payments.card?.total || 0) * 100) / 100,
-      terminalTotal: Math.round((payments.terminal?.total || 0) * 100) / 100,
+      userPerformance,
+      cashTotal: round2(payments.cash?.total || 0),
+      cardTotal: round2(payments.card?.total || 0),
+      terminalTotal: round2(payments.terminal?.total || 0),
+      businessName: merchant?.name || "",
     };
   }
 }

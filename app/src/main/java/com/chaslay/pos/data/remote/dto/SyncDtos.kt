@@ -107,6 +107,25 @@ data class SyncFeaturesDto(
     @SerializedName("pax_ordering_enabled") val paxOrderingEnabled: Boolean = false
 )
 
+data class SyncCheckoutDiscountPresetDto(
+    val id: String? = null,
+    val name: String? = null,
+    val percent: Double = 0.0
+)
+
+data class SyncCheckoutDto(
+    val tipsEnabled: Boolean = true,
+    val tipPresetsPercent: List<Double> = listOf(0.0, 5.0, 10.0, 15.0),
+    val allowCustomTip: Boolean = true,
+    val discountsEnabled: Boolean = true,
+    val discountPresets: List<SyncCheckoutDiscountPresetDto> = emptyList(),
+    val roundingStep: Double = 0.05,
+    val quickCashEnabled: Boolean = true,
+    val quickCashDenominations: List<Double> = listOf(10.0, 20.0, 50.0, 100.0),
+    val splitBillsEnabled: Boolean = true,
+    val maxSplitParts: Int = 8
+)
+
 data class PaymentConfigResponse(
     val serverTime: Long = 0L,
     val adyen: SyncAdyenConfigDto? = null,
@@ -114,7 +133,8 @@ data class PaymentConfigResponse(
     val terminals: List<SyncPaymentTerminalDto> = emptyList(),
     val terminal_ready: Boolean = false,
     val methods: SyncPaymentMethodsDto? = null,
-    val features: SyncFeaturesDto? = null
+    val features: SyncFeaturesDto? = null,
+    val checkout: SyncCheckoutDto? = null
 )
 
 data class PushTerminalItemDto(

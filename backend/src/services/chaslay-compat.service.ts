@@ -286,6 +286,9 @@ export class ChaslayCompatService {
         floor_plan_enabled: !!merchant.floorPlanEnabled,
         pax_ordering_enabled: !!merchant.paxOrderingEnabled,
       },
+      checkout: (await import("@/lib/pos-checkout-settings")).normalizePosCheckoutSettings(
+        merchant.posCheckoutSettings
+      ),
     };
   }
 

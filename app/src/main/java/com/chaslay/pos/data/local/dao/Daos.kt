@@ -576,6 +576,9 @@ interface DiscountPresetDao {
 
     @Query("UPDATE discount_presets SET isActive = 0 WHERE id = :id")
     suspend fun deactivate(id: Long)
+
+    @Query("UPDATE discount_presets SET isActive = 0")
+    suspend fun deactivateAll()
 }
 
 @Dao

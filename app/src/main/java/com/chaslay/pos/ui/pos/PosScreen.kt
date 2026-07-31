@@ -111,6 +111,7 @@ import com.chaslay.pos.domain.model.PosMode
 import com.chaslay.pos.ui.scanner.BarcodeScannerDialog
 import com.chaslay.pos.ui.scanner.BarcodeWedgeListener
 import com.chaslay.pos.domain.model.ProductVariantModel
+import com.chaslay.pos.domain.model.FulfillmentType
 import com.chaslay.pos.domain.model.ServiceType
 import com.chaslay.pos.domain.model.TableStatus
 import com.chaslay.pos.domain.model.TableWithOrderInfo
@@ -215,6 +216,17 @@ fun PosScreen(
             cashEnabled = state.settings.cashEnabled,
             cardEnabled = state.settings.cardEnabled,
             terminalEnabled = state.settings.terminalEnabled && state.settings.adyenTerminalEnabled,
+            tipsEnabled = state.settings.tipsEnabled,
+            allowCustomTip = state.settings.allowCustomTip,
+            tipPresetsPercent = state.settings.tipPresetsPercentCsv
+                .split(',')
+                .mapNotNull { it.trim().toDoubleOrNull() },
+            discountsEnabled = state.settings.discountsEnabled,
+            quickCashEnabled = state.settings.quickCashEnabled,
+            quickCashDenominations = state.settings.quickCashDenominationsCsv
+                .split(',')
+                .mapNotNull { it.trim().toDoubleOrNull() },
+            splitBillsEnabled = state.settings.splitBillsEnabled,
             splitBillIndex = if (isSplitCheckout) state.cart.activeSplitCheck else null,
             splitBillCount = if (isSplitCheckout) state.cart.splitCount else null,
             isEqualSplit = isSplitCheckout && !state.cart.splitByItems,
@@ -1190,6 +1202,9 @@ private fun VectronOrderPanel(
                     text = when {
                         activeTableName != null -> activeTableName
                         serviceType == ServiceType.DINE_IN -> stringResource(R.string.dine_in)
+                        cart.fulfillmentType == FulfillmentType.DELIVERY ||
+                            !cart.deliveryName.isNullOrBlank() -> stringResource(R.string.delivery)
+                        cart.fulfillmentType == FulfillmentType.PICKUP -> stringResource(R.string.takeout)
                         else -> stringResource(R.string.take_away)
                     },
                     color = Color(0xFF666666),

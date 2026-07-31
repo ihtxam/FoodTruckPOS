@@ -188,6 +188,11 @@ export const merchants = pgTable(
      *   autoPrintReceipt, autoPrintKitchen, printers: PosPrinterProfile[] }
      */
     posPrintSettings: json("pos_print_settings").$type<PosPrintSettings | null>(),
+    /**
+     * Shared WebPOS / Android checkout behaviour:
+     * tips, discount presets, rounding, quick-cash denominations, split bills.
+     */
+    posCheckoutSettings: json("pos_checkout_settings").$type<Record<string, unknown> | null>(),
     status: varchar("status", { length: 50 }).default("active").notNull(), // active, suspended, trial, expired
     subscriptionPlan: varchar("subscription_plan", { length: 50 }).default("free"), // free, starter, professional, enterprise
     trialEndsAt: timestamp("trial_ends_at"),
@@ -706,6 +711,12 @@ export const orders = pgTable(
     discountAmount: decimal("discount_amount", { precision: 10, scale: 2 }).default("0"),
     deliveryFee: decimal("delivery_fee", { precision: 10, scale: 2 }).default("0"),
     tipAmount: decimal("tip_amount", { precision: 10, scale: 2 }).default("0"),
+    /** Cash rounding adjustment applied at checkout (can be negative) */
+    roundingAmount: decimal("rounding_amount", { precision: 10, scale: 2 }).default("0"),
+    amountTendered: decimal("amount_tendered", { precision: 10, scale: 2 }),
+    changeDue: decimal("change_due", { precision: 10, scale: 2 }),
+    /** Staff who completed the POS / WebPOS sale */
+    staffName: varchar("staff_name", { length: 255 }),
     /** Online card surcharge charged to the customer */
     cardFee: decimal("card_fee", { precision: 10, scale: 2 }).default("0"),
     /** CHF discount applied from redeeming loyalty points as money */

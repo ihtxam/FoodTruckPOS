@@ -21,6 +21,7 @@ type EodReport = {
   revenue: number;
   subtotal: number;
   taxTotal: number;
+  netTotal?: number;
   discountTotal: number;
   tipsTotal: number;
   refundTotal: number;
@@ -30,15 +31,20 @@ type EodReport = {
   cashTotal: number;
   cardTotal: number;
   terminalTotal: number;
-  paymentRows: Array<{ method: string; count: number; total: number }>;
+  vatRows?: Array<{ label: string; net: number; tva: number; brut: number }>;
+  paymentRows: Array<{ method: string; count: number; total: number; percent?: number }>;
   channelRows: Array<{ channel: string; count: number; total: number }>;
+  orderTypeRows?: Array<{ label: string; count: number; total: number; percent?: number }>;
   productsSold: Array<{ name: string; quantity: number; total: number }>;
+  userPerformance?: Array<{ name: string; salesCount: number; total: number }>;
 };
 
-type Preset = 'today' | 'yesterday' | 'last_week' | 'last_month' | 'custom';
+type Preset = 'today' | 'yesterday' | 'last_week' | 'last_month' | 'last_3_months' | 'custom';
+type Tab = 'eod' | 'sales' | 'products' | 'users';
 
 export default function ReportsPage() {
   const { t, locale } = useI18n();
+  const [tab, setTab] = useState<Tab>('eod');
   const [preset, setPreset] = useState<Preset>('today');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
@@ -87,9 +93,15 @@ export default function ReportsPage() {
         targets[0]?.paperWidthMm || printSettings?.paperWidthMm || 80;
       const text = generateEodReportText({
         label: report.range.label,
+        periodFrom: report.range.from,
+        periodTo: report.range.to,
         salesCount: report.salesCount,
         revenue: report.revenue,
+        subtotal: report.subtotal || report.revenue,
         taxTotal: report.taxTotal,
+        netTotal: report.netTotal,
+        tipsTotal: report.tipsTotal,
+        grandTotal: report.grandTotal,
         refundTotal: report.refundTotal,
         cancelledCount: report.cancelledCount,
         cancelledTotal: report.cancelledTotal,
@@ -97,8 +109,11 @@ export default function ReportsPage() {
         cardTotal: report.cardTotal,
         terminalTotal: report.terminalTotal,
         coversServed: report.coversServed,
+        vatRows: report.vatRows,
         productsSold: report.productsSold,
         paymentRows: report.paymentRows,
+        orderTypeRows: report.orderTypeRows,
+        channelRows: report.channelRows,
         businessName,
         language: lang,
         paperWidthMm,
@@ -111,6 +126,7 @@ export default function ReportsPage() {
       const logo = logoUrl
         ? await logoUrlToEscPos(logoUrl, paperWidthMm === 58 ? 240 : 384)
         : null;
+      // Plain ESC/POS body (no bold) ó kitchen tickets use bold separately.
       const escpos = textToEscPos(text, undefined, logo);
       const dataBase64 = uint8ToBase64(escpos);
       const names =
@@ -131,7 +147,15 @@ export default function ReportsPage() {
     { id: 'yesterday', label: t('reportsYesterday') },
     { id: 'last_week', label: t('reportsLastWeek') },
     { id: 'last_month', label: t('reportsLastMonth') },
+    { id: 'last_3_months', label: t('reportsLast3Months') },
     { id: 'custom', label: t('reportsCustom') },
+  ];
+
+  const tabs: { id: Tab; label: string }[] = [
+    { id: 'eod', label: t('reportsTabEod') },
+    { id: 'sales', label: t('reportsTabSales') },
+    { id: 'products', label: t('reportsTabProducts') },
+    { id: 'users', label: t('reportsTabUsers') },
   ];
 
   return (
@@ -150,6 +174,23 @@ export default function ReportsPage() {
           <Printer size={16} />
           {t('reportsPrintEod')}
         </button>
+      </div>
+
+      <div className="flex flex-wrap gap-2 border-b border-[var(--border)] pb-2">
+        {tabs.map((tb) => (
+          <button
+            key={tb.id}
+            type="button"
+            onClick={() => setTab(tb.id)}
+            className={`rounded-lg px-3 py-1.5 text-sm border ${
+              tab === tb.id
+                ? 'bg-[var(--bg-elevated)] border-[var(--border)] shadow-sm font-medium'
+                : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text)]'
+            }`}
+          >
+            {tb.label}
+          </button>
+        ))}
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -197,101 +238,178 @@ export default function ReportsPage() {
       ) : (
         <>
           <p className="text-sm text-[var(--text-muted)]">{report.range.label}</p>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {[
-              [t('reportsSalesCount'), String(report.salesCount)],
-              [t('reportsRevenue'), money(report.revenue)],
-              [t('reportsTax'), money(report.taxTotal)],
-              [t('reportsNet'), money(report.grandTotal)],
-              [t('reportsCash'), money(report.cashTotal)],
-              [t('reportsCard'), money(report.cardTotal)],
-              [t('reportsTerminal'), money(report.terminalTotal)],
-              [t('reportsRefunds'), money(report.refundTotal)],
-            ].map(([label, value]) => (
-              <div
-                key={String(label)}
-                className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-3"
-              >
-                <p className="text-[11px] uppercase tracking-wide muted">{label}</p>
-                <p className="text-lg font-semibold tabular-nums mt-1">{value}</p>
+
+          {(tab === 'eod' || tab === 'sales') && (
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {[
+                  [t('reportsSalesCount'), String(report.salesCount)],
+                  [t('reportsRevenue'), money(report.revenue)],
+                  [t('reportsTax'), money(report.taxTotal)],
+                  [t('reportsTips'), money(report.tipsTotal)],
+                  [t('reportsGrandTotal'), money(report.grandTotal)],
+                  [t('reportsCash'), money(report.cashTotal)],
+                  [t('reportsCard'), money(report.cardTotal)],
+                  [t('reportsTerminal'), money(report.terminalTotal)],
+                  [t('reportsRefunds'), money(report.refundTotal)],
+                ].map(([label, value]) => (
+                  <div
+                    key={String(label)}
+                    className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-3"
+                  >
+                    <p className="text-[11px] uppercase tracking-wide muted">{label}</p>
+                    <p className="text-lg font-semibold tabular-nums mt-1">{value}</p>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+              {report.tipsTotal > 0 && (
+                <p className="text-xs text-[var(--text-muted)]">{t('tipsNotTaxable')}</p>
+              )}
 
-          <div className="grid md:grid-cols-2 gap-4">
+              {!!report.vatRows?.length && (
+                <section className="rounded-xl border border-[var(--border)] overflow-hidden">
+                  <h2 className="px-3 py-2 text-sm font-semibold bg-[var(--bg-muted)]">
+                    {t('reportsVat')}
+                  </h2>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-[var(--text-muted)] border-b border-[var(--border)]">
+                          <th className="px-3 py-2 font-medium">{t('reportsVatType')}</th>
+                          <th className="px-3 py-2 font-medium text-right">{t('reportsVatNet')}</th>
+                          <th className="px-3 py-2 font-medium text-right">{t('reportsTax')}</th>
+                          <th className="px-3 py-2 font-medium text-right">{t('reportsVatBrut')}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {report.vatRows.map((row) => (
+                          <tr key={row.label} className="border-b border-[var(--border)]/60">
+                            <td className="px-3 py-2">{row.label}</td>
+                            <td className="px-3 py-2 tabular-nums text-right">{money(row.net)}</td>
+                            <td className="px-3 py-2 tabular-nums text-right">{money(row.tva)}</td>
+                            <td className="px-3 py-2 tabular-nums text-right">{money(row.brut)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              )}
+
+              <div className="grid md:grid-cols-2 gap-4">
+                <section className="rounded-xl border border-[var(--border)] overflow-hidden">
+                  <h2 className="px-3 py-2 text-sm font-semibold bg-[var(--bg-muted)]">
+                    {t('reportsByChannel')}
+                  </h2>
+                  <ul className="divide-y divide-[var(--border)] text-sm">
+                    {report.channelRows.length === 0 ? (
+                      <li className="px-3 py-3 muted">{t('reportsEmpty')}</li>
+                    ) : (
+                      report.channelRows.map((r) => (
+                        <li key={r.channel} className="flex justify-between px-3 py-2">
+                          <span>
+                            {r.channel} ∑ {r.count}
+                          </span>
+                          <span className="tabular-nums">{money(r.total)}</span>
+                        </li>
+                      ))
+                    )}
+                  </ul>
+                </section>
+                <section className="rounded-xl border border-[var(--border)] overflow-hidden">
+                  <h2 className="px-3 py-2 text-sm font-semibold bg-[var(--bg-muted)]">
+                    {t('reportsByPayment')}
+                  </h2>
+                  <ul className="divide-y divide-[var(--border)] text-sm">
+                    {report.paymentRows.length === 0 ? (
+                      <li className="px-3 py-3 muted">{t('reportsEmpty')}</li>
+                    ) : (
+                      report.paymentRows.map((r) => (
+                        <li key={r.method} className="flex justify-between px-3 py-2">
+                          <span>
+                            {r.method} ∑ {r.count}
+                          </span>
+                          <span className="tabular-nums">{money(r.total)}</span>
+                        </li>
+                      ))
+                    )}
+                  </ul>
+                </section>
+              </div>
+            </>
+          )}
+
+          {(tab === 'eod' || tab === 'products') && (
             <section className="rounded-xl border border-[var(--border)] overflow-hidden">
               <h2 className="px-3 py-2 text-sm font-semibold bg-[var(--bg-muted)]">
-                {t('reportsByChannel')}
+                {t('reportsProductsSold')}
               </h2>
-              <ul className="divide-y divide-[var(--border)] text-sm">
-                {report.channelRows.length === 0 ? (
-                  <li className="px-3 py-3 muted">{t('reportsEmpty')}</li>
-                ) : (
-                  report.channelRows.map((r) => (
-                    <li key={r.channel} className="flex justify-between px-3 py-2">
-                      <span>
-                        {r.channel} ù {r.count}
-                      </span>
-                      <span className="tabular-nums">{money(r.total)}</span>
-                    </li>
-                  ))
-                )}
-              </ul>
-            </section>
-            <section className="rounded-xl border border-[var(--border)] overflow-hidden">
-              <h2 className="px-3 py-2 text-sm font-semibold bg-[var(--bg-muted)]">
-                {t('reportsByPayment')}
-              </h2>
-              <ul className="divide-y divide-[var(--border)] text-sm">
-                {report.paymentRows.length === 0 ? (
-                  <li className="px-3 py-3 muted">{t('reportsEmpty')}</li>
-                ) : (
-                  report.paymentRows.map((r) => (
-                    <li key={r.method} className="flex justify-between px-3 py-2">
-                      <span>
-                        {r.method} ù {r.count}
-                      </span>
-                      <span className="tabular-nums">{money(r.total)}</span>
-                    </li>
-                  ))
-                )}
-              </ul>
-            </section>
-          </div>
-
-          <section className="rounded-xl border border-[var(--border)] overflow-hidden">
-            <h2 className="px-3 py-2 text-sm font-semibold bg-[var(--bg-muted)]">
-              {t('reportsProductsSold')}
-            </h2>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-[var(--text-muted)] border-b border-[var(--border)]">
-                    <th className="px-3 py-2 font-medium">{t('reportsProduct')}</th>
-                    <th className="px-3 py-2 font-medium">{t('reportsQty')}</th>
-                    <th className="px-3 py-2 font-medium text-right">{t('reportsRevenue')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {report.productsSold.length === 0 ? (
-                    <tr>
-                      <td colSpan={3} className="px-3 py-3 muted">
-                        {t('reportsEmpty')}
-                      </td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-[var(--text-muted)] border-b border-[var(--border)]">
+                      <th className="px-3 py-2 font-medium">{t('reportsProduct')}</th>
+                      <th className="px-3 py-2 font-medium">{t('reportsQty')}</th>
+                      <th className="px-3 py-2 font-medium text-right">{t('reportsRevenue')}</th>
                     </tr>
-                  ) : (
-                    report.productsSold.map((p) => (
-                      <tr key={p.name} className="border-b border-[var(--border)]/60">
-                        <td className="px-3 py-2">{p.name}</td>
-                        <td className="px-3 py-2 tabular-nums">{p.quantity}</td>
-                        <td className="px-3 py-2 tabular-nums text-right">{money(p.total)}</td>
+                  </thead>
+                  <tbody>
+                    {report.productsSold.length === 0 ? (
+                      <tr>
+                        <td colSpan={3} className="px-3 py-3 muted">
+                          {t('reportsEmpty')}
+                        </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </section>
+                    ) : (
+                      report.productsSold.map((p) => (
+                        <tr key={p.name} className="border-b border-[var(--border)]/60">
+                          <td className="px-3 py-2">{p.name}</td>
+                          <td className="px-3 py-2 tabular-nums">{p.quantity}</td>
+                          <td className="px-3 py-2 tabular-nums text-right">{money(p.total)}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+
+          {tab === 'users' && (
+            <section className="rounded-xl border border-[var(--border)] overflow-hidden">
+              <h2 className="px-3 py-2 text-sm font-semibold bg-[var(--bg-muted)]">
+                {t('reportsTabUsers')}
+              </h2>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-[var(--text-muted)] border-b border-[var(--border)]">
+                      <th className="px-3 py-2 font-medium">{t('reportsStaff')}</th>
+                      <th className="px-3 py-2 font-medium">{t('reportsSalesCount')}</th>
+                      <th className="px-3 py-2 font-medium text-right">{t('reportsRevenue')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {!report.userPerformance?.length ? (
+                      <tr>
+                        <td colSpan={3} className="px-3 py-3 muted">
+                          {t('reportsEmpty')}
+                        </td>
+                      </tr>
+                    ) : (
+                      report.userPerformance.map((u) => (
+                        <tr key={u.name} className="border-b border-[var(--border)]/60">
+                          <td className="px-3 py-2">{u.name}</td>
+                          <td className="px-3 py-2 tabular-nums">{u.salesCount}</td>
+                          <td className="px-3 py-2 tabular-nums text-right">{money(u.total)}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
         </>
       )}
     </div>

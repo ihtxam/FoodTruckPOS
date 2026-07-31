@@ -36,6 +36,11 @@ export interface SyncSalePayload {
   subtotal: number;
   taxAmount: number;
   discountAmount?: number;
+  tipAmount?: number;
+  roundingAmount?: number;
+  amountTendered?: number | null;
+  changeDue?: number | null;
+  staffName?: string | null;
   total: number;
   notes?: string;
   fulfillmentChannel?: "takeaway" | "dine_in" | "delivery";
@@ -60,6 +65,24 @@ export interface SyncSalePayload {
     paidAt?: string | null;
   }>;
   items: SyncSaleItem[];
+}
+
+function asUuidOrNull(v: unknown): string | null {
+  if (v == null || v === "") return null;
+  const s = String(v).trim();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)) {
+    return null;
+  }
+  return s;
+}
+
+function isUniqueViolation(err: unknown): boolean {
+  const e = err as { code?: string; cause?: { code?: string }; message?: string };
+  return (
+    e?.code === "23505" ||
+    e?.cause?.code === "23505" ||
+    /duplicate key|unique constraint/i.test(String(e?.message || err || ""))
+  );
 }
 
 export class SyncService {
@@ -305,64 +328,112 @@ export class SyncService {
         continue;
       }
 
-      const orderNumber = sale.orderNumber || `POS-${sale.clientId}`;
+      const baseOrderNumber = String(sale.orderNumber || `POS-${sale.clientId}`).slice(0, 40);
       const subtotal = roundMoney2(Number(sale.subtotal) || 0);
       const taxAmount = roundMoney2(Number(sale.taxAmount) || 0);
       const discountAmount = roundMoney2(Number(sale.discountAmount) || 0);
-      // Prefer client total (already 0.05-rounded on POS); otherwise round ourselves
+      const tipAmount = roundMoney2(Math.max(0, Number(sale.tipAmount) || 0));
+      const roundingAmount = roundMoney2(Number(sale.roundingAmount) || 0);
+      // Prefer client total (already rounded on POS); otherwise compute
       const total = roundTo005(
-        sale.total != null ? Number(sale.total) : subtotal + taxAmount - discountAmount
+        sale.total != null
+          ? Number(sale.total)
+          : subtotal + taxAmount - discountAmount + tipAmount + roundingAmount
       );
       const payStatus = sale.paymentStatus || "completed";
       const payLater =
         payStatus === "awaiting_payment" ||
         sale.paymentMethod === "pay_later" ||
         sale.paymentMethod === "pay-later";
-      const scheduledFor =
-        sale.scheduledFor != null && sale.scheduledFor !== ""
-          ? new Date(sale.scheduledFor)
-          : null;
+      let scheduledFor: Date | null = null;
+      if (sale.scheduledFor != null && sale.scheduledFor !== "") {
+        const d = new Date(sale.scheduledFor);
+        if (!Number.isNaN(d.getTime())) scheduledFor = d;
+      }
       const status =
         sale.status ||
         (payLater ? (scheduledFor ? "accepted" : "preparing") : "completed");
-      const [order] = await db
-        .insert(schema.orders)
-        .values({
-          merchantId,
-          orderNumber,
-          orderType: "pos",
-          fulfillmentChannel: sale.fulfillmentChannel || "takeaway",
-          status,
-          subtotal: subtotal.toFixed(2),
-          taxAmount: taxAmount.toFixed(2),
-          discountAmount: discountAmount.toFixed(2),
-          total: total.toFixed(2),
-          paymentMethod: sale.paymentMethod,
-          paymentStatus: payStatus,
-          notes: sale.notes,
-          scheduledFor,
-          customerId: sale.customerId || null,
-          customerName: sale.customerName || null,
-          customerPhone: sale.customerPhone || null,
-          customerEmail: sale.customerEmail || null,
-          shippingAddress: sale.shippingAddress || null,
-          tableId: sale.tableId || null,
-          tableLabel: sale.tableLabel || null,
-          guestCount: sale.guestCount != null ? Number(sale.guestCount) : null,
-          billSplits: sale.billSplits || [],
-          clientId: sale.clientId,
-          deviceId: sale.deviceId,
-          syncedAt: new Date(),
-          completedAt: payLater
-            ? null
-            : sale.completedAt
-              ? new Date(sale.completedAt)
-              : new Date(),
-        })
-        .returning();
+      const completedAt = payLater
+        ? null
+        : sale.completedAt
+          ? new Date(sale.completedAt)
+          : new Date();
+      if (completedAt && Number.isNaN(completedAt.getTime())) {
+        throw new Error("Invalid completedAt on sale");
+      }
+
+      const orderValuesBase = {
+        merchantId,
+        orderType: "pos" as const,
+        fulfillmentChannel: sale.fulfillmentChannel || "takeaway",
+        status,
+        subtotal: subtotal.toFixed(2),
+        taxAmount: taxAmount.toFixed(2),
+        discountAmount: discountAmount.toFixed(2),
+        tipAmount: tipAmount.toFixed(2),
+        roundingAmount: roundingAmount.toFixed(2),
+        amountTendered:
+          sale.amountTendered != null && Number.isFinite(Number(sale.amountTendered))
+            ? roundMoney2(Number(sale.amountTendered)).toFixed(2)
+            : null,
+        changeDue:
+          sale.changeDue != null && Number.isFinite(Number(sale.changeDue))
+            ? roundMoney2(Number(sale.changeDue)).toFixed(2)
+            : null,
+        staffName: sale.staffName ? String(sale.staffName).trim().slice(0, 255) : null,
+        total: total.toFixed(2),
+        paymentMethod: sale.paymentMethod,
+        paymentStatus: payStatus,
+        notes: sale.notes || null,
+        scheduledFor,
+        customerId: asUuidOrNull(sale.customerId),
+        customerName: sale.customerName || null,
+        customerPhone: sale.customerPhone || null,
+        customerEmail: sale.customerEmail || null,
+        shippingAddress: sale.shippingAddress || null,
+        tableId: asUuidOrNull(sale.tableId),
+        tableLabel: sale.tableLabel || null,
+        guestCount:
+          sale.guestCount != null && Number.isFinite(Number(sale.guestCount))
+            ? Number(sale.guestCount)
+            : null,
+        billSplits: sale.billSplits || [],
+        clientId: sale.clientId,
+        deviceId: sale.deviceId || null,
+        syncedAt: new Date(),
+        completedAt,
+      };
+
+      let order: { id: string } | undefined;
+      let orderNumber = baseOrderNumber;
+      for (let attempt = 0; attempt < 6; attempt++) {
+        try {
+          const [row] = await db
+            .insert(schema.orders)
+            .values({ ...orderValuesBase, orderNumber })
+            .returning();
+          order = row;
+          break;
+        } catch (err) {
+          if (isUniqueViolation(err) && attempt < 5) {
+            orderNumber = `${baseOrderNumber}-${Math.random().toString(36).slice(2, 6)}`.slice(
+              0,
+              50
+            );
+            continue;
+          }
+          const cause = (err as { cause?: unknown })?.cause;
+          const detail =
+            (cause as { message?: string })?.message ||
+            (err as Error)?.message ||
+            String(err);
+          throw new Error(`Failed to insert sale order: ${detail}`);
+        }
+      }
+      if (!order) throw new Error("Failed to insert sale order");
 
       for (const item of sale.items) {
-        let productId = item.productId;
+        let productId = asUuidOrNull(item.productId);
         if (!productId && item.productClientId) {
           const linked = await db.query.products.findFirst({
             where: and(
@@ -370,7 +441,7 @@ export class SyncService {
               eq(schema.products.clientId, item.productClientId)
             ),
           });
-          productId = linked?.id;
+          productId = linked?.id ?? null;
         }
 
         await db.insert(schema.orderItems).values({

@@ -38,9 +38,11 @@ export function nextWebPosTicketNumber(merchantId?: string | null): {
     /* ignore quota */
   }
   const padded = String(n).padStart(3, '0');
+  // Suffix avoids unique collisions when two tabs race the same counter.
+  const suffix = Math.random().toString(36).slice(2, 5);
   return {
     display: `#${n}`,
-    orderNumber: `WP-${dayKey.slice(2)}-${padded}`,
+    orderNumber: `WP-${dayKey.slice(2)}-${padded}-${suffix}`,
   };
 }
 
@@ -399,11 +401,24 @@ export function generateKitchenTicketEscPos(opts: KitchenTicketOpts): Uint8Array
   return concatBytes(...parts);
 }
 
+export type EodVatRow = {
+  label: string;
+  net: number;
+  tva: number;
+  brut: number;
+};
+
 export type EodReportPrint = {
   label: string;
+  periodFrom?: string;
+  periodTo?: string;
   salesCount: number;
   revenue: number;
+  subtotal?: number;
   taxTotal: number;
+  netTotal?: number;
+  tipsTotal?: number;
+  grandTotal?: number;
   refundTotal: number;
   cancelledCount: number;
   cancelledTotal: number;
@@ -411,48 +426,168 @@ export type EodReportPrint = {
   cardTotal: number;
   terminalTotal: number;
   coversServed?: number | null;
+  vatRows?: EodVatRow[];
   productsSold: Array<{ name: string; quantity: number; total: number }>;
-  paymentRows: Array<{ method: string; count: number; total: number }>;
+  paymentRows: Array<{ method: string; count: number; total: number; percent?: number }>;
+  orderTypeRows?: Array<{ label: string; count: number; total: number; percent?: number }>;
+  channelRows?: Array<{ channel: string; count: number; total: number }>;
   businessName?: string;
   language?: string;
+  /** Default 80mm to match Android LINE_WIDTH_80 */
   paperWidthMm?: 58 | 80;
   header?: string;
   footer?: string;
 };
 
+function vatCols(
+  type: string,
+  net: string,
+  tva: string,
+  brut: string,
+  width: number
+): string {
+  const compact = width <= 32;
+  if (compact) {
+    const t = type.slice(0, 8).padEnd(8);
+    return `${t}${net.padStart(7)}${tva.padStart(7)}${brut.padStart(7)}`.slice(0, width);
+  }
+  const t = type.slice(0, 14).padEnd(14);
+  const n = net.padStart(10);
+  const v = tva.padStart(10);
+  const b = brut.padStart(10);
+  return `${t}${n}${v}${b}`.slice(0, width);
+}
+
+/** Android-parity 80mm EOD layout. Plain text only (no ESC/POS bold). */
 export function generateEodReportText(report: EodReportPrint): string {
-  const width = lineWidthForPaper(report.paperWidthMm);
+  const width = lineWidthForPaper(report.paperWidthMm ?? 80);
   const L = receiptLabels(report.language);
-  const sep = '='.repeat(width);
-  const thin = '-'.repeat(width);
+  const sep = '='.repeat(Math.min(width, 32));
+  const thin = '-'.repeat(Math.min(width, 32));
+  const money = (n: number) => `CHF ${Number(n || 0).toFixed(2)}`;
+  const two = (n: number) => Number(n || 0).toFixed(2);
+  const tips = Number(report.tipsTotal || 0);
+  const brut = Number(report.revenue || 0);
+  const grand = Number(report.grandTotal != null ? report.grandTotal : brut + tips);
+  const period =
+    report.periodFrom && report.periodTo
+      ? `${report.periodFrom} to ${report.periodTo}`
+      : report.label;
+
   let r = '';
   r += sep + '\n';
-  r += L.endOfDay + '\n';
-  if (report.businessName) r += report.businessName.toUpperCase().slice(0, width) + '\n';
-  if (report.header?.trim()) r += report.header.trim() + '\n';
-  r += report.label + '\n';
+  if (report.businessName) {
+    r += centerLine(report.businessName.toUpperCase().slice(0, width), width) + '\n';
+  }
   r += sep + '\n';
-  r += padLine(`${L.salesCount}:`, String(report.salesCount), width) + '\n';
-  r += padLine(`${L.revenue}:`, `CHF ${report.revenue.toFixed(2)}`, width) + '\n';
-  r += padLine(`${L.tax}:`, `CHF ${report.taxTotal.toFixed(2)}`, width) + '\n';
-  r += padLine(`${L.refunds}:`, `CHF ${report.refundTotal.toFixed(2)}`, width) + '\n';
-  r += padLine(`${L.cancelled}:`, `${report.cancelledCount} / CHF ${report.cancelledTotal.toFixed(2)}`, width) + '\n';
-  if (report.coversServed) r += padLine(`${L.covers}:`, String(report.coversServed), width) + '\n';
+  r += '\n';
+  r += centerLine(L.endOfDay, width) + '\n';
+  r += '\n';
+  r += centerLine(L.reportPeriod, width) + '\n';
+  r += centerLine(period.slice(0, width), width) + '\n';
+  r += '\n';
   r += thin + '\n';
-  r += `${L.payment}\n`;
-  for (const p of report.paymentRows) {
+  r += centerLine(L.salesSummary, width) + '\n';
+  r += thin + '\n';
+  r += padLine(L.subtotal, money(report.subtotal ?? brut), width) + '\n';
+  r += '\n';
+  r += centerLine(L.tva, width) + '\n';
+  r += vatCols(L.type, L.net, L.tva, L.brut, width) + '\n';
+  const vatRows = report.vatRows?.length
+    ? report.vatRows
+    : [
+        {
+          label: 'Total',
+          net: Number(report.netTotal ?? brut - report.taxTotal),
+          tva: report.taxTotal,
+          brut,
+        },
+      ];
+  for (const row of vatRows) {
+    r += vatCols(row.label, two(row.net), two(row.tva), two(row.brut), width) + '\n';
+  }
+  if (report.vatRows?.length) {
     r +=
-      padLine(
-        `  ${paymentLabel(L, p.method)} (${p.count})`,
-        `CHF ${p.total.toFixed(2)}`,
+      vatCols(
+        'Total',
+        two(report.netTotal ?? brut - report.taxTotal),
+        two(report.taxTotal),
+        two(brut),
         width
       ) + '\n';
   }
   r += thin + '\n';
-  r += `${L.productsSold}\n`;
-  for (const p of report.productsSold.slice(0, 40)) {
-    r += padLine(`  ${p.quantity}x ${p.name}`.slice(0, width - 10), p.total.toFixed(2), width) + '\n';
+  r += padLine(L.total, money(brut), width) + '\n';
+  if (tips > 0) {
+    r += padLine(L.tipsNotTaxable, money(tips), width) + '\n';
+    r += padLine(L.grandTotal, money(grand), width) + '\n';
   }
+  r += padLine(L.orders, String(report.salesCount), width) + '\n';
+  if (report.coversServed) {
+    r += padLine(L.guestsServed, String(report.coversServed), width) + '\n';
+  }
+  r += '\n';
+  r += thin + '\n';
+  r += centerLine(L.paymentMethods, width) + '\n';
+  r += thin + '\n';
+  for (const p of report.paymentRows) {
+    const pct =
+      p.percent != null ? `${p.percent.toFixed(1)}%` : `${p.count}`;
+    r +=
+      padLine(
+        `${paymentLabel(L, p.method)} ${pct}`,
+        money(p.total),
+        width
+      ) + '\n';
+  }
+  r += thin + '\n';
+  r +=
+    padLine(
+      L.total,
+      money(report.paymentRows.reduce((s, p) => s + p.total, 0)),
+      width
+    ) + '\n';
+  r += '\n';
+
+  const orderTypes =
+    report.orderTypeRows ||
+    (report.channelRows || []).map((c) => ({
+      label: channelLabel(L, c.channel),
+      count: c.count,
+      total: c.total,
+      percent: undefined as number | undefined,
+    }));
+  if (orderTypes.length) {
+    r += thin + '\n';
+    r += centerLine(L.orderTypes, width) + '\n';
+    r += thin + '\n';
+    for (const o of orderTypes) {
+      const meta = o.percent != null ? `${o.percent.toFixed(1)}%` : String(o.count);
+      r += padLine(`${o.label} ${o.count} ${meta}`, money(o.total), width) + '\n';
+    }
+    r += thin + '\n';
+    r +=
+      padLine(
+        L.total,
+        money(orderTypes.reduce((s, o) => s + o.total, 0)),
+        width
+      ) + '\n';
+  }
+
+  if (report.productsSold.length) {
+    r += '\n';
+    r += thin + '\n';
+    r += centerLine(L.productsSold, width) + '\n';
+    r += thin + '\n';
+    const qtySum = report.productsSold.reduce((s, p) => s + p.quantity, 0);
+    r += padLine(L.totalQty, String(Math.round(qtySum * 1000) / 1000), width) + '\n';
+    const nameWidth = width <= 32 ? 22 : 30;
+    for (const p of report.productsSold.slice(0, 60)) {
+      const name = p.name.slice(0, nameWidth).padEnd(Math.min(nameWidth, width - 6));
+      r += (name + String(p.quantity).padStart(6)).slice(0, width) + '\n';
+    }
+  }
+
   if (report.footer?.trim()) {
     r += thin + '\n';
     r += report.footer.trim() + '\n';

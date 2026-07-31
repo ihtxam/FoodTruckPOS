@@ -37,6 +37,18 @@ interface SettingsData {
   floorPlanEnabled?: boolean;
   paxOrderingEnabled?: boolean;
   coursesEnabled?: boolean;
+  posCheckoutSettings?: {
+    tipsEnabled?: boolean;
+    tipPresetsPercent?: number[];
+    allowCustomTip?: boolean;
+    discountsEnabled?: boolean;
+    discountPresets?: Array<{ id: string; name: string; percent: number }>;
+    roundingStep?: number;
+    quickCashEnabled?: boolean;
+    quickCashDenominations?: number[];
+    splitBillsEnabled?: boolean;
+    maxSplitParts?: number;
+  } | null;
   shopPathUrl?: string | null;
   shopSubdomainUrl?: string | null;
   panelLanguage?: string | null;
@@ -325,6 +337,7 @@ export default function Settings() {
         floorPlanEnabled: !!settings.floorPlanEnabled,
         paxOrderingEnabled: !!settings.paxOrderingEnabled,
         coursesEnabled: !!settings.coursesEnabled,
+        posCheckoutSettings: settings.posCheckoutSettings || undefined,
         panelLanguage: settings.panelLanguage || locale,
         emailSmtpSettings: {
           enabled: !!settings.emailSmtpSettings?.enabled,
@@ -1097,6 +1110,60 @@ export default function Settings() {
               </Section>
 
               <div className="border-t border-[var(--border)] pt-4">
+                <Section title={t('posCheckoutSettings')} description={t('posCheckoutHint')}>
+                  {(
+                    [
+                      ['tipsEnabled', 'tipsEnabled'],
+                      ['allowCustomTip', 'allowCustomTip'],
+                      ['discountsEnabled', 'discountsEnabled'],
+                      ['quickCashEnabled', 'quickCashEnabled'],
+                      ['splitBillsEnabled', 'splitBillsEnabled'],
+                    ] as const
+                  ).map(([key, labelKey]) => (
+                    <label
+                      key={key}
+                      className="flex items-start gap-2.5 rounded-md border border-[var(--border)] px-3 py-2.5 text-sm"
+                    >
+                      <input
+                        type="checkbox"
+                        className="mt-0.5"
+                        checked={settings.posCheckoutSettings?.[key] !== false}
+                        onChange={(e) =>
+                          setSettings({
+                            ...settings,
+                            posCheckoutSettings: {
+                              ...(settings.posCheckoutSettings || {}),
+                              [key]: e.target.checked,
+                            },
+                          })
+                        }
+                      />
+                      <span className="font-medium">{t(labelKey)}</span>
+                    </label>
+                  ))}
+                  <Field label={t('quickCashDenominations')} hint={t('quickCashDenominationsHint')}>
+                    <input
+                      className="input"
+                      value={(settings.posCheckoutSettings?.quickCashDenominations || [10, 20, 50, 100]).join(', ')}
+                      onChange={(e) => {
+                        const dens = e.target.value
+                          .split(/[,;\s]+/)
+                          .map((x) => Number(x))
+                          .filter((n) => Number.isFinite(n) && n > 0);
+                        setSettings({
+                          ...settings,
+                          posCheckoutSettings: {
+                            ...(settings.posCheckoutSettings || {}),
+                            quickCashDenominations: dens.length ? dens : [10, 20, 50, 100],
+                          },
+                        });
+                      }}
+                    />
+                  </Field>
+                </Section>
+              </div>
+
+              <div className="border-t border-[var(--border)] pt-4">
                 <Section title={t('webPos')} description={t('webPosHint')}>
                   <a href="/merchant/pos" className="btn-secondary inline-flex">
                     {t('openWebPos')}
@@ -1642,21 +1709,80 @@ export default function Settings() {
                     <option value={58}>58mm</option>
                   </select>
                 </Field>
-                <Field label={t('receiptLogoUrl')} hint={t('receiptLogoHint')}>
-                  <input
-                    className="input"
-                    value={settings.posPrintSettings?.receiptLogoUrl || ''}
-                    placeholder={settings.shopLogoUrl || ''}
-                    onChange={(e) =>
-                      setSettings({
-                        ...settings,
-                        posPrintSettings: {
-                          ...(settings.posPrintSettings || {}),
-                          receiptLogoUrl: e.target.value || null,
-                        },
-                      })
-                    }
-                  />
+                <Field label={t('receiptLogoUpload')} hint={t('receiptLogoUploadHint')}>
+                  <div className="space-y-2">
+                    {(settings.posPrintSettings?.receiptLogoUrl || settings.shopLogoUrl) && (
+                      <img
+                        src={settings.posPrintSettings?.receiptLogoUrl || settings.shopLogoUrl || ''}
+                        alt=""
+                        className="h-16 object-contain rounded border border-[var(--border)] bg-white p-1"
+                      />
+                    )}
+                    <div className="flex flex-wrap gap-2">
+                      <label className="btn-secondary cursor-pointer inline-flex">
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp,image/gif"
+                          className="hidden"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            e.target.value = '';
+                            if (!file) return;
+                            try {
+                              const fd = new FormData();
+                              fd.append('file', file);
+                              const res = await api.post('/merchant/media', fd, {
+                                headers: { 'Content-Type': 'multipart/form-data' },
+                              });
+                              const url = res.data.url as string;
+                              setSettings({
+                                ...settings,
+                                posPrintSettings: {
+                                  ...(settings.posPrintSettings || {}),
+                                  receiptLogoUrl: url,
+                                },
+                              });
+                              toast.success(t('saved'));
+                            } catch (err: any) {
+                              toast.error(err.response?.data?.error || t('uploadFailed'));
+                            }
+                          }}
+                        />
+                        {t('receiptLogoUpload')}
+                      </label>
+                      {settings.posPrintSettings?.receiptLogoUrl && (
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          onClick={() =>
+                            setSettings({
+                              ...settings,
+                              posPrintSettings: {
+                                ...(settings.posPrintSettings || {}),
+                                receiptLogoUrl: null,
+                              },
+                            })
+                          }
+                        >
+                          {t('receiptLogoRemove')}
+                        </button>
+                      )}
+                    </div>
+                    <input
+                      className="input"
+                      value={settings.posPrintSettings?.receiptLogoUrl || ''}
+                      placeholder={settings.shopLogoUrl || t('receiptLogoUrl')}
+                      onChange={(e) =>
+                        setSettings({
+                          ...settings,
+                          posPrintSettings: {
+                            ...(settings.posPrintSettings || {}),
+                            receiptLogoUrl: e.target.value || null,
+                          },
+                        })
+                      }
+                    />
+                  </div>
                 </Field>
                 <Field label={t('receiptHeader')}>
                   <textarea

@@ -8,6 +8,10 @@ import {
   normalizePosPrintSettings,
   type PosPrintSettings,
 } from "@/lib/pos-print-settings";
+import {
+  normalizePosCheckoutSettings,
+  type PosCheckoutSettings,
+} from "@/lib/pos-checkout-settings";
 
 function maskSecret(value?: string | null): string | null {
   if (!value) return null;
@@ -128,6 +132,7 @@ export class MerchantSettingsService {
       panelLanguage: merchant.panelLanguage || "en",
       shopLanguage: merchant.shopLanguage || merchant.panelLanguage || "en",
       posPrintSettings: normalizePosPrintSettings(merchant.posPrintSettings),
+      posCheckoutSettings: normalizePosCheckoutSettings(merchant.posCheckoutSettings),
       status: merchant.status,
       subscriptionPlan: merchant.subscriptionPlan,
     };
@@ -190,6 +195,7 @@ export class MerchantSettingsService {
       panelLanguage?: string;
       shopLanguage?: string;
       posPrintSettings?: PosPrintSettings | null;
+      posCheckoutSettings?: PosCheckoutSettings | Partial<PosCheckoutSettings> | null;
     }
   ) {
     const db = getDb();
@@ -336,6 +342,9 @@ export class MerchantSettingsService {
     }
     if (updates.posPrintSettings !== undefined) {
       patch.posPrintSettings = normalizePosPrintSettings(updates.posPrintSettings);
+    }
+    if (updates.posCheckoutSettings !== undefined) {
+      patch.posCheckoutSettings = normalizePosCheckoutSettings(updates.posCheckoutSettings);
     }
 
     // Auto-create slug when enabling shop without one

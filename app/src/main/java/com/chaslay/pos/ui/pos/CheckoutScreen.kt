@@ -42,8 +42,12 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
+import androidx.compose.ui.modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -84,6 +88,13 @@ fun CheckoutScreen(
     cashEnabled: Boolean = true,
     cardEnabled: Boolean = true,
     terminalEnabled: Boolean = true,
+    tipsEnabled: Boolean = true,
+    allowCustomTip: Boolean = true,
+    tipPresetsPercent: List<Double> = listOf(0.0, 5.0, 10.0, 15.0),
+    discountsEnabled: Boolean = true,
+    quickCashEnabled: Boolean = true,
+    quickCashDenominations: List<Double> = listOf(10.0, 20.0, 50.0, 100.0),
+    splitBillsEnabled: Boolean = true,
     splitBillIndex: Int? = null,
     splitBillCount: Int? = null,
     isEqualSplit: Boolean = false,
@@ -109,6 +120,26 @@ fun CheckoutScreen(
     val totals = rememberCheckoutTotals(cart, checkoutState, equalSplitCount)
     val vc = vectronColors()
     val showSplitNav = splitBillIndex != null && splitBillCount != null && splitBillCount > 1
+    var showTipKeypad by remember { mutableStateOf(false) }
+    if (showTipKeypad) {
+        PriceKeypadDialog(
+            title = stringResource(R.string.tip),
+            subtitle = stringResource(R.string.enter_tip_amount),
+            currencySymbol = currencySymbol,
+            initialValue = if (checkoutState.tipAmount > 0) {
+                String.format(Locale.US, "%.2f", checkoutState.tipAmount)
+            } else {
+                ""
+            },
+            confirmLabel = stringResource(R.string.confirm),
+            onConfirm = { amount ->
+                onTipPercent(-1.0)
+                onTipAmount(amount.coerceAtLeast(0.0))
+                showTipKeypad = false
+            },
+            onDismiss = { showTipKeypad = false }
+        )
+    }
 
     Row(
         modifier = Modifier
@@ -259,32 +290,37 @@ fun CheckoutScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
-            Text("QUICK CASH", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                buildQuickCashAmounts(totals.roundedTotal, currencySymbol).forEach { amount ->
-                    Surface(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(24.dp))
-                            .clickable { onQuickCash(amount) },
-                        color = Color.White,
-                        shadowElevation = 1.dp
-                    ) {
-                        Text(
-                            formatMoney(amount, currencySymbol),
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                            fontWeight = FontWeight.SemiBold
-                        )
+            if (quickCashEnabled) {
+                Spacer(modifier = Modifier.height(24.dp))
+                Text("QUICK CASH", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    buildQuickCashAmounts(totals.roundedTotal, quickCashDenominations).forEach { amount ->
+                        Surface(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(24.dp))
+                                .clickable { onQuickCash(amount) },
+                            color = Color.White,
+                            shadowElevation = 1.dp
+                        ) {
+                            Text(
+                                formatMoney(amount, currencySymbol),
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     }
                 }
             }
 
-            if (checkoutState.showTipPanel) {
+            if (tipsEnabled && checkoutState.showTipPanel) {
                 Spacer(modifier = Modifier.height(16.dp))
                 Text("TIP", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
-                    listOf(0.0, 5.0, 10.0, 15.0).forEach { pct ->
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(top = 8.dp)
+                ) {
+                    tipPresetsPercent.ifEmpty { listOf(0.0, 5.0, 10.0, 15.0) }.forEach { pct ->
                         FilterChip(
                             selected = checkoutState.tipPercent == pct,
                             onClick = {
@@ -294,10 +330,17 @@ fun CheckoutScreen(
                             label = { Text(if (pct == 0.0) "None" else "${pct.toInt()}%") }
                         )
                     }
+                    if (allowCustomTip) {
+                        FilterChip(
+                            selected = checkoutState.tipPercent < 0 && checkoutState.tipAmount > 0,
+                            onClick = { showTipKeypad = true },
+                            label = { Text(stringResource(R.string.custom_tip)) }
+                        )
+                    }
                 }
             }
 
-            if (checkoutState.showDiscountPanel) {
+            if (discountsEnabled && checkoutState.showDiscountPanel) {
                 Spacer(modifier = Modifier.height(16.dp))
                 Text("DISCOUNT", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
@@ -408,24 +451,30 @@ fun CheckoutScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        CheckoutActionIcon(
-                            icon = Icons.Default.Sell,
-                            selected = checkoutState.showDiscountPanel,
-                            onClick = onToggleDiscountPanel,
-                            modifier = Modifier.weight(1f)
-                        )
-                        CheckoutActionIcon(
-                            icon = Icons.Default.Payments,
-                            selected = checkoutState.showTipPanel,
-                            onClick = onToggleTipPanel,
-                            modifier = Modifier.weight(1f)
-                        )
-                        CheckoutActionIcon(
-                            icon = Icons.AutoMirrored.Filled.CallSplit,
-                            selected = false,
-                            onClick = onSplitClick,
-                            modifier = Modifier.weight(1f)
-                        )
+                        if (discountsEnabled) {
+                            CheckoutActionIcon(
+                                icon = Icons.Default.Sell,
+                                selected = checkoutState.showDiscountPanel,
+                                onClick = onToggleDiscountPanel,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        if (tipsEnabled) {
+                            CheckoutActionIcon(
+                                icon = Icons.Default.Payments,
+                                selected = checkoutState.showTipPanel,
+                                onClick = onToggleTipPanel,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        if (splitBillsEnabled) {
+                            CheckoutActionIcon(
+                                icon = Icons.AutoMirrored.Filled.CallSplit,
+                                selected = false,
+                                onClick = onSplitClick,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
                     }
 
                     Button(
@@ -571,10 +620,14 @@ private fun rememberCheckoutTotals(
     return CheckoutTotals(netSubtotal, cart.itemDiscountTotal, cartDiscount, preTipTotal, roundedTotal, roundingAdj)
 }
 
-private fun buildQuickCashAmounts(total: Double, currencySymbol: String): List<Double> {
+private fun buildQuickCashAmounts(total: Double, denominations: List<Double>): List<Double> {
+    val exact = if (total > 0) listOf(total) else emptyList()
+    val dens = denominations
+        .filter { it >= total && it > 0 }
+        .sorted()
     val rounded5 = if (total <= 0) 0.0 else ceil(total / 0.05) * 0.05
-    val rounded1 = if (total <= 0) 0.0 else ceil(total)
-    return listOf(total, rounded5, rounded1, rounded1 + 10.0).distinct().filter { it > 0 }.take(4)
+    val extras = listOf(rounded5).filter { it > total }
+    return (exact + dens + extras).distinct().filter { it > 0 }.take(6)
 }
 
 private fun formatMoney(amount: Double, symbol: String): String =
