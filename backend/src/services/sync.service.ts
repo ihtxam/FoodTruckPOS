@@ -1,3 +1,4 @@
+import { repairCatalogText } from "@/lib/text-encoding";
 import { getDb, schema } from "@/db";
 import { and, desc, eq, gt, inArray } from "drizzle-orm";
 import { FloorPlanService } from "@/services/floor-plan.service";
@@ -64,6 +65,10 @@ export interface SyncSalePayload {
     paymentStatus: string;
     paidAt?: string | null;
   }>;
+  /** Shared id for split-bill sibling orders */
+  masterOrderId?: string | null;
+  /** 1-based split check number */
+  splitCheckNumber?: number | null;
   items: SyncSaleItem[];
 }
 
@@ -231,7 +236,7 @@ export class SyncService {
         await db
           .update(schema.categories)
           .set({
-            name: cat.name,
+            name: repairCatalogText(cat.name),
             description: cat.description,
             sortOrder: cat.sortOrder || 0,
             color: cat.color,
@@ -245,7 +250,7 @@ export class SyncService {
           .values({
             merchantId,
             clientId: cat.clientId,
-            name: cat.name,
+            name: repairCatalogText(cat.name),
             description: cat.description,
             sortOrder: cat.sortOrder || 0,
             color: cat.color,
@@ -280,7 +285,7 @@ export class SyncService {
       const values = {
         merchantId,
         clientId: product.clientId,
-        name: product.name,
+        name: repairCatalogText(product.name),
         price: product.price.toString(),
         categoryId,
         sku: product.sku,
@@ -398,6 +403,11 @@ export class SyncService {
             ? Number(sale.guestCount)
             : null,
         billSplits: sale.billSplits || [],
+        masterOrderId: sale.masterOrderId ? String(sale.masterOrderId).trim().slice(0, 64) : null,
+        splitCheckNumber:
+          sale.splitCheckNumber != null && Number.isFinite(Number(sale.splitCheckNumber))
+            ? Number(sale.splitCheckNumber)
+            : null,
         clientId: sale.clientId,
         deviceId: sale.deviceId || null,
         syncedAt: new Date(),

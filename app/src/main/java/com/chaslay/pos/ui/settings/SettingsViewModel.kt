@@ -128,6 +128,7 @@ data class SettingsUiState(
     val scaleTestReading: String? = null,
     val message: String? = null,
     val isMenuSyncing: Boolean = false,
+    val syncBusinessInfo: Boolean = true,
     val selectedSection: SettingsSection = SettingsSection.GENERAL,
     val posThemeMode: PosThemeMode = PosThemeMode.LIGHT,
     val crashLogs: List<CrashLogEntry> = emptyList(),
@@ -165,7 +166,8 @@ class SettingsViewModel @Inject constructor(
     private val scaleService: com.chaslay.pos.scale.AclasScaleService,
     private val floorSyncRepository: com.chaslay.pos.sync.FloorSyncRepository,
     private val terminalSyncRepository: com.chaslay.pos.sync.TerminalSyncRepository,
-    private val syncService: com.chaslay.pos.sync.SyncService
+    private val syncService: com.chaslay.pos.sync.SyncService,
+    private val syncPreferences: com.chaslay.pos.data.preferences.SyncPreferences
 ) : ViewModel() {
 
     private var currentSettings = BusinessSettingsEntity()
@@ -184,6 +186,7 @@ class SettingsViewModel @Inject constructor(
             }
             AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(language.code))
             val themeMode = sessionManager.posThemeMode.first()
+            val syncBusinessInfo = syncPreferences.isSyncBusinessInfoEnabled()
             val categories = productRepository.getAllCategories()
             _uiState.update {
                 it.copy(
@@ -245,6 +248,7 @@ class SettingsViewModel @Inject constructor(
                     localLanUrl = NetworkAddress.localLanUrl(FloorLanServer.PORT),
                     scaleEnabled = settings.scaleEnabled,
                     scaleUsbAddress = settings.scaleUsbAddress,
+                    syncBusinessInfo = syncBusinessInfo,
                     selectedPrinter = resolvePrinter(settings.printerMacAddress, settings.printerName),
                     selectedKitchenPrinter = resolvePrinter(
                         settings.kitchenPrinterMacAddress,
@@ -436,6 +440,13 @@ class SettingsViewModel @Inject constructor(
     fun updateTrackCoversFromSeatingPlan(enabled: Boolean) =
         _uiState.update { it.copy(trackCoversFromSeatingPlan = enabled) }
 
+    fun updateSyncBusinessInfo(enabled: Boolean) {
+        viewModelScope.launch {
+            syncPreferences.setSyncBusinessInfoEnabled(enabled)
+            _uiState.update { it.copy(syncBusinessInfo = enabled) }
+        }
+    }
+
     fun pullOnlineMenuReplace() {
         viewModelScope.launch {
             _uiState.update { it.copy(isMenuSyncing = true, message = null) }
@@ -452,6 +463,28 @@ class SettingsViewModel @Inject constructor(
                     )
                 )
             }
+            reloadBusinessFieldsFromSettings()
+        }
+    }
+
+    private suspend fun reloadBusinessFieldsFromSettings() {
+        val settings = settingsRepository.getSettings()
+        currentSettings = settings
+        _uiState.update {
+            it.copy(
+                businessName = settings.businessName,
+                vatNumber = settings.vatNumber,
+                address = settings.address,
+                phone = settings.phone,
+                email = settings.email,
+                dineInVatRate = settings.dineInVatRate.toString(),
+                takeawayVatRate = settings.takeawayVatRate.toString(),
+                openHour = settings.openHour.toString(),
+                openMinute = settings.openMinute.toString(),
+                closeHour = settings.closeHour.toString(),
+                closeMinute = settings.closeMinute.toString(),
+                language = AppLanguage.fromCode(settings.defaultLanguage)
+            )
         }
     }
 
@@ -471,6 +504,7 @@ class SettingsViewModel @Inject constructor(
                     )
                 )
             }
+            reloadBusinessFieldsFromSettings()
         }
     }
 

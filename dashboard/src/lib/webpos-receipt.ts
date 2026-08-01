@@ -1,6 +1,7 @@
 import { roundMoney2 } from '@/lib/money';
 import { APP_NAME } from '@/lib/brand';
 import { buildReceiptUrl, concatBytes, escposQrCode } from '@/lib/qr';
+import { escposCp850Encode, ESC_CODEPAGE_CP850 } from '@/lib/escpos-encode';
 import { localDateTimeToIso } from '@/lib/shop-hours';
 import {
   channelLabel,
@@ -92,6 +93,10 @@ export type WebPosReceipt = {
   phone?: string;
   vatNumber?: string;
   id: string;
+  /** Short ticket number shown on kitchen/receipt, e.g. #47 */
+  orderDisplay?: string | null;
+  /** Full order number stored in backend */
+  orderNumber?: string | null;
   completedAt: number;
   channel?: string;
   paymentMethod: string;
@@ -105,9 +110,12 @@ export type WebPosReceipt = {
   taxAmount: number;
   taxRate: number;
   rounding: number;
+  tipAmount?: number;
   total: number;
   tableLabel?: string | null;
   guestCount?: number | null;
+  vatIncludedInPrice?: boolean;
+  splitLabel?: string | null;
   notes?: string;
   receiptUrl?: string;
   includeQr?: boolean;
@@ -173,12 +181,39 @@ function resolveLang(tx: WebPosReceipt, panelLang?: string): ReceiptLang {
   return 'en';
 }
 
+function formatCompactVatLine(
+  tx: WebPosReceipt,
+  L: ReturnType<typeof receiptLabels>,
+  width: number
+): string | null {
+  if (tx.showVat === false || tx.taxAmount <= 0 || tx.taxRate <= 0) return null;
+  const net = roundMoney2(tx.subtotal);
+  const tva = roundMoney2(tx.taxAmount);
+  const brut = roundMoney2(net + tva);
+  const text = `${L.tva} ${tx.taxRate}% ${L.net} ${net.toFixed(2)} ${L.tva} ${tva.toFixed(2)} ${L.total} ${brut.toFixed(2)}`;
+  return text.slice(0, width);
+}
+
+function formatReceiptMetaFooter(
+  tx: WebPosReceipt,
+  L: ReturnType<typeof receiptLabels>,
+  locale: string,
+  width: number
+): string {
+  const date = new Date(tx.completedAt);
+  const dateStr = `${date.toLocaleDateString(locale, { timeZone: 'Europe/Zurich' })} ${date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Zurich' })}`;
+  const orderRef = (tx.orderDisplay || tx.orderNumber || tx.id.slice(-8)).trim();
+  const channel = tx.channel ? channelLabel(L, tx.channel) : '';
+  const user = tx.showStaff !== false && tx.staffName?.trim() ? tx.staffName.trim() : '';
+  const parts = [dateStr, orderRef, channel, user].filter(Boolean);
+  return centerLine(parts.join(' | '), width);
+}
+
 export function generateWebPosReceiptText(tx: WebPosReceipt, panelLang?: string): string {
   const width = lineWidthForPaper(tx.paperWidthMm);
-  const L = receiptLabels(resolveLang(tx, panelLang));
-  const date = new Date(tx.completedAt);
-  const locale = resolveLang(tx, panelLang) === 'fr' ? 'fr-CH' : resolveLang(tx, panelLang) === 'de' ? 'de-CH' : 'en-CH';
-  const dateStr = `${date.toLocaleDateString(locale)} ${date.toLocaleTimeString(locale)}`;
+  const lang = resolveLang(tx, panelLang);
+  const L = receiptLabels(lang);
+  const locale = lang === 'fr' ? 'fr-CH' : lang === 'de' ? 'de-CH' : 'en-CH';
   const sep = '='.repeat(width);
   const thin = '-'.repeat(width);
 
@@ -193,9 +228,6 @@ export function generateWebPosReceiptText(tx: WebPosReceipt, panelLang?: string)
     if (tx.vatNumber) r += `VAT: ${tx.vatNumber}`.slice(0, width) + '\n';
   }
   r += sep + '\n';
-  r += `${L.date}: ${dateStr}\n`;
-  r += `${L.sale}: ${tx.id}\n`;
-  if (tx.channel) r += `${L.channel}: ${channelLabel(L, tx.channel)}\n`;
   if (tx.tableLabel) {
     r += `${L.table} ${tx.tableLabel}`;
     if (tx.guestCount) r += ` · ${tx.guestCount} ${L.pax}`;
@@ -209,14 +241,13 @@ export function generateWebPosReceiptText(tx: WebPosReceipt, panelLang?: string)
       for (const line of tx.shippingAddress.trim().split(/\r?\n/)) {
         const chunk = line.trim();
         if (!chunk) continue;
-        // wrap long address lines
         for (let i = 0; i < chunk.length; i += width) {
           r += chunk.slice(i, i + width) + '\n';
         }
       }
     }
   }
-  if (tx.showStaff !== false && tx.staffName) r += `${L.staff} ${tx.staffName}\n`;
+  if (tx.splitLabel) r += `${tx.splitLabel}\n`;
   r += thin + '\n';
 
   for (const item of tx.items) {
@@ -230,12 +261,19 @@ export function generateWebPosReceiptText(tx: WebPosReceipt, panelLang?: string)
   }
 
   r += thin + '\n';
-  r += padLine(`${L.subtotal}:`, `CHF ${tx.subtotal.toFixed(2)}`, width) + '\n';
   if (tx.discount > 0) {
     r += padLine(`${L.discount}:`, `-CHF ${tx.discount.toFixed(2)}`, width) + '\n';
   }
-  if (tx.showVat !== false) {
-    r += padLine(`${L.tax} (${tx.taxRate}%):`, `CHF ${tx.taxAmount.toFixed(2)}`, width) + '\n';
+  const vatLine = formatCompactVatLine(tx, L, width);
+  if (vatLine) {
+    r += vatLine + '\n';
+    if (tx.vatIncludedInPrice !== false) {
+      r += L.vatIncludedNote.slice(0, width) + '\n';
+    }
+  }
+  const tip = roundMoney2(tx.tipAmount || 0);
+  if (tip > 0) {
+    r += padLine(`${L.tip}:`, `CHF ${tip.toFixed(2)}`, width) + '\n';
   }
   if (tx.rounding) {
     r +=
@@ -258,8 +296,9 @@ export function generateWebPosReceiptText(tx: WebPosReceipt, panelLang?: string)
     r += qrUrl + '\n';
   }
 
+  r += formatReceiptMetaFooter(tx, L, locale, width) + '\n';
   const footer = (tx.footer || L.thankYou).trim();
-  r += '\n' + footer + '\n\n\n';
+  r += footer + '\n\n\n';
   return r;
 }
 
@@ -323,7 +362,7 @@ function buildKitchenTicketLines(opts: KitchenTicketOpts): {
   const ticketNo = (opts.orderNumber || '—').trim();
 
   const lines: KitchenLine[] = [
-    { kind: 'center', text: `${centerLine('KITCHEN', width)}\n` },
+    { kind: 'center', text: `${centerLine(L.kitchen, width)}\n` },
     { kind: 'center', text: `${centerLine(ticketNo, width)}\n` },
     { kind: 'header', text: `${formatChannelWhen(L, opts.channel, opts.scheduledFor)}\n` },
     { kind: 'normal', text: `${thin}\n` },
@@ -379,34 +418,32 @@ export function generateKitchenTicketEscPos(opts: KitchenTicketOpts): Uint8Array
     ? opts.itemTextScale
     : 2) as 1 | 2 | 3;
   const bold = opts.boldText !== false;
-  const enc = new TextEncoder();
-  const parts: Uint8Array[] = [new Uint8Array([0x1b, 0x40])];
+  const parts: Uint8Array[] = [new Uint8Array([0x1b, 0x40]), ESC_CODEPAGE_CP850];
 
   for (const line of lines) {
     if (line.kind === 'center') {
-      // Hardware center + already space-padded text for plain fallback printers
       parts.push(
         escAlign(1),
         escKitchenSize(headerScale),
         escBold(bold || headerScale > 1),
-        enc.encode(line.text.trimStart()) // trim left pad; ESC/POS centers
+        escposCp850Encode(line.text.trimStart())
       );
     } else if (line.kind === 'header') {
       parts.push(
         escAlign(0),
         escKitchenSize(headerScale),
         escBold(bold || headerScale > 1),
-        enc.encode(line.text)
+        escposCp850Encode(line.text)
       );
     } else if (line.kind === 'item') {
       parts.push(
         escAlign(0),
         escKitchenSize(itemScale),
         escBold(bold || itemScale > 1),
-        enc.encode(line.text)
+        escposCp850Encode(line.text)
       );
     } else {
-      parts.push(escAlign(0), escKitchenSize(1), escBold(false), enc.encode(line.text));
+      parts.push(escAlign(0), escKitchenSize(1), escBold(false), escposCp850Encode(line.text));
     }
   }
 
@@ -621,14 +658,13 @@ export function textToEscPos(
   qrData?: string,
   logoBytes?: Uint8Array | null
 ): Uint8Array {
-  const encoder = new TextEncoder();
-  const body = encoder.encode(text);
+  const body = escposCp850Encode(text);
   const init = new Uint8Array([0x1b, 0x40]);
   const alignCenter = new Uint8Array([0x1b, 0x61, 0x01]);
   const alignLeft = new Uint8Array([0x1b, 0x61, 0x00]);
   const feed = new Uint8Array([0x1b, 0x64, 0x04]);
   const cut = new Uint8Array([0x1d, 0x56, 0x41, 0x10]);
-  const parts: Uint8Array[] = [init];
+  const parts: Uint8Array[] = [init, ESC_CODEPAGE_CP850];
   if (logoBytes?.length) {
     parts.push(alignCenter, logoBytes, alignLeft);
   }
@@ -740,4 +776,99 @@ export function resolveReceiptLanguage(
   const p = String(panelLanguage || 'en').toLowerCase().slice(0, 2);
   if (p === 'fr' || p === 'de') return p;
   return 'en';
+}
+
+/** Minimal order shape for reprinting from POS order history */
+export type PosOrderForReceipt = {
+  id: string;
+  orderNumber: string;
+  clientId?: string | null;
+  channel?: string | null;
+  paymentMethod?: string | null;
+  subtotal?: number;
+  taxAmount?: number;
+  discountAmount?: number;
+  tipAmount?: number;
+  roundingAmount?: number;
+  total: number;
+  tableLabel?: string | null;
+  guestCount?: number | null;
+  staffName?: string | null;
+  customerName?: string | null;
+  customerPhone?: string | null;
+  shippingAddress?: string | null;
+  completedAt?: string | null;
+  createdAt: string;
+  splitCheckNumber?: number | null;
+  items: Array<{ name?: string | null; quantity: number; totalPrice: number; unitPrice?: number }>;
+};
+
+export function posOrderToWebPosReceipt(
+  order: PosOrderForReceipt,
+  ctx: {
+    businessName: string;
+    address?: string;
+    phone?: string;
+    vatNumber?: string;
+    taxRate?: number;
+    vatIncludedInPrice?: boolean;
+    printSettings?: PosPrintSettingsClient | null;
+    panelLang?: string;
+    splitLabel?: string | null;
+  }
+): WebPosReceipt {
+  const subtotal = Number(order.subtotal ?? 0);
+  const taxAmount = Number(order.taxAmount ?? 0);
+  const inferredRate =
+    subtotal > 0 && taxAmount > 0 ? roundMoney2((taxAmount / subtotal) * 100) : 8.1;
+  const lang = resolveReceiptLanguage(ctx.printSettings, ctx.panelLang);
+  const paperWidthMm = ctx.printSettings?.paperWidthMm || 80;
+  const completedAt = order.completedAt
+    ? new Date(order.completedAt).getTime()
+    : new Date(order.createdAt).getTime();
+  const splitLabel =
+    ctx.splitLabel ??
+    (order.splitCheckNumber != null
+      ? `Split ${order.splitCheckNumber}`
+      : null);
+  return {
+    businessName: ctx.businessName,
+    address: ctx.address,
+    phone: ctx.phone,
+    vatNumber: ctx.vatNumber,
+    id: order.clientId || order.id,
+    orderNumber: order.orderNumber,
+    completedAt,
+    channel: order.channel || undefined,
+    paymentMethod: order.paymentMethod || 'cash',
+    customerName: order.customerName,
+    customerPhone: order.customerPhone,
+    shippingAddress: order.shippingAddress,
+    tableLabel: order.tableLabel,
+    guestCount: order.guestCount,
+    items: order.items.map((i) => ({
+      name: i.name || 'Item',
+      quantity: i.quantity,
+      unitPrice: Number(i.unitPrice ?? (i.quantity ? i.totalPrice / i.quantity : i.totalPrice)),
+      lineTotal: Number(i.totalPrice),
+    })),
+    subtotal,
+    discount: Number(order.discountAmount ?? 0),
+    taxAmount,
+    taxRate: ctx.taxRate ?? inferredRate,
+    rounding: Number(order.roundingAmount ?? 0),
+    tipAmount: Number(order.tipAmount ?? 0),
+    total: Number(order.total),
+    vatIncludedInPrice: ctx.vatIncludedInPrice ?? true,
+    splitLabel,
+    receiptUrl: order.clientId ? buildReceiptUrl(order.clientId) : undefined,
+    includeQr: ctx.printSettings?.receiptShowQrCode !== false,
+    staffName: order.staffName,
+    language: lang,
+    paperWidthMm,
+    header: ctx.printSettings?.receiptHeader,
+    footer: ctx.printSettings?.receiptFooter,
+    showVat: ctx.printSettings?.receiptShowVatTable !== false,
+    showStaff: ctx.printSettings?.receiptShowStaffLine !== false,
+  };
 }

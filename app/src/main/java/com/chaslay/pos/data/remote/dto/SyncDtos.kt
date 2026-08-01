@@ -25,14 +25,37 @@ data class SyncProductDto(
     val image_url: String? = null,
     val sort_order: Int? = null,
     val in_stock: Boolean? = null,
+    @SerializedName("is_open_price") val isOpenPrice: Boolean? = null,
+    @SerializedName("sold_by_weight") val soldByWeight: Boolean? = null,
+    @SerializedName("product_type") val productType: String? = null,
     val online_visible: Boolean? = null,
     val kiosk_visible: Boolean? = null,
     val updated_at: String? = null,
     val deleted_at: String? = null
 )
 
+data class SyncBusinessDto(
+    val name: String? = null,
+    val phone: String? = null,
+    val email: String? = null,
+    val address: String? = null,
+    @SerializedName("vat_number") val vatNumber: String? = null,
+    @SerializedName("vat_rate") val vatRate: Double? = null,
+    @SerializedName("tax_takeaway_rate") val taxTakeawayRate: Double? = null,
+    @SerializedName("tax_dine_in_rate") val taxDineInRate: Double? = null,
+    @SerializedName("tax_delivery_rate") val taxDeliveryRate: Double? = null,
+    @SerializedName("default_language") val defaultLanguage: String? = null,
+    @SerializedName("store_hours") val storeHours: Map<String, Map<String, List<SyncStoreHoursSlotDto>>>? = null
+)
+
+data class SyncStoreHoursSlotDto(
+    val open: String,
+    val close: String
+)
+
 data class MenuBootstrapResponse(
     val serverTime: Long,
+    val business: SyncBusinessDto? = null,
     val categories: List<SyncCategoryDto> = emptyList(),
     val products: List<SyncProductDto> = emptyList()
 )

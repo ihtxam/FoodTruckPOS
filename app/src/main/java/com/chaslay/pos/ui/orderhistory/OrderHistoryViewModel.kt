@@ -72,8 +72,8 @@ class OrderHistoryViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            val reasons = heldOrderRepository.getCancelReasons().map { it.label }
             val settings = settingsRepository.getSettings()
+            val reasons = com.chaslay.pos.domain.model.CancelReasonLabels.localizedLabels(settings.defaultLanguage)
             val currency = settings.currencySymbol.ifBlank { "CHF" }
             val access = sessionManager.currentUserAccess.first()
             _uiState.value = _uiState.value.copy(
@@ -197,7 +197,11 @@ class OrderHistoryViewModel @Inject constructor(
     }
 
     fun showCancelDialog() {
-        _uiState.value = _uiState.value.copy(showCancelDialog = true)
+        viewModelScope.launch {
+            val settings = settingsRepository.getSettings()
+            val reasons = com.chaslay.pos.domain.model.CancelReasonLabels.localizedLabels(settings.defaultLanguage)
+            _uiState.value = _uiState.value.copy(showCancelDialog = true, cancelReasons = reasons)
+        }
     }
 
     fun dismissCancelDialog() {

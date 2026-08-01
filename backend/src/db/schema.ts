@@ -752,6 +752,10 @@ export const orders = pgTable(
         }>
       >()
       .default([]),
+    /** Links split-bill sibling orders (Android masterOrderId / WebPOS split checkout) */
+    masterOrderId: varchar("master_order_id", { length: 64 }),
+    /** 1-based split check number within a masterOrderId group */
+    splitCheckNumber: integer("split_check_number"),
     clientId: varchar("client_id", { length: 64 }), // offline POS transaction id
     deviceId: varchar("device_id", { length: 255 }),
     syncedAt: timestamp("synced_at"),
@@ -769,6 +773,7 @@ export const orders = pgTable(
     createdAtIdx: index("orders_created_at_idx").on(table.createdAt),
     clientIdIdx: index("orders_client_id_idx").on(table.clientId),
     tableIdIdx: index("orders_table_id_idx").on(table.tableId),
+    masterOrderIdIdx: index("orders_master_order_id_idx").on(table.masterOrderId),
   })
 );
 

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
-import { Search, Plus, Edit2, Trash2, Eye, X, Copy, KeyRound, LogIn } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, Eye, X, Copy, KeyRound, LogIn, Eraser } from 'lucide-react';
 import { useAuthStore } from '@/store/auth';
 
 interface Merchant {
@@ -62,6 +62,9 @@ export default function Merchants() {
   const [issuedKeys, setIssuedKeys] = useState<IssuedLicense[]>([]);
   const [resetPassword, setResetPassword] = useState('');
   const [resettingPassword, setResettingPassword] = useState(false);
+  const [purgeConfirm, setPurgeConfirm] = useState('');
+  const [deleteCustomersToo, setDeleteCustomersToo] = useState(false);
+  const [purgingSales, setPurgingSales] = useState(false);
 
   useEffect(() => {
     fetchMerchants();
@@ -84,6 +87,8 @@ export default function Merchants() {
   const openDetail = async (merchant: Merchant) => {
     setShowDetail(merchant);
     setResetPassword('');
+    setPurgeConfirm('');
+    setDeleteCustomersToo(false);
     try {
       const res = await api.get(`/superadmin/merchants/${merchant.id}`);
       setDetailFull(res.data.merchant);
@@ -109,6 +114,39 @@ export default function Merchants() {
       toast.error(err.response?.data?.error || 'Failed to reset password');
     } finally {
       setResettingPassword(false);
+    }
+  };
+
+  const handlePurgeSalesData = async () => {
+    if (!showDetail) return;
+    if (purgeConfirm !== 'DELETE ALL SALES') {
+      toast.error('Type DELETE ALL SALES to confirm');
+      return;
+    }
+    if (
+      !window.confirm(
+        `Permanently delete all orders and sales for "${showDetail.name}"? Menu and settings are kept. This cannot be undone.`
+      )
+    ) {
+      return;
+    }
+    setPurgingSales(true);
+    try {
+      const res = await api.post(`/superadmin/merchants/${showDetail.id}/purge-sales-data`, {
+        confirm: 'DELETE ALL SALES',
+        deleteCustomers: deleteCustomersToo,
+      });
+      const d = res.data?.result?.deleted;
+      toast.success(
+        d
+          ? `Purged ${d.orders ?? 0} orders, ${d.heldOrders ?? 0} held carts, ${d.dailyReports ?? 0} reports`
+          : res.data?.message || 'Sales data purged'
+      );
+      setPurgeConfirm('');
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to purge sales data');
+    } finally {
+      setPurgingSales(false);
     }
   };
 
@@ -652,6 +690,42 @@ export default function Merchants() {
                       onClick={() => void handleResetPassword()}
                     >
                       {resettingPassword ? 'Saving…' : 'Reset'}
+                    </button>
+                  </div>
+                </div>
+                <div className="rounded-lg border border-red-200 bg-red-50 p-3 space-y-3">
+                  <p className="font-semibold text-red-900 flex items-center gap-2">
+                    <Eraser className="w-4 h-4" /> Purge test sales data
+                  </p>
+                  <p className="text-xs text-red-800">
+                    Deletes all POS / WebPOS / online orders, held carts, payment records, daily
+                    reports, floor sync orders, and loyalty history. Keeps menu, staff, settings,
+                    licenses, and devices. Use after merchant testing to start from zero.
+                  </p>
+                  <label className="flex items-center gap-2 text-xs text-red-900">
+                    <input
+                      type="checkbox"
+                      checked={deleteCustomersToo}
+                      onChange={(e) => setDeleteCustomersToo(e.target.checked)}
+                    />
+                    Also delete customer profiles (otherwise only reset spend / points stats)
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      className="input flex-1 border-red-200"
+                      placeholder='Type DELETE ALL SALES'
+                      value={purgeConfirm}
+                      onChange={(e) => setPurgeConfirm(e.target.value)}
+                      autoComplete="off"
+                    />
+                    <button
+                      type="button"
+                      className="btn-secondary whitespace-nowrap border-red-300 text-red-800 hover:bg-red-100"
+                      disabled={purgingSales || purgeConfirm !== 'DELETE ALL SALES'}
+                      onClick={() => void handlePurgeSalesData()}
+                    >
+                      {purgingSales ? 'Purging…' : 'Purge sales'}
                     </button>
                   </div>
                 </div>

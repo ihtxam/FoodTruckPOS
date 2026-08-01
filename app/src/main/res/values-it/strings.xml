@@ -220,7 +220,7 @@
     <string name="refund_order">Remboursement commande</string>
     <string name="refund_full">Remboursement partiel.</string>
     <string name="refund_partial">Remboursement partiel</string>
-    <string name="cancel_reason">Attention : vous êtes sur le point d’annuler votre projet</string>
+    <string name="cancel_reason">Motivo annullamento</string>
     <string name="filter_date">Date</string>
     <string name="filter_payment">Pagamento</string>
     <string name="filter_service">Type de service</string>

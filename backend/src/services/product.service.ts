@@ -1,4 +1,5 @@
 import { getDb, schema } from "@/db";
+import { repairCatalogText } from "@/lib/text-encoding";
 import { eq, and, like, desc, asc, or, max, sql, lt } from "drizzle-orm";
 
 export class ProductService {
@@ -62,7 +63,7 @@ export class ProductService {
         .insert(schema.products)
         .values({
           merchantId,
-          name,
+          name: repairCatalogText(name),
           price: price.toString(),
           categoryId,
           sku,
@@ -142,7 +143,11 @@ export class ProductService {
         orderBy: [asc(schema.products.sortOrder), desc(schema.products.createdAt)],
       });
 
-      return products;
+      return products.map((p) => ({
+        ...p,
+        name: repairCatalogText(p.name),
+        description: p.description ? repairCatalogText(p.description) : p.description,
+      }));
     } catch (error) {
       console.error("Error getting products:", error);
       throw error;
@@ -246,10 +251,15 @@ export class ProductService {
     const db = getDb();
 
     try {
+      const patched = { ...updates } as Partial<typeof schema.products.$inferInsert>;
+      if (typeof patched.name === "string") patched.name = repairCatalogText(patched.name);
+      if (typeof patched.description === "string") {
+        patched.description = repairCatalogText(patched.description);
+      }
       const product = await db
         .update(schema.products)
         .set({
-          ...updates,
+          ...patched,
           updatedAt: new Date(),
         })
         .where(

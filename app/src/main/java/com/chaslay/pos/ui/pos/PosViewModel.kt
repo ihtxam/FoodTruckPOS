@@ -26,6 +26,7 @@ import com.chaslay.pos.domain.model.CartItem
 import com.chaslay.pos.domain.model.ComboPickState
 import com.chaslay.pos.domain.model.ComboSelection
 import com.chaslay.pos.domain.model.CartSummary
+import com.chaslay.pos.domain.model.CancelReasonLabels
 import com.chaslay.pos.domain.model.FloorDeviceRole
 import com.chaslay.pos.domain.model.FulfillmentType
 import com.chaslay.pos.domain.model.DiscountPreset
@@ -1360,9 +1361,8 @@ class PosViewModel @Inject constructor(
         printerService.routeKitchen(
             settings = settings,
             tableName = when (cart.fulfillmentType) {
-                FulfillmentType.PICKUP -> "Takeaway"
-                FulfillmentType.DELIVERY -> "Delivery"
-                else -> cart.tableName ?: "Walk-in"
+                FulfillmentType.DINE_IN -> cart.tableName.orEmpty()
+                else -> ""
             },
             serviceType = cart.serviceType,
             round = 1,
@@ -1763,7 +1763,8 @@ class PosViewModel @Inject constructor(
             return
         }
         viewModelScope.launch {
-            val reasons = heldOrderRepository.getCancelReasons().map { it.label }
+            val settings = settingsRepository.getSettings()
+            val reasons = CancelReasonLabels.localizedLabels(settings.defaultLanguage)
             updateExtras {
                 it.copy(showCartCancelDialog = true, cartCancelReasons = reasons)
             }
@@ -2674,17 +2675,25 @@ class PosViewModel @Inject constructor(
     }
 
     private suspend fun buildKitchenMeta(cart: CartSummary): KitchenPrintMeta {
+        val settings = settingsRepository.getSettings()
         val userName = sessionManager.currentUserName.first() ?: "Cashier"
-        val orderNum = cart.orderNumber
+        val orderNum = cart.orderNumber?.trim()?.takeIf { it.isNotBlank() }
             ?: cart.tableOrderId?.let { "T-${it.takeLast(6).uppercase()}" }
+            ?: "P-${System.currentTimeMillis().toString().takeLast(6)}"
         val deliveryAddress = listOfNotNull(cart.deliveryAddress, cart.deliveryZip)
             .filter { it.isNotBlank() }
             .joinToString(", ")
             .ifBlank { null }
+        val source = when (FloorDeviceRole.fromApi(settings.floorDeviceRole)) {
+            FloorDeviceRole.WAITER -> "WAITERAPP"
+            else -> "POS"
+        }
         return KitchenPrintMeta(
             orderNumber = orderNum,
             fulfillmentType = cart.fulfillmentType,
             pickupTimeMs = cart.pickupTimeMs,
+            orderedAtMs = System.currentTimeMillis(),
+            orderSource = source,
             cashierName = userName,
             deliveryName = cart.deliveryName,
             deliveryAddress = deliveryAddress,

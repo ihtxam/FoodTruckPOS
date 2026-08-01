@@ -4,6 +4,7 @@ import com.chaslay.pos.domain.model.AppLanguage
 import com.chaslay.pos.domain.model.FulfillmentType
 import com.chaslay.pos.domain.model.PaymentMethod
 import com.chaslay.pos.domain.model.ServiceType
+import java.util.Locale
 
 /** Localized receipt / print labels (uses business default language). */
 data class ReceiptLabels(
@@ -35,7 +36,23 @@ data class ReceiptLabels(
     val card: String,
     val tapToPay: String,
     val terminal: String,
-    val payLater: String
+    val payLater: String,
+    val kitchenTitle: String,
+    val kitchenMessageTitle: String,
+    val itemsHeader: String,
+    val pickupAt: String,
+    val deliveryAt: String,
+    val deliverTo: String,
+    val tel: String,
+    val asap: String,
+    val roundLabel: String,
+    val fireCourse: String,
+    val courseLabel: String,
+    val byStaff: String,
+    val sourcePos: String,
+    val sourceWaiter: String,
+    val sourceWeb: String,
+    val sourceOnline: String
 ) {
     fun fulfillmentLabel(fulfillmentType: FulfillmentType, serviceType: ServiceType): String =
         when (fulfillmentType) {
@@ -54,6 +71,16 @@ data class ReceiptLabels(
         PaymentMethod.TAP_TO_PAY -> tapToPay
         PaymentMethod.ADYEN_TERMINAL -> terminal
         PaymentMethod.PAY_LATER -> payLater
+    }
+
+    fun orderSourceLabel(source: String?): String {
+        val key = source?.trim()?.uppercase(Locale.ROOT).orEmpty()
+        return when {
+            key.contains("WAITER") -> sourceWaiter
+            key.contains("WEB") -> sourceWeb
+            key.contains("ONLINE") || key.contains("SHOP") || key.contains("KIOSK") -> sourceOnline
+            else -> sourcePos
+        }
     }
 
     companion object {
@@ -94,7 +121,23 @@ data class ReceiptLabels(
             card = "Card",
             tapToPay = "Tap-to-Pay",
             terminal = "Terminal",
-            payLater = "Pay Later"
+            payLater = "Pay Later",
+            kitchenTitle = "KITCHEN",
+            kitchenMessageTitle = "KITCHEN MESSAGE",
+            itemsHeader = "ITEMS",
+            pickupAt = "Pickup",
+            deliveryAt = "Delivery time",
+            deliverTo = "Deliver to",
+            tel = "Tel",
+            asap = "ASAP",
+            roundLabel = "Round",
+            fireCourse = "FIRE COURSE",
+            courseLabel = "COURSE",
+            byStaff = "By",
+            sourcePos = "POS",
+            sourceWaiter = "Waiter app",
+            sourceWeb = "WebPOS",
+            sourceOnline = "Online"
         )
 
         private fun french() = ReceiptLabels(
@@ -126,7 +169,23 @@ data class ReceiptLabels(
             card = "Carte",
             tapToPay = "Tap-to-Pay",
             terminal = "Terminal",
-            payLater = "Payer plus tard"
+            payLater = "Payer plus tard",
+            kitchenTitle = "CUISINE",
+            kitchenMessageTitle = "MESSAGE CUISINE",
+            itemsHeader = "ARTICLES",
+            pickupAt = "Retrait",
+            deliveryAt = "Heure livraison",
+            deliverTo = "Livrer à",
+            tel = "Tél",
+            asap = "Dès que possible",
+            roundLabel = "Tour",
+            fireCourse = "ENVOYER PLAT",
+            courseLabel = "PLAT",
+            byStaff = "Par",
+            sourcePos = "Caisse",
+            sourceWaiter = "App serveur",
+            sourceWeb = "WebPOS",
+            sourceOnline = "En ligne"
         )
 
         private fun german() = ReceiptLabels(
@@ -158,7 +217,23 @@ data class ReceiptLabels(
             card = "Karte",
             tapToPay = "Tap-to-Pay",
             terminal = "Terminal",
-            payLater = "Sp\u00E4ter zahlen"
+            payLater = "Sp\u00E4ter zahlen",
+            kitchenTitle = "KUECHE",
+            kitchenMessageTitle = "KUECHEN-NACHRICHT",
+            itemsHeader = "ARTIKEL",
+            pickupAt = "Abholung",
+            deliveryAt = "Lieferzeit",
+            deliverTo = "Lieferung an",
+            tel = "Tel",
+            asap = "Sofort",
+            roundLabel = "Gang",
+            fireCourse = "GANG SENDEN",
+            courseLabel = "GANG",
+            byStaff = "Von",
+            sourcePos = "Kasse",
+            sourceWaiter = "Kellner-App",
+            sourceWeb = "WebPOS",
+            sourceOnline = "Online"
         )
 
         private fun italian() = ReceiptLabels(
@@ -190,7 +265,23 @@ data class ReceiptLabels(
             card = "Carta",
             tapToPay = "Tap-to-Pay",
             terminal = "Terminale",
-            payLater = "Paga dopo"
+            payLater = "Paga dopo",
+            kitchenTitle = "CUCINA",
+            kitchenMessageTitle = "MESSAGGIO CUCINA",
+            itemsHeader = "ARTICOLI",
+            pickupAt = "Ritiro",
+            deliveryAt = "Orario consegna",
+            deliverTo = "Consegna a",
+            tel = "Tel",
+            asap = "Subito",
+            roundLabel = "Turno",
+            fireCourse = "INVIA PORTATA",
+            courseLabel = "PORTATA",
+            byStaff = "Da",
+            sourcePos = "POS",
+            sourceWaiter = "App cameriere",
+            sourceWeb = "WebPOS",
+            sourceOnline = "Online"
         )
     }
 }

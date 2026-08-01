@@ -149,6 +149,20 @@ fun SettingsScreen(
         Text(stringResource(R.string.menu_sync_title), fontWeight = FontWeight.SemiBold)
         Text(stringResource(R.string.menu_sync_help), style = MaterialTheme.typography.bodySmall)
         Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Checkbox(
+                checked = state.syncBusinessInfo,
+                onCheckedChange = viewModel::updateSyncBusinessInfo
+            )
+            Text(
+                stringResource(R.string.menu_sync_business_info),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f)
+            )
+        }
+        Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.fillMaxWidth()
         ) {

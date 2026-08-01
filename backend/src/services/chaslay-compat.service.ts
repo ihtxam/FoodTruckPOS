@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { getDb, schema } from "@/db";
+import { repairCatalogText } from "@/lib/text-encoding";
 import { and, eq, gt, inArray, sql } from "drizzle-orm";
 import { AuthService } from "./auth.service";
 import { MerchantSettingsService } from "./merchant-settings.service";
@@ -237,6 +238,7 @@ export class ChaslayCompatService {
     const categoryClientById = new Map(
       categories.map((c) => [c.id, c.clientId || c.id] as const)
     );
+    const addressParts = [merchant.address, merchant.city, merchant.country].filter(Boolean);
     return {
       serverTime: Date.now(),
       tenant: {
@@ -244,6 +246,19 @@ export class ChaslayCompatService {
         slug: merchant.slug,
         name: merchant.name,
         currency_symbol: "CHF",
+      },
+      business: {
+        name: merchant.name,
+        phone: merchant.phone || null,
+        email: merchant.email,
+        address: addressParts.join(", ") || null,
+        vat_number: merchant.vatNumber || null,
+        vat_rate: Number(merchant.vatRate || 0),
+        tax_takeaway_rate: Number(merchant.taxTakeawayRate || merchant.vatRate || 0),
+        tax_dine_in_rate: Number(merchant.taxDineInRate || merchant.vatRate || 0),
+        tax_delivery_rate: Number(merchant.taxDeliveryRate || merchant.vatRate || 0),
+        default_language: merchant.panelLanguage || "en",
+        store_hours: merchant.storeHours || {},
       },
       categories: categories.map((c) => this.mapCategory(c)),
       products: products.map((p) => this.mapProduct(p, false, categoryClientById)),
@@ -488,7 +503,7 @@ export class ChaslayCompatService {
   static mapCategory(c: typeof schema.categories.$inferSelect, includeDeleted = false) {
     return {
       id: c.clientId || c.id,
-      name: c.name,
+      name: repairCatalogText(c.name),
       sort_order: c.sortOrder ?? 0,
       color_hex: c.color || null,
       online_visible: true,
@@ -506,17 +521,22 @@ export class ChaslayCompatService {
     const categoryId = p.categoryId
       ? categoryClientById?.get(p.categoryId) || p.categoryId
       : null;
+    // stock defaults to 0 in DB — that means "not tracking inventory", not unavailable.
+    // Use isActive for POS/menu availability; only hide when merchant deactivated the item.
     return {
       id: p.clientId || p.id,
       category_id: categoryId,
-      name: p.name,
-      description: p.description,
+      name: repairCatalogText(p.name),
+      description: p.description ? repairCatalogText(p.description) : p.description,
       price: parseFloat(String(p.price)),
       tax_rate: parseFloat(String(p.isTaxable ? 8.1 : 0)),
       sku: p.sku,
       image_url: p.imageUrl,
       sort_order: p.sortOrder ?? 0,
-      in_stock: (p.stock ?? 0) > 0,
+      in_stock: p.isActive !== false,
+      is_open_price: !!p.isOpenPrice,
+      sold_by_weight: !!p.soldByWeight,
+      product_type: p.productType || "standard",
       online_visible: p.isActive,
       kiosk_visible: p.isActive,
       updated_at: p.updatedAt?.toISOString(),

@@ -74,7 +74,7 @@ object SushiSakeCatalogSeeder {
         Item(3, "Spring Thon Cuit Rosa", 7.90),
         Item(3, "Spring Cheese Avocat", 7.50),
         Item(3, "Spring Saumon Concombre Cheese", 8.90),
-        Item(3, "Spring Saumon Snackù", 8.90),
+        Item(3, "Spring Saumon Snack\u00E9", 8.90),
         Item(3, "Spring Chicken Pane", 9.90),
         Item(3, "Spring Plante", 8.90),
         Item(3, "Spring Concombre Cheese", 7.90),
@@ -160,7 +160,7 @@ object SushiSakeCatalogSeeder {
         Item(11, "Yakisoba Brochette Poulet", 15.90),
         Item(11, "Yakisoba Legumes", 13.50),
         Item(11, "Yakisoba Crevette Tempura", 15.50),
-        Item(11, "Yakisoba Saumon SnackÈ", 15.50),
+        Item(11, "Yakisoba Saumon Snack\u00E9", 15.50),
         // Desserts
         Item(12, "Petit Mochi Vanille", 2.90),
         Item(12, "Petit Mochi Coconut", 2.90),
@@ -189,19 +189,15 @@ object SushiSakeCatalogSeeder {
         insertProduct(db, 9L, "Divers", 0.0, 2.6, 900, now, openPrice = true)
     }
 
-    fun isDemoCatalog(db: SupportSQLiteDatabase): Boolean {
+    /** Old Vectron-style demo (Soup category) ù one-time migrate to Sushi Sake seed. */
+    fun isLegacySoupDemo(db: SupportSQLiteDatabase): Boolean {
         db.query("SELECT COUNT(*) FROM categories WHERE name = 'Soup'").use { cursor ->
-            if (cursor.moveToFirst() && cursor.getLong(0) > 0L) return true
+            return cursor.moveToFirst() && cursor.getLong(0) > 0L
         }
-        db.query("SELECT COUNT(*) FROM categories WHERE name = 'Sushi'").use { cursor ->
-            if (cursor.moveToFirst() && cursor.getLong(0) == 0L) {
-                db.query("SELECT COUNT(*) FROM products").use { p ->
-                    if (p.moveToFirst() && p.getLong(0) > 0L) return true
-                }
-            }
-        }
-        return false
     }
+
+    @Deprecated("Replaced by isLegacySoupDemo ù do not call on every DB open")
+    fun isDemoCatalog(db: SupportSQLiteDatabase): Boolean = isLegacySoupDemo(db)
 
     fun replaceCatalog(db: SupportSQLiteDatabase) {
         db.execSQL("DELETE FROM products")

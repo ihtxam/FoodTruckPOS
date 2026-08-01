@@ -150,6 +150,26 @@ button {
     display: none;
   }
 
+  .webpos-category-tile {
+    @apply flex min-h-[4.5rem] items-center justify-center rounded-xl px-3 py-4 text-center text-sm font-bold leading-snug text-stone-800 shadow-sm transition active:scale-[0.98];
+  }
+
+  .webpos-product-card {
+    @apply relative flex flex-col overflow-hidden rounded-lg border border-stone-200 bg-white text-left shadow-sm transition hover:shadow-md active:scale-[0.98];
+  }
+
+  .webpos-keypad-key {
+    @apply rounded-lg bg-white py-3 text-lg font-semibold text-stone-800 ring-1 ring-stone-200 hover:bg-stone-50 disabled:opacity-40;
+  }
+
+  .webpos-mini-btn {
+    @apply inline-flex flex-col items-center justify-center gap-0.5 rounded-lg border border-stone-200 bg-white px-1 py-1.5 text-[10px] font-semibold leading-tight text-stone-600 hover:bg-stone-50 disabled:opacity-40;
+  }
+
+  .webpos-action-chip {
+    @apply rounded-lg border border-stone-200 bg-white px-2 py-2 text-[10px] font-bold uppercase tracking-wide text-stone-700 hover:bg-stone-50;
+  }
+
   /* Online shop: allow normal page scroll (panel-shell sets overflow:hidden globally). */
   html.shop-shell,
   html.shop-shell body {

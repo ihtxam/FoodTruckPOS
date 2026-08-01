@@ -45,6 +45,64 @@ export function splitEqual005(total: number, parts: number): number[] {
   return Array.from({ length: n }, (_, i) => (base + (i < rem ? 1 : 0)) / 20);
 }
 
+/** Use channel-specific rate when > 0, else merchant vatRate, else default. */
+export function resolvePosTaxRate(
+  channelRate: string | number | null | undefined,
+  vatRate: string | number | null | undefined,
+  defaultRate: number
+): number {
+  const ch = Number(channelRate);
+  if (Number.isFinite(ch) && ch > 0) return ch;
+  const vat = Number(vatRate);
+  if (Number.isFinite(vat) && vat > 0) return vat;
+  return defaultRate;
+}
+
+  if (!Number.isFinite(gross) || gross <= 0 || ratePercent <= 0) return 0;
+  return roundMoney2(gross - gross / (1 + ratePercent / 100));
+}
+
+export type MerchandiseLine = { lineTotal: number; taxable: boolean };
+
+export function computeMerchandiseTotals(
+  lines: MerchandiseLine[],
+  taxRate: number,
+  vatIncludedInPrice: boolean,
+  roundingStep = 0.05
+) {
+  const gross = roundMoney2(lines.reduce((s, l) => s + l.lineTotal, 0));
+  const taxableGross = roundMoney2(
+    lines.filter((l) => l.taxable).reduce((s, l) => s + l.lineTotal, 0)
+  );
+
+  if (vatIncludedInPrice) {
+    const tax = extractVatFromGross(taxableGross, taxRate);
+    const net = roundMoney2(gross - tax);
+    const rounding = roundingAdjustment(gross, roundingStep);
+    const total = roundToStep(gross + rounding, roundingStep);
+    return { subtotal: net, tax, gross, net, rounding, total };
+  }
+
+  const net = gross;
+  const tax = roundMoney2((taxableGross * taxRate) / 100);
+  const raw = net + tax;
+  const rounding = roundingAdjustment(raw, roundingStep);
+  const total = roundToStep(raw + rounding, roundingStep);
+  return { subtotal: net, tax, gross: raw, net, rounding, total };
+}
+
+/** Scale line amounts for an equal split (e.g. /2). */
+export function scaleLinesByFactor<
+  T extends { lineTotal: number; unitPrice: number; quantity: number },
+>(lines: T[], factor: number): T[] {
+  if (factor >= 0.999) return lines;
+  return lines.map((l) => {
+    const lineTotal = roundMoney2(l.lineTotal * factor);
+    const unitPrice = l.quantity > 0 ? roundMoney2(lineTotal / l.quantity) : 0;
+    return { ...l, lineTotal, unitPrice };
+  });
+}
+
 export function formatCHF(amount: number): string {
   return `CHF ${roundMoney2(amount).toFixed(2)}`;
 }

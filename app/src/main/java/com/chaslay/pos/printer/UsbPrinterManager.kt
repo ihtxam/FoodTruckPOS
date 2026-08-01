@@ -11,6 +11,7 @@ import android.hardware.usb.UsbEndpoint
 import android.hardware.usb.UsbInterface
 import android.hardware.usb.UsbManager
 import android.os.Build
+import com.chaslay.pos.printer.EscPosEncoder
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
@@ -137,8 +138,10 @@ class UsbPrinterManager @Inject constructor(
     }
 
     fun buildTestPayload(): ByteArray {
-        val text = "ChaslayPOS\nUSB test print\n\n\n"
-        return byteArrayOf(0x1B, 0x40) + text.toByteArray(Charsets.ISO_8859_1) + byteArrayOf(0x1D, 0x56, 0x00)
+        val text = "ChaslayPOS\nUSB: é è ü Ø\n\n\n"
+        return byteArrayOf(0x1B, 0x40, 0x1B, 0x74, 0x02) +
+            EscPosEncoder.encode(text) +
+            byteArrayOf(0x1D, 0x56, 0x00)
     }
 
     fun sendBytes(address: String, payload: ByteArray): Result<Unit> = runCatching {

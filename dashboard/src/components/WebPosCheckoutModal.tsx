@@ -33,6 +33,8 @@ type Props = {
   open: boolean;
   subtotal: number;
   taxAmount: number;
+  taxRate?: number;
+  vatIncludedInPrice?: boolean;
   settings: PosCheckoutSettings;
   methods: MethodFlags;
   initialMethod?: CheckoutPayMethod | 'express';
@@ -45,6 +47,8 @@ export default function WebPosCheckoutModal({
   open,
   subtotal,
   taxAmount,
+  taxRate = 0,
+  vatIncludedInPrice = true,
   settings,
   methods,
   initialMethod = 'cash',
@@ -63,17 +67,20 @@ export default function WebPosCheckoutModal({
   const [tender, setTender] = useState<number | null>(null);
 
   const calc = useMemo(() => {
-    const disc = roundMoney2((subtotal * discountPercent) / 100);
-    const afterDisc = roundMoney2(subtotal - disc);
+    const merchandise = vatIncludedInPrice ? subtotal + taxAmount : subtotal;
+    const disc = roundMoney2((merchandise * discountPercent) / 100);
+    const afterDisc = roundMoney2(merchandise - disc);
     const taxShare =
-      subtotal > 0 ? roundMoney2(taxAmount * (afterDisc / subtotal)) : taxAmount;
-    const preTip = roundMoney2(afterDisc + taxShare);
+      merchandise > 0 ? roundMoney2(taxAmount * (afterDisc / merchandise)) : taxAmount;
+    const preTip = vatIncludedInPrice
+      ? afterDisc
+      : roundMoney2(afterDisc + taxShare);
     const withTip = roundMoney2(preTip + tipAmount);
     const step = settings.roundingStep || 0;
     const total = roundToStep(withTip, step || 0.01);
     const roundingAmount = roundingAdjustment(withTip, step || 0.01);
-    return { disc, preTip, total, roundingAmount };
-  }, [subtotal, taxAmount, discountPercent, tipAmount, settings.roundingStep]);
+    return { disc, preTip, total, roundingAmount, taxShare };
+  }, [subtotal, taxAmount, discountPercent, tipAmount, settings.roundingStep, vatIncludedInPrice]);
 
   const cashOpts = useMemo(
     () => quickCashOptions(calc.total, settings.quickCashDenominations || []),
@@ -174,6 +181,12 @@ export default function WebPosCheckoutModal({
                   {t('discount')} ({discountPercent}%)
                 </span>
                 <span>-CHF {calc.disc.toFixed(2)}</span>
+              </div>
+            )}
+            {taxAmount > 0 && taxRate > 0 && (
+              <div className="flex justify-between muted text-xs">
+                <span>{t('webPosTax').replace('{rate}', String(taxRate))}</span>
+                <span>CHF {taxAmount.toFixed(2)}</span>
               </div>
             )}
             {tipAmount > 0 && (
@@ -284,7 +297,7 @@ export default function WebPosCheckoutModal({
                 })
               }
             >
-              {t('webPosConfirmPay')} ∑ CHF {calc.total.toFixed(2)}
+              {t('webPosConfirmPay')} ù CHF {calc.total.toFixed(2)}
             </button>
           </div>
         </div>

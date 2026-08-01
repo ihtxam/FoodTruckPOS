@@ -6,11 +6,18 @@ import { roundMoney2 } from '@/lib/money';
 type Props = {
   open: boolean;
   initial?: number;
+  title?: string;
   onClose: () => void;
   onConfirm: (amount: number) => void;
 };
 
-export default function WebPosTipKeypad({ open, initial = 0, onClose, onConfirm }: Props) {
+export default function WebPosTipKeypad({
+  open,
+  initial = 0,
+  title,
+  onClose,
+  onConfirm,
+}: Props) {
   const { t } = useI18n();
   const [buf, setBuf] = useState(() =>
     initial > 0 ? String(roundMoney2(initial)) : ''
@@ -34,7 +41,7 @@ export default function WebPosTipKeypad({ open, initial = 0, onClose, onConfirm 
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-3">
       <div className="w-full max-w-xs rounded-2xl bg-[var(--bg-elevated)] border border-[var(--border)] shadow-xl">
         <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)]">
-          <h3 className="font-semibold">{t('webPosTipAmount')}</h3>
+          <h3 className="font-semibold">{title || t('webPosTipAmount')}</h3>
           <button type="button" className="p-2" onClick={onClose} aria-label={t('close')}>
             <X size={18} />
           </button>

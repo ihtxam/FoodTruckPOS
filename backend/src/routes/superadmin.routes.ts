@@ -318,6 +318,42 @@ router.post("/merchants/:merchantId/reset-password", async (req: Request, res: R
 });
 
 /**
+ * POST /api/superadmin/merchants/:merchantId/purge-sales-data
+ * Delete all orders / sales / held carts / reports for a merchant (testing reset).
+ * Menu, staff, settings, licenses, and devices are kept.
+ */
+router.post("/merchants/:merchantId/purge-sales-data", async (req: Request, res: Response) => {
+  try {
+    const { merchantId } = req.params;
+    const confirm = String(req.body?.confirm || "").trim();
+    if (confirm !== "DELETE ALL SALES") {
+      return res.status(400).json({
+        error: 'Confirmation required: send { "confirm": "DELETE ALL SALES" } in the request body',
+      });
+    }
+    const existing = await MerchantService.getMerchantById(merchantId);
+    if (!existing) {
+      return res.status(404).json({ error: "Merchant not found" });
+    }
+    const { MerchantDataResetService } = await import("@/services/merchant-data-reset.service");
+    const result = await MerchantDataResetService.purgeSalesData(merchantId, {
+      deleteCustomers: req.body?.deleteCustomers === true,
+      deleteReservations: req.body?.deleteReservations !== false,
+    });
+    res.json({
+      success: true,
+      message: `Purged sales data for ${result.merchantName}`,
+      result,
+    });
+  } catch (error) {
+    console.error("Error purging merchant sales data:", error);
+    res
+      .status(400)
+      .json({ error: error instanceof Error ? error.message : "Failed to purge sales data" });
+  }
+});
+
+/**
  * POST /api/superadmin/merchants/:merchantId/suspend
  * Suspend merchant account
  */

@@ -1170,8 +1170,22 @@ class CartManager @Inject constructor() {
 
     fun setServiceType(serviceType: ServiceType, rateResolver: (CartItem) -> Double) {
         _cart.update { cart ->
+            val fulfillment = when (serviceType) {
+                ServiceType.TAKEAWAY -> FulfillmentType.PICKUP
+                ServiceType.DINE_IN -> when (cart.fulfillmentType) {
+                    FulfillmentType.DELIVERY, FulfillmentType.PICKUP -> FulfillmentType.DINE_IN
+                    else -> cart.fulfillmentType
+                }
+            }
+            val orderNumber = if (serviceType == ServiceType.TAKEAWAY && cart.orderNumber.isNullOrBlank()) {
+                "P-${System.currentTimeMillis().toString().takeLast(6)}"
+            } else {
+                cart.orderNumber
+            }
             cart.copy(
                 serviceType = serviceType,
+                fulfillmentType = fulfillment,
+                orderNumber = orderNumber,
                 items = cart.items.map { item ->
                     val rate = rateResolver(item)
                     if (item.taxRate == rate) item else item.copy(taxRate = rate)

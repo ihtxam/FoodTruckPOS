@@ -27,7 +27,28 @@ object ReceiptVatCalculator {
                 val net = brut / (1.0 + rate / 100.0)
                 val tva = brut - net
                 VatBreakdownRow(
-                    label = "A: ${formatRate(rate)}%",
+                    label = "${formatRate(rate)}%",
+                    rate = rate,
+                    net = net,
+                    tva = tva,
+                    brut = brut
+                )
+            }
+            .sortedByDescending { it.rate }
+
+    /** VAT breakdown from saved transaction lines (applies order-level discount proportionally). */
+    fun vatRowsFromTransactionItems(
+        items: List<com.chaslay.pos.data.local.entity.TransactionItemEntity>,
+        discountFactor: Double = 1.0
+    ): List<VatBreakdownRow> =
+        items.filter { it.taxRate > 0.0 }
+            .groupBy { it.taxRate }
+            .map { (rate, groupItems) ->
+                val brut = groupItems.sumOf { it.lineTotal } * discountFactor
+                val net = brut / (1.0 + rate / 100.0)
+                val tva = brut - net
+                VatBreakdownRow(
+                    label = "${formatRate(rate)}%",
                     rate = rate,
                     net = net,
                     tva = tva,
@@ -53,6 +74,6 @@ object ReceiptVatCalculator {
             ?: modifierSummaryFromNotes(item.notes)
     }
 
-    private fun formatRate(rate: Double): String =
+    fun formatRate(rate: Double): String =
         if (rate % 1.0 == 0.0) rate.toInt().toString() else String.format("%.1f", rate)
 }

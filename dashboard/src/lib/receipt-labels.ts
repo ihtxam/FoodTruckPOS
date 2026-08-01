@@ -49,6 +49,8 @@ export type ReceiptLabels = {
   asap: string;
   payLater: string;
   totalItems: string;
+  vatIncludedNote: string;
+  tip: string;
   customer: string;
   deliveryAddress: string;
 };
@@ -102,6 +104,8 @@ const EN: ReceiptLabels = {
   asap: 'ASAP',
   payLater: 'Pay later',
   totalItems: 'Items',
+  vatIncludedNote: 'VAT included in prices',
+  tip: 'Tip',
   customer: 'Customer',
   deliveryAddress: 'Delivery address',
 };
@@ -155,6 +159,8 @@ const FR: ReceiptLabels = {
   asap: 'Des que possible',
   payLater: 'Payer plus tard',
   totalItems: 'Articles',
+  vatIncludedNote: 'TVA incluse dans les prix',
+  tip: 'Pourboire',
   customer: 'Client',
   deliveryAddress: 'Adresse de livraison',
 };
@@ -208,6 +214,8 @@ const DE: ReceiptLabels = {
   asap: 'Sofort',
   payLater: 'Spaeter zahlen',
   totalItems: 'Artikel',
+  vatIncludedNote: 'MwSt. im Preis enthalten',
+  tip: 'Trinkgeld',
   customer: 'Kunde',
   deliveryAddress: 'Lieferadresse',
 };

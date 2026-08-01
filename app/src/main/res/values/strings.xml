@@ -132,6 +132,7 @@
     <string name="menu_sync_replace">Replace with online menu</string>
     <string name="menu_sync_merge">Merge with online</string>
     <string name="menu_sync_push">Push menu to panel</string>
+    <string name="menu_sync_business_info">Also sync business info (name, phone, VAT, opening hours)</string>
     <string name="menu_syncing">Syncing…</string>
     <string name="currency_settings">Currency</string>
     <string name="language_settings">Language</string>
@@ -626,4 +627,13 @@
     <string name="add_obstacle">Add obstacle</string>
     <string name="edit_floor_element">Edit floor element</string>
     <string name="element_label_optional">Label (optional)</string>
+
+    <!-- Demo mode -->
+    <string name="demo_mode_banner_label">DEMO MODE</string>
+    <string name="demo_go_live_button">GO LIVE</string>
+    <string name="demo_go_live_working">Clearing…</string>
+    <string name="demo_go_live_confirm_title">Go live?</string>
+    <string name="demo_go_live_confirm_body">This will permanently delete all demo sales data on this device (orders, payments, held orders, table orders, and reports). Your menu, staff, settings, and floor plan will be kept.</string>
+    <string name="demo_go_live_success">You are now live. Demo sales data has been cleared.</string>
+    <string name="demo_go_live_failed">Could not clear demo data. Please try again.</string>
 </resources>

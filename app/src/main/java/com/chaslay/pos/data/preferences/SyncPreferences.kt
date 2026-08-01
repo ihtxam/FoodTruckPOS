@@ -3,6 +3,7 @@ package com.chaslay.pos.data.preferences
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -23,11 +24,59 @@ class SyncPreferences @Inject constructor(
     private val lastOrdersSyncKey = longPreferencesKey("last_orders_sync_ms")
     private val syncApiKeyKey = stringPreferencesKey("sync_api_key")
     private val merchantIdKey = stringPreferencesKey("merchant_id")
+    private val syncBusinessInfoKey = booleanPreferencesKey("sync_business_info")
+    private val menuCloudSyncedKey = booleanPreferencesKey("menu_cloud_synced")
+
+    /** Sync read for Room [DatabaseCallback] (runs before DataStore is ready). */
+    fun isMenuCloudSyncedBlocking(): Boolean =
+        context.getSharedPreferences(SYNC_FLAGS_PREFS, Context.MODE_PRIVATE)
+            .getBoolean(MENU_CLOUD_SYNCED_PREFS_KEY, false)
+
+    private fun setMenuCloudSyncedBlocking(synced: Boolean) {
+        context.getSharedPreferences(SYNC_FLAGS_PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(MENU_CLOUD_SYNCED_PREFS_KEY, synced)
+            .apply()
+    }
+
+    suspend fun isMenuCloudSynced(): Boolean =
+        context.syncDataStore.data.map { it[menuCloudSyncedKey] ?: isMenuCloudSyncedBlocking() }.first()
+
+    suspend fun setMenuCloudSynced(synced: Boolean = true) {
+        setMenuCloudSyncedBlocking(synced)
+        context.syncDataStore.edit { prefs ->
+            if (synced) prefs[menuCloudSyncedKey] = true
+            else prefs.remove(menuCloudSyncedKey)
+        }
+    }
+
+    companion object {
+        private const val SYNC_FLAGS_PREFS = "pos_sync_flags"
+        private const val MENU_CLOUD_SYNCED_PREFS_KEY = "menu_cloud_synced"
+        private const val LAST_MENU_SYNC_PREFS_KEY = "last_menu_sync_ms"
+
+        fun hasRemoteMenuSync(context: Context): Boolean {
+            val prefs = context.getSharedPreferences(SYNC_FLAGS_PREFS, Context.MODE_PRIVATE)
+            return prefs.getBoolean(MENU_CLOUD_SYNCED_PREFS_KEY, false) ||
+                prefs.getLong(LAST_MENU_SYNC_PREFS_KEY, 0L) > 0L
+        }
+    }
+
+    suspend fun isSyncBusinessInfoEnabled(): Boolean =
+        context.syncDataStore.data.map { it[syncBusinessInfoKey] ?: true }.first()
+
+    suspend fun setSyncBusinessInfoEnabled(enabled: Boolean) {
+        context.syncDataStore.edit { it[syncBusinessInfoKey] = enabled }
+    }
 
     suspend fun getLastMenuSyncMs(): Long =
         context.syncDataStore.data.map { it[lastMenuSyncKey] ?: 0L }.first()
 
     suspend fun setLastMenuSyncMs(value: Long) {
+        context.getSharedPreferences(SYNC_FLAGS_PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putLong(LAST_MENU_SYNC_PREFS_KEY, value)
+            .apply()
         context.syncDataStore.edit { it[lastMenuSyncKey] = value }
     }
 

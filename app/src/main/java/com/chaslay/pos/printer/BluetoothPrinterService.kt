@@ -541,13 +541,14 @@ class BluetoothPrinterService @Inject constructor(
         lineWidth: Int = LINE_WIDTH_80
     ): ByteArray {
         val sb = StringBuilder()
+        val labels = ReceiptLabels.forLanguage(settings.defaultLanguage)
         val timeFmt = SimpleDateFormat("dd-MM-yyyy HH:mm", Locale.getDefault())
         val sepEq = "=".repeat(lineWidth.coerceAtMost(32))
         val sepDash = "-".repeat(lineWidth.coerceAtMost(32))
 
         if (isFollowUp) {
             sb.appendLine(escBold(true))
-            sb.appendLine(center("KITCHEN MESSAGE", lineWidth))
+            sb.appendLine(center(labels.kitchenMessageTitle, lineWidth))
             sb.appendLine(escBold(false))
             if (tableName.isNotBlank()) sb.appendLine(center(tableName, lineWidth))
             sb.appendLine(center(sepDash, lineWidth))
@@ -557,18 +558,15 @@ class BluetoothPrinterService @Inject constructor(
             return encodePayload(sb.toString())
         }
 
-        sb.appendLine(escBold(true))
-        sb.appendLine(center("KITCHEN", lineWidth))
-        sb.appendLine(escBold(false))
-        meta.orderNumber?.let { sb.appendLine(center("#$it", lineWidth)) }
+        val effectiveFulfillment = resolveKitchenFulfillment(meta.fulfillmentType, serviceType)
+        val orderNo = meta.orderNumber?.trim()?.takeIf { it.isNotBlank() }
 
-        val fulfillmentLabel = when (meta.fulfillmentType) {
-            FulfillmentType.PICKUP -> "TAKEAWAY"
-            FulfillmentType.DELIVERY -> "DELIVERY"
-            FulfillmentType.DINE_IN -> "DINE IN"
-            FulfillmentType.WALK_IN -> "WALK IN"
-            else -> serviceType.displayName.uppercase(Locale.getDefault())
-        }
+        sb.appendLine(escBold(true))
+        sb.appendLine(center(labels.kitchenTitle, lineWidth))
+        sb.appendLine(escBold(false))
+        orderNo?.let { sb.appendLine(center("#$it", lineWidth)) }
+
+        val fulfillmentLabel = labels.fulfillmentLabel(effectiveFulfillment, serviceType)
         if (effectiveKitchenHeaderScale(settings) > 1) {
             sb.append(escAlignCenter())
             sb.append(escKitchenSize(effectiveKitchenHeaderScale(settings), bold = true))
@@ -580,41 +578,41 @@ class BluetoothPrinterService @Inject constructor(
             sb.appendLine(center(fulfillmentLabel, lineWidth))
             sb.appendLine(escBold(false))
         }
-        when (meta.fulfillmentType) {
+        when (effectiveFulfillment) {
             FulfillmentType.DELIVERY -> {
                 meta.deliveryName?.takeIf { it.isNotBlank() }?.let {
-                    sb.appendLine(center("Deliver to: $it", lineWidth))
+                    sb.appendLine(center("${labels.deliverTo}: $it", lineWidth))
                 }
                 meta.deliveryAddress?.takeIf { it.isNotBlank() }?.let { addr ->
                     addr.chunked(lineWidth.coerceAtMost(32)).forEach { sb.appendLine(it) }
                 }
                 meta.deliveryPhone?.takeIf { it.isNotBlank() }?.let {
-                    sb.appendLine(center("Tel: $it", lineWidth))
+                    sb.appendLine(center("${labels.tel}: $it", lineWidth))
                 }
-                val deliveryLabel = meta.pickupTimeMs?.let { timeFmt.format(Date(it)) } ?: "ASAP"
-                sb.appendLine(center("Delivery time: $deliveryLabel", lineWidth))
+                val deliveryLabel = meta.pickupTimeMs?.let { timeFmt.format(Date(it)) } ?: labels.asap
+                sb.appendLine(center("${labels.deliveryAt}: $deliveryLabel", lineWidth))
             }
             FulfillmentType.PICKUP -> {
-                val pickupLabel = meta.pickupTimeMs?.let { timeFmt.format(Date(it)) } ?: "ASAP"
-                sb.appendLine(center("Pickup: $pickupLabel", lineWidth))
+                val pickupLabel = meta.pickupTimeMs?.let { timeFmt.format(Date(it)) } ?: labels.asap
+                sb.appendLine(center("${labels.pickupAt}: $pickupLabel", lineWidth))
             }
-            FulfillmentType.WALK_IN -> sb.appendLine(center("Walk-in", lineWidth))
+            FulfillmentType.DINE_IN -> {
+                tableName.takeIf { it.isNotBlank() }?.let { sb.appendLine(center(it, lineWidth)) }
+            }
             else -> Unit
-        }
-        if (tableName.isNotBlank() && meta.fulfillmentType != FulfillmentType.PICKUP &&
-            meta.fulfillmentType != FulfillmentType.DELIVERY
-        ) {
-            sb.appendLine(center(tableName, lineWidth))
         }
 
         sb.appendLine(center(sepEq, lineWidth))
         val itemCount = items.sumOf { it.quantity }
-        sb.appendLine("ITEMS${" ".repeat((lineWidth - 5 - "NUMS ($itemCount)".length).coerceAtLeast(1))}NUMS ($itemCount)")
+        val numsLabel = "($itemCount)"
+        sb.appendLine(
+            "${labels.itemsHeader}${" ".repeat((lineWidth - labels.itemsHeader.length - numsLabel.length).coerceAtLeast(1))}$numsLabel"
+        )
         sb.appendLine(sepDash)
 
         meta.fireCourseNumber?.let { course ->
             sb.appendLine(escBold(true))
-            sb.appendLine(center("*** FIRE COURSE $course ***", lineWidth))
+            sb.appendLine(center("*** ${labels.fireCourse} $course ***", lineWidth))
             sb.appendLine(escBold(false))
         }
 
@@ -626,7 +624,7 @@ class BluetoothPrinterService @Inject constructor(
         } else {
             courses.forEach { (course, courseItems) ->
                 sb.appendLine(escBold(true))
-                sb.appendLine(center("--- COURSE $course ---", lineWidth))
+                sb.appendLine(center("--- ${labels.courseLabel} $course ---", lineWidth))
                 sb.appendLine(escBold(false))
                 courseItems.forEach { item ->
                     appendKitchenItemBlock(sb, item, settings, lineWidth)
@@ -635,11 +633,32 @@ class BluetoothPrinterService @Inject constructor(
             }
         }
 
-        if (round > 1) sb.appendLine(center("Round: $round", lineWidth))
-        meta.cashierName?.let { sb.appendLine(center("By: $it", lineWidth)) }
+        if (round > 1) sb.appendLine(center("${labels.roundLabel}: $round", lineWidth))
+
+        sb.appendLine(center(sepDash, lineWidth))
+        val orderedAt = meta.orderedAtMs ?: System.currentTimeMillis()
+        val staff = meta.cashierName?.trim().orEmpty()
+        val source = labels.orderSourceLabel(meta.orderSource)
+        val footerParts = buildList {
+            if (staff.isNotBlank()) add(staff)
+            add(timeFmt.format(Date(orderedAt)))
+            add(source)
+        }
+        sb.appendLine(center(footerParts.joinToString(" · "), lineWidth))
         appendFooter(sb, settings.kitchenTicketFooter, lineWidth)
         sb.appendLine("\n\n\n")
         return encodePayload(sb.toString())
+    }
+
+    private fun resolveKitchenFulfillment(
+        fulfillmentType: FulfillmentType,
+        serviceType: ServiceType
+    ): FulfillmentType = when (fulfillmentType) {
+        FulfillmentType.WALK_IN -> when (serviceType) {
+            ServiceType.TAKEAWAY -> FulfillmentType.PICKUP
+            ServiceType.DINE_IN -> FulfillmentType.DINE_IN
+        }
+        else -> fulfillmentType
     }
 
     private fun buildCartReceipt(
@@ -668,11 +687,6 @@ class BluetoothPrinterService @Inject constructor(
         appendReceiptStoreBlock(sb, settings, lineWidth)
         sb.appendLine(center(sepEq, lineWidth))
 
-        val orderType = labels.fulfillmentLabel(context.fulfillmentType, context.serviceType)
-        appendReceiptOrderType(sb, orderType, lineWidth)
-        context.orderNumber?.let {
-            appendReceiptOrderNumber(sb, labels.orderNumber, it, lineWidth)
-        }
         context.tableName?.let {
             wrapText("${labels.table} $it", lineWidth).forEach { line ->
                 sb.appendLine(center(line, lineWidth))
@@ -729,18 +743,18 @@ class BluetoothPrinterService @Inject constructor(
             sb.appendLine(leftRight(labels.discount, "-${formatMoney(discountAmount, settings.currencySymbol)}", lineWidth))
         }
 
-        appendReceiptTotal(sb, labels.total, total, settings.currencySymbol, lineWidth)
-
         if (settings.receiptShowVatTable && vatRows.isNotEmpty()) {
             if (cart.vatIncludedInPrice) {
                 sb.appendLine(labels.vatIncludedNote)
             }
-            sb.appendLine(labels.vatTitle)
-            sb.appendLine(vatRow(labels.vatType, labels.vatNet, labels.vatTax, labels.vatGross, lineWidth))
-            vatRows.forEach { row ->
-                sb.appendLine(vatRow(row.label, twoDp(row.net), twoDp(row.tva), twoDp(row.brut), lineWidth))
-            }
+            appendCompactVatLines(sb, vatRows, labels, lineWidth)
         }
+
+        if (tipAmount > 0.0) {
+            sb.appendLine(leftRight(labels.tip, formatMoney(tipAmount, settings.currencySymbol), lineWidth))
+        }
+
+        appendReceiptTotal(sb, labels.total, total, settings.currencySymbol, lineWidth)
 
         context.paymentMethod?.let { method ->
             sb.appendLine(leftRight(labels.payment, labels.paymentMethod(method), lineWidth))
@@ -748,15 +762,17 @@ class BluetoothPrinterService @Inject constructor(
                 sb.appendLine(leftRight(labels.paid, twoDp(paid), lineWidth))
             }
         }
-        if (tipAmount > 0.0) {
-            sb.appendLine(leftRight(labels.tip, formatMoney(tipAmount, settings.currencySymbol), lineWidth))
-        }
 
-        if (settings.receiptShowStaffLine) {
-            sb.appendLine("${labels.staff} ${context.staffName}")
-        }
-        sb.appendLine(center(dateTimeFmt.format(Date()), lineWidth))
-        sb.appendLine(center("${labels.source} ${context.sourceLabel}", lineWidth))
+        val orderType = labels.fulfillmentLabel(context.fulfillmentType, context.serviceType)
+        appendReceiptMetaFooter(
+            sb = sb,
+            dateTime = dateTimeFmt.format(Date()),
+            staffName = context.staffName,
+            showStaff = settings.receiptShowStaffLine,
+            lineWidth = lineWidth,
+            orderNumber = context.orderNumber,
+            orderType = orderType
+        )
         appendFooter(sb, settings.receiptFooter, lineWidth)
         sb.appendLine("\n\n\n")
         return finalizePayload(sb.toString(), settings, lineWidth)
@@ -773,26 +789,14 @@ class BluetoothPrinterService @Inject constructor(
         val labels = ReceiptLabels.forLanguage(settings.defaultLanguage)
         val dateTimeFmt = SimpleDateFormat("dd-MM-yyyy HH:mm", Locale.getDefault())
         val sepEq = "=".repeat(lineWidth.coerceAtMost(32))
-        val vatRows = items.filter { it.taxRate > 0.0 }
-            .groupBy { it.taxRate }
-            .map { (rate, groupItems) ->
-                val brut = groupItems.sumOf { it.lineTotal }
-                val tva = groupItems.sumOf { it.lineTax }
-                val net = brut - tva
-                VatBreakdownRow("A: ${"%.1f".format(rate)}%", rate, net, tva, brut)
-            }
+        val itemBrut = items.sumOf { it.lineTotal }
+        val orderDiscount = resolveReceiptDiscount(transaction)
+        val discountFactor = if (itemBrut > 0.0) {
+            ((itemBrut - orderDiscount) / itemBrut).coerceIn(0.0, 1.0)
+        } else 1.0
+        val vatRows = ReceiptVatCalculator.vatRowsFromTransactionItems(items, discountFactor)
 
         appendReceiptStoreBlock(sb, settings, lineWidth)
-        sb.appendLine(center(sepEq, lineWidth))
-
-        val serviceType = transaction.serviceType ?: com.chaslay.pos.domain.model.ServiceType.TAKEAWAY
-        val orderType = labels.fulfillmentLabel(
-            com.chaslay.pos.domain.model.FulfillmentType.WALK_IN,
-            serviceType
-        )
-        appendReceiptOrderType(sb, orderType, lineWidth)
-        appendReceiptOrderNumber(sb, labels.orderNumber, transaction.transactionNumber, lineWidth)
-
         sb.appendLine(center(sepEq, lineWidth))
         items.forEach { item ->
             val label = buildString {
@@ -818,7 +822,6 @@ class BluetoothPrinterService @Inject constructor(
             }
         }
 
-        val orderDiscount = resolveReceiptDiscount(transaction)
         if (orderDiscount > 0.0) {
             val discountLabel = if (transaction.discountPercent > 0) {
                 labels.discountPercent.format(transaction.discountPercent.toInt())
@@ -827,33 +830,50 @@ class BluetoothPrinterService @Inject constructor(
             }
             sb.appendLine(leftRight(discountLabel, "-${formatMoney(orderDiscount, settings.currencySymbol)}", lineWidth))
         }
-        if (transaction.tipAmount > 0.0) {
-            sb.appendLine(leftRight(labels.tip, formatMoney(transaction.tipAmount, settings.currencySymbol), lineWidth))
-        }
-
-        appendReceiptTotal(sb, labels.total, transaction.total, settings.currencySymbol, lineWidth)
 
         if (settings.receiptShowVatTable && vatRows.isNotEmpty()) {
             if (settings.vatIncludedInPrice) {
                 sb.appendLine(labels.vatIncludedNote)
             }
-            sb.appendLine(labels.vatTitle)
-            sb.appendLine(vatRow(labels.vatType, labels.vatNet, labels.vatTax, labels.vatGross, lineWidth))
-            vatRows.forEach { row ->
-                sb.appendLine(vatRow(row.label, twoDp(row.net), twoDp(row.tva), twoDp(row.brut), lineWidth))
-            }
+            appendCompactVatLines(sb, vatRows, labels, lineWidth)
         }
+
+        if (transaction.tipAmount > 0.0) {
+            sb.appendLine(leftRight(labels.tip, formatMoney(transaction.tipAmount, settings.currencySymbol), lineWidth))
+        }
+
+        if (kotlin.math.abs(transaction.roundingAmount) >= 0.01) {
+            val sign = if (transaction.roundingAmount > 0) "+" else ""
+            sb.appendLine(
+                leftRight(
+                    labels.rounding,
+                    "$sign${formatMoney(transaction.roundingAmount, settings.currencySymbol)}",
+                    lineWidth
+                )
+            )
+        }
+
+        appendReceiptTotal(sb, labels.total, transaction.total, settings.currencySymbol, lineWidth)
 
         sb.appendLine(leftRight(labels.payment, labels.paymentMethod(transaction.paymentMethod), lineWidth))
         sb.appendLine(leftRight(labels.paid, twoDp(transaction.total), lineWidth))
         transaction.cardReference?.takeIf { it.isNotBlank() }?.let { ref ->
             sb.appendLine(leftRight("Terminal ref:", ref.take(lineWidth - 14), lineWidth))
         }
-        if (settings.receiptShowStaffLine) {
-            sb.appendLine("${labels.staff} ${transaction.userName}")
-        }
-        sb.appendLine(center(dateTimeFmt.format(Date(transaction.createdAt)), lineWidth))
-        sb.appendLine(center("${labels.source} POS", lineWidth))
+        val serviceType = transaction.serviceType ?: com.chaslay.pos.domain.model.ServiceType.TAKEAWAY
+        val orderType = labels.fulfillmentLabel(
+            com.chaslay.pos.domain.model.FulfillmentType.WALK_IN,
+            serviceType
+        )
+        appendReceiptMetaFooter(
+            sb = sb,
+            dateTime = dateTimeFmt.format(Date(transaction.createdAt)),
+            staffName = transaction.userName,
+            showStaff = settings.receiptShowStaffLine,
+            lineWidth = lineWidth,
+            orderNumber = transaction.transactionNumber,
+            orderType = orderType
+        )
         transaction.notes?.lines()?.filter { it.isNotBlank() }?.forEach { line ->
             sb.appendLine(line)
         }
@@ -1021,40 +1041,6 @@ class BluetoothPrinterService @Inject constructor(
         }
     }
 
-    private fun appendReceiptOrderType(sb: StringBuilder, orderType: String, lineWidth: Int) {
-        sb.append(escAlignLeft())
-        sb.append(escDoubleHeight(false))
-        appendCenteredLines(sb, orderType, lineWidth, bold = true)
-    }
-
-    private fun appendReceiptOrderNumber(
-        sb: StringBuilder,
-        orderLabel: String,
-        orderNumber: String,
-        lineWidth: Int
-    ) {
-        sb.append(escAlignLeft())
-        sb.append(escDoubleHeight(false))
-        sb.append(escBold(false))
-        val label = orderLabel.trim()
-        val number = orderNumber.trim()
-        val compact = lineWidth <= LINE_WIDTH_58
-        if (compact) {
-            wrapText(label, lineWidth).forEach { sb.appendLine(center(it, lineWidth)) }
-            sb.append(escBold(true))
-            wrapText(number, lineWidth).forEach { sb.appendLine(center(it, lineWidth)) }
-            sb.append(escBold(false))
-            return
-        }
-        val combined = "$label$number"
-        if (combined.length <= lineWidth) {
-            appendCenteredLines(sb, combined, lineWidth, bold = true)
-        } else {
-            appendCenteredLines(sb, label, lineWidth, bold = true)
-            appendCenteredLines(sb, number, lineWidth, bold = true)
-        }
-    }
-
     private fun appendCenteredLines(
         sb: StringBuilder,
         text: String,
@@ -1122,6 +1108,64 @@ class BluetoothPrinterService @Inject constructor(
         sb.append(escAlignLeft())
     }
 
+    private fun appendCompactVatLines(
+        sb: StringBuilder,
+        rows: List<com.chaslay.pos.domain.model.VatBreakdownRow>,
+        labels: ReceiptLabels,
+        lineWidth: Int
+    ) {
+        rows.forEach { row ->
+            sb.appendLine(formatCompactVatLine(row, labels, lineWidth))
+        }
+    }
+
+    /** e.g. "TVA 2.6% Net 19.00 TVA 0.48 TOTAL 19.49" */
+    private fun formatCompactVatLine(
+        row: com.chaslay.pos.domain.model.VatBreakdownRow,
+        labels: ReceiptLabels,
+        lineWidth: Int
+    ): String {
+        val rateLabel = ReceiptVatCalculator.formatRate(row.rate)
+        val text = buildString {
+            append(labels.vatTitle)
+            append(' ')
+            append(rateLabel)
+            append("% ")
+            append(labels.vatNet)
+            append(' ')
+            append(twoDp(row.net))
+            append(' ')
+            append(labels.vatTax)
+            append(' ')
+            append(twoDp(row.tva))
+            append(' ')
+            append(labels.total)
+            append(' ')
+            append(twoDp(row.brut))
+        }
+        return text.take(lineWidth)
+    }
+
+    private fun appendReceiptMetaFooter(
+        sb: StringBuilder,
+        dateTime: String,
+        staffName: String?,
+        showStaff: Boolean,
+        lineWidth: Int,
+        orderNumber: String? = null,
+        orderType: String? = null
+    ) {
+        val parts = buildList {
+            add(dateTime)
+            orderNumber?.trim()?.takeIf { it.isNotBlank() }?.let { add(it) }
+            orderType?.trim()?.takeIf { it.isNotBlank() }?.let { add(it) }
+            if (showStaff) {
+                staffName?.trim()?.takeIf { it.isNotBlank() }?.let { add(it) }
+            }
+        }
+        sb.appendLine(center(parts.joinToString(" | "), lineWidth))
+    }
+
     private fun vatRow(type: String, net: String, tva: String, brut: String, lineWidth: Int = LINE_WIDTH_80): String {
         val typeWidth = if (lineWidth <= LINE_WIDTH_58) 10 else 14
         val numWidth = if (lineWidth <= LINE_WIDTH_58) 5 else 6
@@ -1162,6 +1206,7 @@ class BluetoothPrinterService @Inject constructor(
             appendLine(center(settings.businessName))
             appendLine(center("TEST PRINT"))
             appendLine("Fran\u00E7ais: esp\u00E8ces caf\u00E9 cr\u00E8me")
+            appendLine("Test: é è ü Ø")
             appendLine(center("Printer OK"))
             appendLine("\n\n\n")
         }

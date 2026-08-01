@@ -1,5 +1,6 @@
 import * as XLSX from "xlsx";
 import { getDb, schema } from "@/db";
+import { repairCatalogText } from "@/lib/text-encoding";
 import { eq, and } from "drizzle-orm";
 
 export interface ImportRowError {
@@ -46,7 +47,7 @@ export class CatalogImportService {
       });
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i];
-        const name = String(row.name || row.Name || "").trim();
+        const name = repairCatalogText(String(row.name || row.Name || "").trim());
         if (!name) {
           errors.push({ sheet: "Categories", row: i + 2, message: "Missing category name" });
           continue;
@@ -98,7 +99,7 @@ export class CatalogImportService {
 
     for (let i = 0; i < productRows.length; i++) {
       const row = productRows[i];
-      const name = String(row.name || row.Name || "").trim();
+      const name = repairCatalogText(String(row.name || row.Name || "").trim());
       const priceRaw = row.price ?? row.Price;
       if (!name) {
         errors.push({ sheet: "Products", row: i + 2, message: "Missing product name" });

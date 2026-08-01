@@ -3,6 +3,7 @@ package com.chaslay.pos.data.local
 import android.content.Context
 import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.chaslay.pos.data.preferences.SyncPreferences
 import java.security.MessageDigest
 
 class DatabaseCallback(
@@ -16,10 +17,19 @@ class DatabaseCallback(
     override fun onOpen(db: SupportSQLiteDatabase) {
         super.onOpen(db)
         wipeLegacyOrderDataIfNeeded(db)
-        if (count(db, "categories") == 0L || count(db, "products") == 0L) {
-            SushiSakeCatalogSeeder.seed(db)
-        } else if (SushiSakeCatalogSeeder.isDemoCatalog(db)) {
-            SushiSakeCatalogSeeder.replaceCatalog(db)
+        val prefs = context.getSharedPreferences("pos_migrations", Context.MODE_PRIVATE)
+        val menuCloudSynced =
+            SyncPreferences.hasRemoteMenuSync(context) || hasCloudSyncedCatalog(db)
+        if (!menuCloudSynced) {
+            if (count(db, "categories") == 0L || count(db, "products") == 0L) {
+                SushiSakeCatalogSeeder.seed(db)
+            } else if (
+                !prefs.getBoolean("sushi_migration_v1", false) &&
+                SushiSakeCatalogSeeder.isLegacySoupDemo(db)
+            ) {
+                SushiSakeCatalogSeeder.replaceCatalog(db)
+                prefs.edit().putBoolean("sushi_migration_v1", true).apply()
+            }
         }
         if (count(db, "roles") == 0L) {
             seedRoles(db)
@@ -52,11 +62,74 @@ class DatabaseCallback(
             WHERE stockQuantity IS NULL AND isOpenPrice = 0
             """.trimIndent()
         )
+        fixCorruptedProductNames(db)
+    }
+
+    /** Repair catalog names saved with broken encoding (Snacké, Thon Ø50, etc.). */
+    private fun fixCorruptedProductNames(db: SupportSQLiteDatabase) {
+        repairMojibakeInCatalog(db)
+        val fixes = listOf(
+            "Spring Saumon Snack\u00E9" to listOf(
+                "Spring Saumon Snack\uFFFD",
+                "Spring Saumon Snack?",
+                "Spring Saumon Snack\u00C3\u00A9"
+            ),
+            "Yakisoba Saumon Snack\u00E9" to listOf(
+                "Yakisoba Saumon Snack\uFFFD",
+                "Yakisoba Saumon Snack?",
+                "Yakisoba Saumon Snack\u00C3\u00A9"
+            ),
+            "Thon \u00D850" to listOf(
+                "Thon O50",
+                "Thon o50",
+                "Thon ?50",
+                "Thon \uFFFD50"
+            )
+        )
+        fixes.forEach { (correct, variants) ->
+            variants.forEach { bad ->
+                db.execSQL(
+                    "UPDATE products SET name = ? WHERE name = ?",
+                    arrayOf(correct, bad)
+                )
+            }
+        }
+    }
+
+    /** UTF-8 mis-read as Latin-1 in SQLite (SnackÃ©, Thon Ã˜50, etc.). */
+    private fun repairMojibakeInCatalog(db: SupportSQLiteDatabase) {
+        val replacements = listOf(
+            "\u00C3\u00A9" to "\u00E9",
+            "\u00C3\u00A8" to "\u00E8",
+            "\u00C3\u00AA" to "\u00EA",
+            "\u00C3\u00AB" to "\u00EB",
+            "\u00C3\u00BC" to "\u00FC",
+            "\u00C3\u00B6" to "\u00F6",
+            "\u00C3\u00A4" to "\u00E4",
+            "\u00C3\u00A7" to "\u00E7",
+            "\u00C3\u0089" to "\u00C9",
+            "\u00C3\u0098" to "\u00D8",
+            "\u00C3\u00B8" to "\u00F8",
+            "\u00C2\u00B0" to "\u00B0"
+        )
+        replacements.forEach { (bad, good) ->
+            db.execSQL("UPDATE products SET name = REPLACE(name, ?, ?)", arrayOf(bad, good))
+            db.execSQL("UPDATE categories SET name = REPLACE(name, ?, ?)", arrayOf(bad, good))
+        }
     }
 
     private fun count(db: SupportSQLiteDatabase, table: String): Long {
         db.query("SELECT COUNT(*) FROM $table").use { cursor ->
             return if (cursor.moveToFirst()) cursor.getLong(0) else 0L
+        }
+    }
+
+    /** Products pulled from panel carry a remoteId — never overwrite with demo seed. */
+    private fun hasCloudSyncedCatalog(db: SupportSQLiteDatabase): Boolean {
+        db.query(
+            "SELECT COUNT(*) FROM products WHERE remoteId IS NOT NULL AND TRIM(remoteId) != ''"
+        ).use { cursor ->
+            return cursor.moveToFirst() && cursor.getLong(0) > 0L
         }
     }
 
