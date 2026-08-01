@@ -51,7 +51,8 @@ data class PrinterLinkCategory(val id: Long, val name: String, val products: Lis
 
 enum class SettingsSection(@StringRes val titleRes: Int) {
     GENERAL(R.string.settings_section_general),
-    VAT_TABLES(R.string.settings_section_vat_tables),
+    VAT(R.string.settings_section_vat),
+    TABLES(R.string.settings_section_tables),
     PAYMENTS(R.string.settings_section_payments),
     PRINTERS(R.string.settings_section_printers),
     RECEIPTS(R.string.settings_section_receipts),

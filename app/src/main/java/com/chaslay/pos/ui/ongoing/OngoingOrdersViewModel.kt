@@ -321,7 +321,8 @@ class OngoingOrdersViewModel @Inject constructor(
         quantity = quantity,
         taxRate = taxRate,
         sku = sku,
-        courseNumber = courseNumber
+        courseNumber = courseNumber,
+        isWeighed = isWeighed
     )
 
     private fun com.chaslay.pos.data.local.entity.TableOrderItemEntity.toCartItem() = CartItem(
@@ -333,6 +334,7 @@ class OngoingOrdersViewModel @Inject constructor(
         quantity = quantity,
         taxRate = taxRate,
         sentToKitchen = sentToKitchenAt != null,
-        courseNumber = courseNumber
+        courseNumber = courseNumber,
+        isWeighed = isWeighed
     )
 }

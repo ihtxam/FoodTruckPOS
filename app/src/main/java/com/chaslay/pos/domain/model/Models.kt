@@ -205,10 +205,29 @@ data class CartItem(
 ) {
     val catalogUnitPrice: Double get() = originalUnitPrice ?: unitPrice
     val weightKg: Double? get() = if (isWeighed) quantity / 1000.0 else null
+    /** Catalog amount before item discount (weight-aware). */
+    val catalogLineSubtotal: Double
+        get() = if (isWeighed) catalogUnitPrice * (quantity / 1000.0) else catalogUnitPrice * quantity
     val lineSubtotal: Double get() = if (isWeighed) unitPrice * (quantity / 1000.0) else unitPrice * quantity
     val lineDiscount: Double get() = if (isWeighed) lineDiscountPerUnit * (quantity / 1000.0) else lineDiscountPerUnit * quantity
     val lineTax: Double get() = computeLineTax(lineSubtotal, taxRate, vatIncludedInPrice)
     val lineTotal: Double get() = computeLineTotal(lineSubtotal, taxRate, vatIncludedInPrice)
+
+    /** Cart / receipt primary label, e.g. `0.794 kg Salmon` or `2x Burger`. */
+    fun displayQtyLabel(): String =
+        if (isWeighed) {
+            val kg = weightKg ?: (quantity / 1000.0)
+            String.format(java.util.Locale.US, "%.3f kg %s", kg, productName)
+        } else {
+            "${quantity}x $productName"
+        }
+
+    /** Small rate line for weighed items, e.g. `15.00 CHF/kg`. */
+    fun displayRateLabel(currencySymbol: String): String? =
+        if (isWeighed) {
+            String.format(java.util.Locale.US, "%.2f %s/kg", unitPrice, currencySymbol)
+        } else null
+
 
     fun optionNotes(): String? {
         val lines = mutableListOf<String>()
@@ -273,7 +292,8 @@ data class CartSummary(
         }
 
     val fullTotal: Double get() = total
-    val subtotal: Double get() = items.sumOf { it.catalogUnitPrice * it.quantity }
+    /** Uses weight-aware catalog amounts so grams are never treated as unit counts. */
+    val subtotal: Double get() = items.sumOf { it.catalogLineSubtotal }
     val itemDiscountTotal: Double get() = items.sumOf { it.lineDiscount }
     val taxTotal: Double get() = items.sumOf { it.lineTax }
     val discountValue: Double

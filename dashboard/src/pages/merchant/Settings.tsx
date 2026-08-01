@@ -9,11 +9,13 @@ import {
   Mail,
   Percent,
   Printer,
+  UtensilsCrossed,
 } from 'lucide-react';
 import api from '@/lib/api';
 import { dashboardVersionLabel } from '@/lib/app-version';
 import { useI18n, type Locale } from '@/lib/i18n';
 import { compressImageIfNeeded } from '@/lib/compress-image';
+import FloorPlan from './FloorPlan';
 
 interface SettingsData {
   name: string;
@@ -141,7 +143,7 @@ interface TerminalRow {
   status: string;
 }
 
-type TabId = 'business' | 'taxes' | 'shop' | 'operations' | 'payments' | 'receipt' | 'email' | 'language';
+type TabId = 'business' | 'taxes' | 'tables' | 'shop' | 'operations' | 'payments' | 'receipt' | 'email' | 'language';
 
 function Field({
   label,
@@ -254,6 +256,8 @@ export default function Settings() {
     try {
       const q = new URLSearchParams(window.location.search).get('tab');
       if (q === 'payments') return 'payments';
+      if (q === 'tables') return 'tables';
+      if (q === 'taxes') return 'taxes';
     } catch {
       /* ignore */
     }
@@ -265,6 +269,7 @@ export default function Settings() {
       [
         { id: 'business' as const, label: t('settingsBusiness'), icon: Building2 },
         { id: 'taxes' as const, label: t('settingsTaxes'), icon: Percent },
+        { id: 'tables' as const, label: t('settingsTables'), icon: UtensilsCrossed },
         { id: 'shop' as const, label: t('shop'), icon: Globe2 },
         { id: 'operations' as const, label: t('settingsOperations'), icon: LayoutGrid },
         { id: 'payments' as const, label: t('settingsPayments'), icon: CreditCard },
@@ -521,7 +526,7 @@ export default function Settings() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-3 sm:space-y-4">
+    <div className={`mx-auto space-y-3 sm:space-y-4 ${tab === 'tables' ? 'max-w-6xl' : 'max-w-3xl'}`}>
       <div>
         <h1 className="page-title">{t('settings')}</h1>
         <p className="page-sub">
@@ -1104,57 +1109,71 @@ export default function Settings() {
             </form>
           )}
 
+          {tab === 'tables' && (
+            <div className="space-y-5">
+              <form onSubmit={onSave} className="space-y-5">
+                <Section title={t('settingsTables')} description={t('floorPlanSettingsHint')}>
+                  <label className="flex items-start gap-2.5 rounded-md border border-[var(--border)] px-3 py-2.5 text-sm">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={!!settings.floorPlanEnabled}
+                      onChange={(e) => setSettings({ ...settings, floorPlanEnabled: e.target.checked })}
+                    />
+                    <span className="font-medium">{t('floorPlanEnabled')}</span>
+                  </label>
+                  <label className="flex items-start gap-2.5 rounded-md border border-[var(--border)] px-3 py-2.5 text-sm">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={!!settings.paxOrderingEnabled}
+                      onChange={(e) =>
+                        setSettings({
+                          ...settings,
+                          paxOrderingEnabled: e.target.checked,
+                          floorPlanEnabled: e.target.checked ? true : settings.floorPlanEnabled,
+                        })
+                      }
+                    />
+                    <span>
+                      <span className="font-medium block">{t('paxOrderingEnabled')}</span>
+                      <span className="text-xs muted">{t('paxOrderingHint')}</span>
+                    </span>
+                  </label>
+                  <label className="flex items-start gap-2.5 rounded-md border border-[var(--border)] px-3 py-2.5 text-sm">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={!!settings.coursesEnabled}
+                      onChange={(e) =>
+                        setSettings({
+                          ...settings,
+                          coursesEnabled: e.target.checked,
+                          floorPlanEnabled: e.target.checked ? true : settings.floorPlanEnabled,
+                        })
+                      }
+                    />
+                    <span>
+                      <span className="font-medium block">{t('coursesEnabled')}</span>
+                      <span className="text-xs muted">{t('coursesEnabledHint')}</span>
+                    </span>
+                  </label>
+                </Section>
+                <div className="flex justify-end border-t border-[var(--border)] pt-4">
+                  <button type="submit" className="btn-primary" disabled={saving}>
+                    {saving ? t('saving') : t('save')}
+                  </button>
+                </div>
+              </form>
+              <Section title={t('tableDesigner')} description={t('tableDesignerHint')}>
+                <FloorPlan embedded />
+              </Section>
+            </div>
+          )}
+
           {tab === 'operations' && (
             <form onSubmit={onSave} className="space-y-5">
-              <Section title={t('floorPlan')} description={t('floorPlanSettingsHint')}>
-                <label className="flex items-start gap-2.5 rounded-md border border-[var(--border)] px-3 py-2.5 text-sm">
-                  <input
-                    type="checkbox"
-                    className="mt-0.5"
-                    checked={!!settings.floorPlanEnabled}
-                    onChange={(e) => setSettings({ ...settings, floorPlanEnabled: e.target.checked })}
-                  />
-                  <span className="font-medium">{t('floorPlanEnabled')}</span>
-                </label>
-                <label className="flex items-start gap-2.5 rounded-md border border-[var(--border)] px-3 py-2.5 text-sm">
-                  <input
-                    type="checkbox"
-                    className="mt-0.5"
-                    checked={!!settings.paxOrderingEnabled}
-                    onChange={(e) =>
-                      setSettings({
-                        ...settings,
-                        paxOrderingEnabled: e.target.checked,
-                        floorPlanEnabled: e.target.checked ? true : settings.floorPlanEnabled,
-                      })
-                    }
-                  />
-                  <span>
-                    <span className="font-medium block">{t('paxOrderingEnabled')}</span>
-                    <span className="text-xs muted">{t('paxOrderingHint')}</span>
-                  </span>
-                </label>
-                <label className="flex items-start gap-2.5 rounded-md border border-[var(--border)] px-3 py-2.5 text-sm">
-                  <input
-                    type="checkbox"
-                    className="mt-0.5"
-                    checked={!!settings.coursesEnabled}
-                    onChange={(e) =>
-                      setSettings({
-                        ...settings,
-                        coursesEnabled: e.target.checked,
-                        floorPlanEnabled: e.target.checked ? true : settings.floorPlanEnabled,
-                      })
-                    }
-                  />
-                  <span>
-                    <span className="font-medium block">{t('coursesEnabled')}</span>
-                    <span className="text-xs muted">{t('coursesEnabledHint')}</span>
-                  </span>
-                </label>
-              </Section>
-
-              <div className="border-t border-[var(--border)] pt-4">
+              <div>
                 <Section title={t('posCheckoutSettings')} description={t('posCheckoutHint')}>
                   {(
                     [

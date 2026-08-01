@@ -115,6 +115,15 @@ fun TablePlanDesignerScreen(
                     Icon(Icons.Default.GridView, contentDescription = null)
                     Text(stringResource(R.string.auto_layout))
                 }
+                if (state.selectedTableId != null) {
+                    OutlinedButton(onClick = viewModel::openEditSelectedTable) {
+                        Text(stringResource(R.string.edit_table))
+                    }
+                } else if (state.selectedElementId != null) {
+                    OutlinedButton(onClick = viewModel::openEditSelectedElement) {
+                        Text(stringResource(R.string.edit_table))
+                    }
+                }
             }
 
             Row(

@@ -1809,11 +1809,7 @@ private fun VectronCartRow(
     ) {
         Column(modifier = Modifier.weight(1f).fillMaxWidth()) {
             Text(
-                if (item.isWeighed) {
-                    "${String.format(Locale.getDefault(), "%.3f", item.weightKg ?: 0.0)} kg ${item.productName}"
-                } else {
-                    "${item.quantity}x ${item.productName}"
-                },
+                item.displayQtyLabel(),
                 color = Color(0xFF222222),
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 2,
@@ -1821,6 +1817,9 @@ private fun VectronCartRow(
                 modifier = Modifier.fillMaxWidth(),
                 textAlign = TextAlign.Start
             )
+            item.displayRateLabel(currencySymbol)?.let {
+                Text(it, color = Color(0xFF888888), fontSize = 11.sp)
+            }
             item.variantName?.let { Text(it, color = Color(0xFF666666), fontSize = 11.sp) }
             if (item.lineDiscount > 0) {
                 Text(
@@ -2427,10 +2426,13 @@ private fun TableTransferItemsDialog(
                         )
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                "${item.quantity}x ${item.productName}",
+                                item.displayQtyLabel(),
                                 fontWeight = FontWeight.Medium,
                                 fontSize = 14.sp
                             )
+                            item.displayRateLabel(currencySymbol)?.let {
+                                Text(it, fontSize = 11.sp, color = Color(0xFF888888))
+                            }
                             item.variantName?.takeIf { it.isNotBlank() }?.let {
                                 Text(it, fontSize = 11.sp, color = Color(0xFF666666))
                             }

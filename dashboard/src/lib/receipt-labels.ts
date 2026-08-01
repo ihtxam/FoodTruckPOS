@@ -11,6 +11,7 @@ export type ReceiptLabels = {
   rounding: string;
   total: string;
   payment: string;
+  paid: string;
   note: string;
   staff: string;
   scanDigitalReceipt: string;
@@ -66,6 +67,7 @@ const EN: ReceiptLabels = {
   rounding: 'Rounding',
   total: 'TOTAL',
   payment: 'Payment',
+  paid: 'Paid',
   note: 'Note',
   staff: 'Staff',
   scanDigitalReceipt: 'Scan for digital receipt',
@@ -121,6 +123,7 @@ const FR: ReceiptLabels = {
   rounding: 'Arrondi',
   total: 'TOTAL',
   payment: 'Paiement',
+  paid: 'Payé',
   note: 'Note',
   staff: 'Personnel',
   scanDigitalReceipt: 'Scannez pour le recu digital',
@@ -176,6 +179,7 @@ const DE: ReceiptLabels = {
   rounding: 'Rundung',
   total: 'TOTAL',
   payment: 'Zahlung',
+  paid: 'Bezahlt',
   note: 'Notiz',
   staff: 'Personal',
   scanDigitalReceipt: 'Scannen fuer digitalen Beleg',

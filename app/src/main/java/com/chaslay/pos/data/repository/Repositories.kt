@@ -548,7 +548,8 @@ class TransactionRepository @Inject constructor(
                 lineTotal = item.lineTotal,
                 originalUnitPrice = item.originalUnitPrice ?: item.catalogUnitPrice,
                 lineDiscountPerUnit = item.lineDiscountPerUnit,
-                notes = item.notes
+                notes = item.notes,
+                isWeighed = item.isWeighed
             )
         }
 
@@ -854,7 +855,8 @@ class TransactionRepository @Inject constructor(
                 lineTotal = item.lineTotal,
                 originalUnitPrice = item.originalUnitPrice ?: item.catalogUnitPrice,
                 lineDiscountPerUnit = item.lineDiscountPerUnit,
-                notes = item.notes
+                notes = item.notes,
+                isWeighed = item.isWeighed
             )
         }
         transactionDao.insertFullTransaction(transaction, items)
@@ -961,7 +963,8 @@ class CartManager @Inject constructor() {
         _cart.update { cart ->
             val stamped = item.copy(vatIncludedInPrice = cart.vatIncludedInPrice)
             val canMerge = cart.tableOrderId == null && !stamped.sentToKitchen
-            val existing = if (canMerge) {
+            // Never merge weighed lines — each scale reading is its own cart row.
+            val existing = if (canMerge && !stamped.isWeighed) {
                 cart.items.find {
                     it.productId == stamped.productId &&
                         it.variantName == stamped.variantName &&
@@ -970,6 +973,7 @@ class CartManager @Inject constructor() {
                         it.addons == stamped.addons &&
                         it.comboSelections == stamped.comboSelections &&
                         it.isCombo == stamped.isCombo &&
+                        !it.isWeighed &&
                         it.notes == stamped.notes &&
                         it.courseNumber == stamped.courseNumber &&
                         it.splitCheck == stamped.splitCheck &&
@@ -1474,7 +1478,8 @@ class TableOrderRepository @Inject constructor(
                 notes = item.notes,
                 sentToKitchenAt = if (item.sentToKitchen) sent?.sentToKitchenAt else null,
                 kitchenRound = if (item.sentToKitchen && sent?.sentToKitchenAt != null) sent.kitchenRound else 0,
-                courseNumber = item.courseNumber.coerceAtLeast(1)
+                courseNumber = item.courseNumber.coerceAtLeast(1),
+                isWeighed = item.isWeighed
             )
         }
         // Update the order row BEFORE writing items. (Even though upsert now updates in
@@ -1857,7 +1862,8 @@ class TableOrderRepository @Inject constructor(
             courseNumber = courseNumber,
             sentToKitchen = sentToKitchenAt != null,
             isCombo = isCombo,
-            comboSelections = comboSelections
+            comboSelections = comboSelections,
+            isWeighed = isWeighed
         )
     }
 
@@ -1876,7 +1882,8 @@ class TableOrderRepository @Inject constructor(
         notes = notes ?: optionNotes(),
         sentToKitchenAt = null,
         kitchenRound = 0,
-        courseNumber = courseNumber.coerceAtLeast(1)
+        courseNumber = courseNumber.coerceAtLeast(1),
+        isWeighed = isWeighed
     )
 }
 
@@ -1938,7 +1945,8 @@ class HeldOrderRepository @Inject constructor(
                 originalUnitPrice = item.originalUnitPrice,
                 lineDiscountPerUnit = item.lineDiscountPerUnit,
                 notes = item.notes,
-                courseNumber = item.courseNumber
+                courseNumber = item.courseNumber,
+                isWeighed = item.isWeighed
             )
         }
         heldOrderItemDao.deleteByOrder(id)
@@ -2010,7 +2018,8 @@ class HeldOrderRepository @Inject constructor(
                 originalUnitPrice = item.originalUnitPrice,
                 lineDiscountPerUnit = item.lineDiscountPerUnit,
                 notes = item.notes,
-                courseNumber = item.courseNumber
+                courseNumber = item.courseNumber,
+                isWeighed = item.isWeighed
             )
         }
         heldOrderItemDao.deleteByOrder(id)
@@ -2098,7 +2107,8 @@ class HeldOrderRepository @Inject constructor(
         sku = sku,
         originalUnitPrice = originalUnitPrice,
         lineDiscountPerUnit = lineDiscountPerUnit,
-        courseNumber = courseNumber
+        courseNumber = courseNumber,
+        isWeighed = isWeighed
     )
 }
 

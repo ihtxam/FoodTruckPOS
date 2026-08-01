@@ -191,7 +191,9 @@ data class TransactionItemEntity(
     val lineTotal: Double,
     val originalUnitPrice: Double? = null,
     val lineDiscountPerUnit: Double = 0.0,
-    val notes: String? = null
+    val notes: String? = null,
+    /** When true, [quantity] is grams and [unitPrice] is per kg. */
+    val isWeighed: Boolean = false
 )
 
 @Entity(tableName = "business_settings")
@@ -382,7 +384,9 @@ data class TableOrderItemEntity(
     val notes: String? = null,
     val sentToKitchenAt: Long? = null,
     val kitchenRound: Int = 0,
-    val courseNumber: Int = 1
+    val courseNumber: Int = 1,
+    /** When true, [quantity] is grams and [unitPrice] is per kg. */
+    val isWeighed: Boolean = false
 )
 
 @Entity(tableName = "discount_presets")
@@ -501,7 +505,9 @@ data class HeldOrderItemEntity(
     val originalUnitPrice: Double? = null,
     val lineDiscountPerUnit: Double = 0.0,
     val notes: String? = null,
-    val courseNumber: Int = 1
+    val courseNumber: Int = 1,
+    /** When true, [quantity] is grams and [unitPrice] is per kg. */
+    val isWeighed: Boolean = false
 )
 
 @Entity(tableName = "modifier_groups")

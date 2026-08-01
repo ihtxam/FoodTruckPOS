@@ -19,6 +19,8 @@
     <string name="tax_included_in_total">Enthaltene MwSt.</string>
     <string name="settings_section_general">Allgemein</string>
     <string name="settings_section_vat_tables">MwSt. &amp; Tische</string>
+    <string name="settings_section_vat">MwSt. / Steuern</string>
+    <string name="settings_section_tables">Tische &amp; Designer</string>
     <string name="settings_section_payments">Zahlungen</string>
     <string name="settings_section_printers">Drucker</string>
     <string name="settings_section_receipts">Belege</string>

@@ -1,4 +1,4 @@
-import { FormEvent, PointerEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { FormEvent, PointerEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
@@ -56,7 +56,7 @@ const STATUS_COLOR: Record<TableStatus, string> = {
   dirty: '#94a3b8',
 };
 
-export default function FloorPlan() {
+export default function FloorPlan({ embedded = false }: { embedded?: boolean }) {
   const { t } = useI18n();
   const [plans, setPlans] = useState<FloorPlanData[]>([]);
   const [activePlanId, setActivePlanId] = useState<string | null>(null);
@@ -67,6 +67,8 @@ export default function FloorPlan() {
   const [newPlanName, setNewPlanName] = useState('');
   const [covers, setCovers] = useState<{ coversServed: number; dineInOrders: number; averagePartySize: number } | null>(null);
   const [drag, setDrag] = useState<{ localId: string; offsetX: number; offsetY: number } | null>(null);
+  /** Inner canvas (same coordinate space for pointer down + move). */
+  const canvasRef = useRef<HTMLDivElement | null>(null);
 
   const activePlan = useMemo(
     () => plans.find((p) => p.id === activePlanId) || null,
@@ -194,10 +196,12 @@ export default function FloorPlan() {
 
   const onCanvasPointerDown = (e: PointerEvent<HTMLDivElement>, localId: string) => {
     e.stopPropagation();
+    e.preventDefault();
     const table = tables.find((t) => t.localId === localId);
     if (!table) return;
     setSelectedId(localId);
-    const rect = (e.currentTarget.parentElement as HTMLElement).getBoundingClientRect();
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
     setDrag({
       localId,
       offsetX: e.clientX - rect.left - table.posX,
@@ -208,37 +212,61 @@ export default function FloorPlan() {
 
   const onCanvasPointerMove = (e: PointerEvent<HTMLDivElement>) => {
     if (!drag || !activePlan) return;
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const x = Math.max(0, Math.min(activePlan.canvasWidth - 40, e.clientX - rect.left - drag.offsetX));
-    const y = Math.max(0, Math.min(activePlan.canvasHeight - 40, e.clientY - rect.top - drag.offsetY));
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const x = Math.max(
+      0,
+      Math.min(activePlan.canvasWidth - (tables.find((t) => t.localId === drag.localId)?.width || 40), e.clientX - rect.left - drag.offsetX)
+    );
+    const y = Math.max(
+      0,
+      Math.min(activePlan.canvasHeight - (tables.find((t) => t.localId === drag.localId)?.height || 40), e.clientY - rect.top - drag.offsetY)
+    );
     setTables((prev) =>
       prev.map((t) => (t.localId === drag.localId ? { ...t, posX: x, posY: y } : t))
     );
   };
 
-  const onCanvasPointerUp = () => setDrag(null);
+  const onCanvasPointerUp = (e?: PointerEvent<HTMLDivElement>) => {
+    if (e && drag) {
+      try {
+        (e.target as HTMLElement).releasePointerCapture?.(e.pointerId);
+      } catch {
+        /* ignore */
+      }
+    }
+    setDrag(null);
+  };
 
   if (loading) return <div className="text-center py-12">Loading floor plans...</div>;
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">{t('floorPlan')}</h1>
-          <p className="text-slate-600 mt-1">
-            Design dining tables with capacity (PAX). Enable floor plan &amp; per-person ordering in Settings.
-          </p>
-        </div>
-        {covers && (
-          <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-            <div className="text-xs uppercase tracking-wide text-slate-500">Covers served today</div>
-            <div className="text-2xl font-bold text-slate-900">{covers.coversServed}</div>
-            <div className="text-xs text-slate-500">
-              {covers.dineInOrders} dine-in · avg party {covers.averagePartySize}
-            </div>
+      {!embedded && (
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight text-slate-900">{t('floorPlan')}</h1>
+            <p className="text-slate-600 mt-1">
+              Design dining tables with capacity (PAX). Enable floor plan &amp; per-person ordering in Settings → Tables.
+            </p>
           </div>
-        )}
-      </div>
+          {covers && (
+            <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+              <div className="text-xs uppercase tracking-wide text-slate-500">Covers served today</div>
+              <div className="text-2xl font-bold text-slate-900">{covers.coversServed}</div>
+              <div className="text-xs text-slate-500">
+                {covers.dineInOrders} dine-in · avg party {covers.averagePartySize}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+      {embedded && covers && (
+        <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm inline-block">
+          <div className="text-xs uppercase tracking-wide text-slate-500">Covers served today</div>
+          <div className="text-2xl font-bold text-slate-900">{covers.coversServed}</div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 xl:grid-cols-[240px_1fr_280px] gap-4">
         {/* Plans list */}
@@ -305,6 +333,7 @@ export default function FloorPlan() {
               onClick={() => setSelectedId(null)}
             >
               <div
+                ref={canvasRef}
                 className="relative bg-slate-50/40"
                 style={{ width: activePlan.canvasWidth, height: activePlan.canvasHeight }}
               >

@@ -121,6 +121,7 @@ fun SettingsScreen(
             SettingsSection.entries.filter { section ->
                 when (section) {
                     SettingsSection.USERS_ACCOUNTS -> userAccess.canManageUsers()
+                    SettingsSection.TABLES -> state.posMode == PosMode.RESTAURANT
                     else -> true
                 }
             }.forEach { section ->
@@ -356,7 +357,7 @@ fun SettingsScreen(
         }
         }
 
-        if (state.selectedSection == SettingsSection.VAT_TABLES) {
+        if (state.selectedSection == SettingsSection.VAT) {
         Text(stringResource(R.string.vat_settings), fontWeight = FontWeight.Bold, fontSize = 18.sp)
         OutlinedTextField(
             value = state.dineInVatRate,
@@ -395,9 +396,10 @@ fun SettingsScreen(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Spacer(modifier = Modifier.height(8.dp))
-        if (state.posMode == PosMode.RESTAURANT) {
-        Text(stringResource(R.string.table_settings), fontWeight = FontWeight.Bold)
+        }
+
+        if (state.selectedSection == SettingsSection.TABLES && state.posMode == PosMode.RESTAURANT) {
+        Text(stringResource(R.string.table_settings), fontWeight = FontWeight.Bold, fontSize = 18.sp)
         Text(
             stringResource(R.string.table_plan_help),
             style = MaterialTheme.typography.bodySmall,
@@ -434,7 +436,6 @@ fun SettingsScreen(
             state.tables.take(8).forEach { name ->
                 Text("• $name", style = MaterialTheme.typography.bodySmall)
             }
-        }
         }
         }
 
@@ -851,12 +852,19 @@ fun SettingsScreen(
                         value = state.mainPosLanUrl,
                         onValueChange = viewModel::updateMainPosLanUrl,
                         label = { Text(stringResource(R.string.main_pos_lan_url)) },
+                        placeholder = { Text("http://192.168.1.50:8787") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                         keyboardActions = KeyboardActions(onDone = { viewModel.commitMainPosLanUrl() })
                     )
                     Text(stringResource(R.string.main_pos_lan_url_help), style = MaterialTheme.typography.bodySmall)
+                    OutlinedButton(
+                        onClick = viewModel::commitMainPosLanUrl,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(stringResource(R.string.save))
+                    }
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.fillMaxWidth()

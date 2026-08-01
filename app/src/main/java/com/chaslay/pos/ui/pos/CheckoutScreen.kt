@@ -391,9 +391,12 @@ fun CheckoutScreen(
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    "${item.quantity}x ${item.productName}",
+                                    item.displayQtyLabel(),
                                     fontSize = 14.sp
                                 )
+                                item.displayRateLabel(currencySymbol)?.let {
+                                    Text(it, fontSize = 11.sp, color = Color.Gray)
+                                }
                                 item.variantName?.let {
                                     Text(it, fontSize = 11.sp, color = Color.Gray)
                                 }

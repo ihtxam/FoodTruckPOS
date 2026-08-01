@@ -174,6 +174,7 @@ class ProgrammedOrdersViewModel @Inject constructor(
             quantity = quantity,
             taxRate = taxRate,
             sku = sku,
-            courseNumber = courseNumber
+            courseNumber = courseNumber,
+            isWeighed = isWeighed
         )
 }

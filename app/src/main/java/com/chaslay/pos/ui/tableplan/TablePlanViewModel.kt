@@ -83,10 +83,25 @@ class TablePlanViewModel @Inject constructor(
 
     fun selectTable(tableId: Long) {
         val table = _uiState.value.tables.find { it.id == tableId } ?: return
+        // Tap selects only — drag can move without opening the edit dialog.
         _uiState.update {
             it.copy(
                 selectedTableId = tableId,
                 selectedElementId = null,
+                editName = table.name,
+                editSeats = table.seatCapacity.toString(),
+                editShape = TableShape.fromApi(table.shape),
+                showEditDialog = false,
+                showElementEditDialog = false
+            )
+        }
+    }
+
+    fun openEditSelectedTable() {
+        val tableId = _uiState.value.selectedTableId ?: return
+        val table = _uiState.value.tables.find { it.id == tableId } ?: return
+        _uiState.update {
+            it.copy(
                 editName = table.name,
                 editSeats = table.seatCapacity.toString(),
                 editShape = TableShape.fromApi(table.shape),
@@ -102,6 +117,18 @@ class TablePlanViewModel @Inject constructor(
             it.copy(
                 selectedElementId = elementId,
                 selectedTableId = null,
+                editElementLabel = element.label.orEmpty(),
+                showElementEditDialog = false,
+                showEditDialog = false
+            )
+        }
+    }
+
+    fun openEditSelectedElement() {
+        val elementId = _uiState.value.selectedElementId ?: return
+        val element = _uiState.value.elements.find { it.id == elementId } ?: return
+        _uiState.update {
+            it.copy(
                 editElementLabel = element.label.orEmpty(),
                 showElementEditDialog = true,
                 showEditDialog = false
@@ -178,7 +205,7 @@ class TablePlanViewModel @Inject constructor(
         viewModelScope.launch {
             tableOrderRepository.addTable("Table $count", floorId = floorId, seatCapacity = 4)
             reload()
-            _uiState.update { it.copy(message = "Table added � drag to position") }
+            _uiState.update { it.copy(message = "Table added — drag to position") }
         }
     }
 
@@ -186,7 +213,7 @@ class TablePlanViewModel @Inject constructor(
         viewModelScope.launch {
             tableOrderRepository.addFloorElement(_uiState.value.selectedFloorId, type.apiValue)
             reload()
-            _uiState.update { it.copy(message = "${type.apiValue} added � drag to position") }
+            _uiState.update { it.copy(message = "${type.apiValue} added — drag to position") }
         }
     }
 

@@ -19,6 +19,8 @@
     <string name="tax_included_in_total">TVA incluse</string>
     <string name="settings_section_general">Général</string>
     <string name="settings_section_vat_tables">TVA et tables</string>
+    <string name="settings_section_vat">TVA / Taxes</string>
+    <string name="settings_section_tables">Tables et plan</string>
     <string name="settings_section_payments">Paiements</string>
     <string name="settings_section_printers">Imprimantes</string>
     <string name="settings_section_receipts">Reçus</string>

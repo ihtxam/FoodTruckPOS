@@ -222,11 +222,23 @@ function formatReceiptMetaFooter(
 ): string {
   const date = new Date(tx.completedAt);
   const dateStr = `${date.toLocaleDateString(locale, { timeZone: 'Europe/Zurich' })} ${date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Zurich' })}`;
-  const orderRef = (tx.orderDisplay || tx.orderNumber || tx.id.slice(-8)).trim();
+  const rawRef = (tx.orderDisplay || tx.orderNumber || tx.id.slice(-8)).trim();
+  const orderRef = shortenOrderRef(rawRef, 16);
   const channel = tx.channel ? channelLabel(L, tx.channel) : '';
   const user = tx.showStaff !== false && tx.staffName?.trim() ? tx.staffName.trim() : '';
   const parts = [dateStr, orderRef, channel, user].filter(Boolean);
   return centerLine(parts.join(' | '), width);
+}
+
+/** Shorten long TX refs for receipt footer, e.g. TX-20260801-005747-8949 → TX-005747-8949 */
+function shortenOrderRef(orderNumber: string, maxLen = 16): string {
+  if (orderNumber.length <= maxLen) return orderNumber;
+  const parts = orderNumber.split('-');
+  if (parts.length >= 3) {
+    const short = `${parts[0]}-${parts[parts.length - 2]}-${parts[parts.length - 1]}`;
+    if (short.length <= maxLen) return short;
+  }
+  return `…${orderNumber.slice(-(maxLen - 1))}`;
 }
 
 export function generateWebPosReceiptText(tx: WebPosReceipt, panelLang?: string): string {
@@ -284,10 +296,6 @@ export function generateWebPosReceiptText(tx: WebPosReceipt, panelLang?: string)
   if (tx.discount > 0) {
     r += padLine(`${L.discount}:`, `-CHF ${tx.discount.toFixed(2)}`, width) + '\n';
   }
-  const vatSection = formatVatSection(tx, L, width);
-  if (vatSection) {
-    r += vatSection + '\n';
-  }
   const tip = roundMoney2(tx.tipAmount || 0);
   if (tip > 0) {
     r += padLine(`${L.tip}:`, `CHF ${tip.toFixed(2)}`, width) + '\n';
@@ -304,6 +312,12 @@ export function generateWebPosReceiptText(tx: WebPosReceipt, panelLang?: string)
   r += padLine(`${L.total}:`, `CHF ${tx.total.toFixed(2)}`, width) + '\n';
   r += sep + '\n';
   r += `${L.payment}: ${paymentLabel(L, tx.paymentMethod)}\n`;
+  r += padLine(`${L.paid}:`, `CHF ${tx.total.toFixed(2)}`, width) + '\n';
+  // VAT calculations below payment section
+  const vatSection = formatVatSection(tx, L, width);
+  if (vatSection) {
+    r += vatSection + '\n';
+  }
   if (tx.notes) r += `${L.note} ${tx.notes}\n`;
 
   const qrUrl = tx.receiptUrl || (tx.includeQr !== false ? buildReceiptUrl(tx.id) : undefined);

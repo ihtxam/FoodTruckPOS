@@ -2,8 +2,9 @@ package com.chaslay.pos.ui.tableplan
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -25,6 +26,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
@@ -35,6 +37,7 @@ import com.chaslay.pos.domain.model.TableShape
 import com.chaslay.pos.domain.model.TableStatus
 import com.chaslay.pos.domain.model.TableWithOrderInfo
 import com.chaslay.pos.ui.theme.VectronColors
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 data class FloorPlanTableDisplay(
@@ -173,31 +176,34 @@ private fun DraggablePlanItem(
                 )
             }
             .rotate(rotation)
-            .then(
-                if (editable) {
-                    Modifier.pointerInput(planX, planY) {
-                        detectDragGestures(
-                            onDragEnd = {
-                                onMoved(
-                                    ((baseX + dragOffsetX) / canvasW).coerceIn(0.02f, 0.92f),
-                                    ((baseY + dragOffsetY) / canvasH).coerceIn(0.02f, 0.92f)
-                                )
-                                dragOffsetX = 0f
-                                dragOffsetY = 0f
-                            },
-                            onDragCancel = {
-                                dragOffsetX = 0f
-                                dragOffsetY = 0f
-                            }
-                        ) { change, dragAmount ->
-                            change.consume()
-                            dragOffsetX += dragAmount.x
-                            dragOffsetY += dragAmount.y
+            .pointerInput(planX, planY, editable) {
+                // Single gesture handler: tap selects, drag moves (no clickable conflict).
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    var totalDrag = 0f
+                    var moved = false
+                    drag(down.id) { change ->
+                        val delta = change.positionChange()
+                        change.consume()
+                        if (editable) {
+                            dragOffsetX += delta.x
+                            dragOffsetY += delta.y
                         }
+                        totalDrag += abs(delta.x) + abs(delta.y)
+                        if (totalDrag > 8f) moved = true
                     }
-                } else Modifier
-            )
-            .clickable(onClick = onClick)
+                    if (!moved) {
+                        onClick()
+                    } else if (editable) {
+                        onMoved(
+                            ((baseX + dragOffsetX) / canvasW).coerceIn(0.02f, 0.92f),
+                            ((baseY + dragOffsetY) / canvasH).coerceIn(0.02f, 0.92f)
+                        )
+                    }
+                    dragOffsetX = 0f
+                    dragOffsetY = 0f
+                }
+            }
     ) {
         Box(modifier = Modifier.size(width = w.coerceAtLeast(40.dp), height = h.coerceAtLeast(24.dp))) {
             content()

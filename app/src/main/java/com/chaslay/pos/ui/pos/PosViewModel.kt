@@ -2710,7 +2710,7 @@ class PosViewModel @Inject constructor(
         } ?: "ASAP / NOW"
         val headerLines = listOf("When: $timeLabel", "Order: ${cart.orderNumber.orEmpty()}")
         val lines = headerLines.map { it to 0.0 } +
-            cart.items.map { "${it.quantity}x ${it.productName}" to it.lineSubtotal }
+            cart.items.map { it.displayQtyLabel() to it.lineSubtotal }
         val total = applyCashRounding(cart.displayTotal, settings.roundingStep.takeIf { it > 0 } ?: 0.05)
         withContext(Dispatchers.IO) {
             printerService.routeCartPreview(settings, lines, total, title)
@@ -2730,7 +2730,7 @@ class PosViewModel @Inject constructor(
             customer.phone?.takeIf { it.isNotBlank() }?.let { add("Tel: $it" to 0.0) }
             add("When: $timeLabel" to 0.0)
             add("Order: ${cart.orderNumber.orEmpty()}" to 0.0)
-            cart.items.forEach { add("${it.quantity}x ${it.productName}" to it.lineSubtotal) }
+            cart.items.forEach { add(it.displayQtyLabel() to it.lineSubtotal) }
         }
         val total = applyCashRounding(cart.displayTotal, settings.roundingStep.takeIf { it > 0 } ?: 0.05)
         withContext(Dispatchers.IO) {
