@@ -31,6 +31,8 @@ type DateRange = 'today' | 'week' | 'all';
 
 type Props = {
   open: boolean;
+  /** Full-width in-tab layout instead of slide-over overlay */
+  embedded?: boolean;
   onClose: () => void;
   onResumeHeld: (held: HeldRow) => void;
   onPrintOrder?: (order: PosOrderForReceipt, splitLabel?: string | null) => Promise<void>;
@@ -74,6 +76,7 @@ function splitBillLabel(t: (k: string) => string, n: number) {
 
 export default function WebPosOrdersPanel({
   open,
+  embedded = false,
   onClose,
   onResumeHeld,
   onPrintOrder,
@@ -375,7 +378,7 @@ export default function WebPosOrdersPanel({
               <ul className="text-xs text-[var(--text-muted)]">
                 {split.items.map((i, idx) => (
                   <li key={idx}>
-                    {i.quantity}◊ {i.name}
+                    {i.quantity}ù {i.name}
                   </li>
                 ))}
               </ul>
@@ -393,8 +396,20 @@ export default function WebPosOrdersPanel({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/40">
-      <div className="flex h-full w-full max-w-md flex-col bg-[var(--bg-elevated)] shadow-xl">
+    <div
+      className={
+        embedded
+          ? 'flex min-h-0 min-w-0 flex-1 flex-col bg-[var(--bg-elevated)]'
+          : 'fixed inset-0 z-50 flex justify-end bg-black/40'
+      }
+    >
+      <div
+        className={
+          embedded
+            ? 'flex min-h-0 flex-1 flex-col bg-[var(--bg-elevated)]'
+            : 'flex h-full w-full max-w-md flex-col bg-[var(--bg-elevated)] shadow-xl'
+        }
+      >
         <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3">
           <h2 className="font-semibold">{t('webPosOrders')}</h2>
           <div className="flex items-center gap-1">
@@ -492,7 +507,7 @@ export default function WebPosOrdersPanel({
                     <div>
                       <p className="font-medium text-sm">{h.label || t('webPosHeldOrder')}</p>
                       <p className="text-[11px] muted">
-                        {h.status} ∑ {h.channel} ∑ {new Date(h.updatedAt).toLocaleString()}
+                        {h.status} ù {h.channel} ù {new Date(h.updatedAt).toLocaleString()}
                       </p>
                     </div>
                   </div>
@@ -552,11 +567,11 @@ export default function WebPosOrdersPanel({
                         ) : null}
                       </div>
                       <p className="text-[11px] muted">
-                        {statusLabel(o.status)} ∑ {o.paymentMethod || 'ó'} ∑ {money(o.total)}
+                        {statusLabel(o.status)} ù {o.paymentMethod || 'ù'} ù {money(o.total)}
                       </p>
                       <p className="text-[11px] muted">
                         {new Date(o.completedAt || o.createdAt).toLocaleString()}
-                        {o.channel ? ` ∑ ${o.channel}` : ''}
+                        {o.channel ? ` ù ${o.channel}` : ''}
                       </p>
                       {o.refundAmount > 0 ? (
                         <p className="text-[11px] text-amber-700">
@@ -572,11 +587,11 @@ export default function WebPosOrdersPanel({
                   <ul className="text-xs text-[var(--text-muted)]">
                     {o.items.slice(0, 3).map((i, idx) => (
                       <li key={idx}>
-                        {i.quantity}◊ {i.name}
+                        {i.quantity}ù {i.name}
                       </li>
                     ))}
                     {o.items.length > 3 ? (
-                      <li className="italic">+{o.items.length - 3} Ö</li>
+                      <li className="italic">+{o.items.length - 3} ù</li>
                     ) : null}
                   </ul>
                   {renderOrderActions(o, true)}
@@ -619,7 +634,7 @@ export default function WebPosOrdersPanel({
                   {selected.items.map((i, idx) => (
                     <li key={idx} className="flex justify-between gap-2">
                       <span>
-                        {i.quantity}◊ {i.name}
+                        {i.quantity}ù {i.name}
                       </span>
                       <span className="tabular-nums">{money(i.totalPrice)}</span>
                     </li>
@@ -658,7 +673,7 @@ export default function WebPosOrdersPanel({
         {cancelFor ? (
           <div className="border-t border-[var(--border)] p-4 space-y-3 bg-[var(--bg)]">
             <p className="text-sm font-medium">
-              {t('webPosCancelReason')} ó {cancelFor.orderNumber}
+              {t('webPosCancelReason')} ù {cancelFor.orderNumber}
             </p>
             <select
               className="input"
@@ -685,7 +700,7 @@ export default function WebPosOrdersPanel({
         {refundFor ? (
           <div className="border-t border-[var(--border)] p-4 space-y-3 bg-[var(--bg)]">
             <p className="text-sm font-medium">
-              {t('webPosRefund')} ó {refundFor.orderNumber}
+              {t('webPosRefund')} ù {refundFor.orderNumber}
             </p>
             <label className="flex items-center gap-2 text-sm">
               <input

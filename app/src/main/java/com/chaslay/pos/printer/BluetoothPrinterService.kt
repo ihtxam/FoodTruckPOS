@@ -1129,7 +1129,7 @@ class BluetoothPrinterService @Inject constructor(
         labels: ReceiptLabels,
         lineWidth: Int
     ) {
-        sb.appendLine(vatRow(labels.vatType, labels.vatNet, labels.vatTax, labels.brut, lineWidth))
+        sb.appendLine(vatRow(labels.vatType, labels.vatNet, labels.vatTax, labels.vatGross, lineWidth))
         rows.forEach { row ->
             val typeLabel = "${labels.vatTitle}: ${ReceiptVatCalculator.formatRate(row.rate)}%"
             sb.appendLine(

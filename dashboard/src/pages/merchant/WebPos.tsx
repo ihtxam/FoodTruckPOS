@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { RefreshCw } from 'lucide-react';
+import api from '@/lib/api';
 import { repairCatalogText } from '@/lib/text-encoding';
 import { useI18n } from '@/lib/i18n';
 import { roundMoney2, roundTo005, roundingAdjustment, computeMerchandiseTotals, scaleLinesByFactor, extractVatFromGross, resolvePosTaxRate } from '@/lib/money';
@@ -239,7 +240,6 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
   const [lastReceipt, setLastReceipt] = useState<string>('');
   const [lastReceiptUrl, setLastReceiptUrl] = useState<string>('');
   const [printSettings, setPrintSettings] = useState<PosPrintSettingsClient | null>(null);
-  const [ordersOpen, setOrdersOpen] = useState(false);
   const [ordersRefreshToken, setOrdersRefreshToken] = useState(0);
   const [highlightOrderId, setHighlightOrderId] = useState<string | null>(null);
   const [onlineOrdersOpen, setOnlineOrdersOpen] = useState(false);
@@ -465,6 +465,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
       setProducts(
         prods.map((p: any) => ({
           ...p,
+          name: repairCatalogText(p.name),
           price: Number(p.price),
         }))
       );
@@ -1517,7 +1518,6 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
   const onPosTabChange = (tab: PosTab) => {
     setPosTab(tab);
     setPosView(tab);
-    if (tab === 'orders') setOrdersOpen(true);
   };
 
   return (
@@ -1621,6 +1621,39 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
           />
         ) : posView === 'bookings' ? (
           <WebPosBookingsView />
+        ) : posView === 'orders' ? (
+          <WebPosOrdersPanel
+            embedded
+            open
+            onClose={() => {
+              setHighlightOrderId(null);
+              setPosTab('register');
+              setPosView('register');
+            }}
+            refreshToken={ordersRefreshToken}
+            canCancel={canCancelOrders}
+            canRefund={canRefundOrders}
+            highlightOrderId={highlightOrderId}
+            onResumeHeld={(held) => {
+              const data = held.cartJson as { cart?: CartLine[]; channel?: Channel } | CartLine[];
+              if (Array.isArray(data)) {
+                setCart(data);
+              } else if (data?.cart) {
+                setCart(data.cart);
+                if (data.channel) setChannel(data.channel);
+              }
+              setPosTab('register');
+              setPosView('register');
+              toast.success(t('webPosOrderResumed'));
+            }}
+            onPrintOrder={async (order, splitLabel) => {
+              try {
+                await printPosOrderReceipt(order, splitLabel);
+              } catch (e: any) {
+                toast.error(e.message || t('webPosPrintFailed'));
+              }
+            }}
+          />
         ) : (
           <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
             <WebPosCartPanel
@@ -1774,37 +1807,6 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
           void runTerminalPayment();
         }}
         onClose={closePaymentModal}
-      />
-
-      <WebPosOrdersPanel
-        open={ordersOpen}
-        onClose={() => {
-          setOrdersOpen(false);
-          setHighlightOrderId(null);
-          setPosTab('register');
-          setPosView('register');
-        }}
-        refreshToken={ordersRefreshToken}
-        canCancel={canCancelOrders}
-        canRefund={canRefundOrders}
-        highlightOrderId={highlightOrderId}
-        onResumeHeld={(held) => {
-          const data = held.cartJson as { cart?: CartLine[]; channel?: Channel } | CartLine[];
-          if (Array.isArray(data)) {
-            setCart(data);
-          } else if (data?.cart) {
-            setCart(data.cart);
-            if (data.channel) setChannel(data.channel);
-          }
-          toast.success(t('webPosOrderResumed'));
-        }}
-        onPrintOrder={async (order, splitLabel) => {
-          try {
-            await printPosOrderReceipt(order, splitLabel);
-          } catch (e: any) {
-            toast.error(e.message || t('webPosPrintFailed'));
-          }
-        }}
       />
 
       <WebPosOnlineOrdersPanel
