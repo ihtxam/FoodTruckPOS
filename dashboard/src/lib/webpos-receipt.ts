@@ -181,7 +181,18 @@ function resolveLang(tx: WebPosReceipt, panelLang?: string): ReceiptLang {
   return 'en';
 }
 
-function formatCompactVatLine(
+function vatTableRow(type: string, net: string, tva: string, brut: string, width: number): string {
+  const typeWidth = width <= 32 ? 10 : 14;
+  const numWidth = width <= 32 ? 5 : 6;
+  return (
+    type.slice(0, typeWidth).padEnd(typeWidth) +
+    net.padStart(numWidth) +
+    tva.padStart(numWidth) +
+    brut.padStart(numWidth)
+  );
+}
+
+function formatVatSection(
   tx: WebPosReceipt,
   L: ReturnType<typeof receiptLabels>,
   width: number
@@ -190,6 +201,15 @@ function formatCompactVatLine(
   const net = roundMoney2(tx.subtotal);
   const tva = roundMoney2(tx.taxAmount);
   const brut = roundMoney2(net + tva);
+  const rateLabel = `${L.tva}: ${tx.taxRate}%`;
+
+  if (tx.vatIncludedInPrice !== false) {
+    let r = L.vatIncludedNote.slice(0, width) + '\n';
+    r += vatTableRow(L.type, L.net, L.tva, L.brut, width) + '\n';
+    r += vatTableRow(rateLabel, net.toFixed(2), tva.toFixed(2), brut.toFixed(2), width);
+    return r;
+  }
+
   const text = `${L.tva} ${tx.taxRate}% ${L.net} ${net.toFixed(2)} ${L.tva} ${tva.toFixed(2)} ${L.total} ${brut.toFixed(2)}`;
   return text.slice(0, width);
 }
@@ -264,12 +284,9 @@ export function generateWebPosReceiptText(tx: WebPosReceipt, panelLang?: string)
   if (tx.discount > 0) {
     r += padLine(`${L.discount}:`, `-CHF ${tx.discount.toFixed(2)}`, width) + '\n';
   }
-  const vatLine = formatCompactVatLine(tx, L, width);
-  if (vatLine) {
-    r += vatLine + '\n';
-    if (tx.vatIncludedInPrice !== false) {
-      r += L.vatIncludedNote.slice(0, width) + '\n';
-    }
+  const vatSection = formatVatSection(tx, L, width);
+  if (vatSection) {
+    r += vatSection + '\n';
   }
   const tip = roundMoney2(tx.tipAmount || 0);
   if (tip > 0) {
@@ -859,7 +876,7 @@ export function posOrderToWebPosReceipt(
     rounding: Number(order.roundingAmount ?? 0),
     tipAmount: Number(order.tipAmount ?? 0),
     total: Number(order.total),
-    vatIncludedInPrice: ctx.vatIncludedInPrice ?? true,
+    vatIncludedInPrice: ctx.vatIncludedInPrice === true,
     splitLabel,
     receiptUrl: order.clientId ? buildReceiptUrl(order.clientId) : undefined,
     includeQr: ctx.printSettings?.receiptShowQrCode !== false,

@@ -57,6 +57,8 @@ export const merchants = pgTable(
     taxTakeawayRate: decimal("tax_takeaway_rate", { precision: 5, scale: 2 }).default("0"),
     taxDineInRate: decimal("tax_dine_in_rate", { precision: 5, scale: 2 }).default("0"),
     taxDeliveryRate: decimal("tax_delivery_rate", { precision: 5, scale: 2 }).default("0"),
+    /** When true, menu prices are gross (TVA included); when false, tax is added on top at checkout. */
+    taxIncludedInPrice: boolean("tax_included_in_price").default(false).notNull(),
     // Online shop: path slug + optional DNS subdomain (e.g. demo → demo.domain)
     slug: varchar("slug", { length: 100 }),
     subdomain: varchar("subdomain", { length: 63 }),

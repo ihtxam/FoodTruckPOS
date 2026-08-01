@@ -9,6 +9,7 @@ import {
   Vault,
 } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
+import { webPosVersionLabel } from '@/lib/app-version';
 import type { PosTab, PosView } from './types';
 
 type Props = {
@@ -181,7 +182,7 @@ export default function WebPosTopBar({
       {merchantName ? (
         <p className="hidden px-4 pb-1 text-[10px] text-stone-400 sm:block">
           {merchantName}
-          {!agentOk ? ` ∑ ${t('webPosStartPrintAgent')}` : ''}
+          {!agentOk ? ` ù ${t('webPosStartPrintAgent')}` : ''}
         </p>
       ) : null}
     </header>
@@ -267,6 +268,9 @@ export function WebPosSettingsDropdown({
       </div>
       <p className="text-[11px] leading-snug text-stone-500">
         {agentOk ? t('webPosAgentOnline') : t('webPosAgentOffline')}
+      </p>
+      <p className="border-t border-stone-100 pt-2 text-center text-[11px] text-stone-400">
+        {webPosVersionLabel}
       </p>
     </div>
   );

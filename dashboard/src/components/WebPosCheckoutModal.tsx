@@ -48,7 +48,7 @@ export default function WebPosCheckoutModal({
   subtotal,
   taxAmount,
   taxRate = 0,
-  vatIncludedInPrice = true,
+  vatIncludedInPrice = false,
   settings,
   methods,
   initialMethod = 'cash',

@@ -257,6 +257,7 @@ export class ChaslayCompatService {
         tax_takeaway_rate: Number(merchant.taxTakeawayRate || merchant.vatRate || 0),
         tax_dine_in_rate: Number(merchant.taxDineInRate || merchant.vatRate || 0),
         tax_delivery_rate: Number(merchant.taxDeliveryRate || merchant.vatRate || 0),
+        tax_included_in_price: merchant.taxIncludedInPrice === true,
         default_language: merchant.panelLanguage || "en",
         store_hours: merchant.storeHours || {},
       },
@@ -316,9 +317,12 @@ export class ChaslayCompatService {
         floor_plan_enabled: !!merchant.floorPlanEnabled,
         pax_ordering_enabled: !!merchant.paxOrderingEnabled,
       },
-      checkout: (await import("@/lib/pos-checkout-settings")).normalizePosCheckoutSettings(
-        merchant.posCheckoutSettings
-      ),
+      checkout: {
+        ...(await import("@/lib/pos-checkout-settings")).normalizePosCheckoutSettings(
+          merchant.posCheckoutSettings
+        ),
+        vatIncludedInPrice: merchant.taxIncludedInPrice === true,
+      },
     };
   }
 

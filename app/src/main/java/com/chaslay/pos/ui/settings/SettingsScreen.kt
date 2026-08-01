@@ -60,6 +60,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.chaslay.pos.BuildConfig
 import com.chaslay.pos.R
 import com.chaslay.pos.domain.model.AppLanguage
 import com.chaslay.pos.domain.model.CategoryPrintSetting
@@ -917,6 +918,28 @@ fun SettingsScreen(
         }
 
         state.message?.let { Text(it) }
+
+        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                stringResource(R.string.app_version),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                stringResource(
+                    R.string.app_version_format,
+                    BuildConfig.VERSION_NAME,
+                    BuildConfig.VERSION_CODE
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium
+            )
+        }
 
         Spacer(modifier = Modifier.height(16.dp))
         Button(onClick = viewModel::saveSettings, modifier = Modifier.fillMaxWidth()) {

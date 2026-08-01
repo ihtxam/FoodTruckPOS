@@ -746,8 +746,10 @@ class BluetoothPrinterService @Inject constructor(
         if (settings.receiptShowVatTable && vatRows.isNotEmpty()) {
             if (cart.vatIncludedInPrice) {
                 sb.appendLine(labels.vatIncludedNote)
+                appendVatTable(sb, vatRows, labels, lineWidth)
+            } else {
+                appendCompactVatLines(sb, vatRows, labels, lineWidth)
             }
-            appendCompactVatLines(sb, vatRows, labels, lineWidth)
         }
 
         if (tipAmount > 0.0) {
@@ -834,8 +836,10 @@ class BluetoothPrinterService @Inject constructor(
         if (settings.receiptShowVatTable && vatRows.isNotEmpty()) {
             if (settings.vatIncludedInPrice) {
                 sb.appendLine(labels.vatIncludedNote)
+                appendVatTable(sb, vatRows, labels, lineWidth)
+            } else {
+                appendCompactVatLines(sb, vatRows, labels, lineWidth)
             }
-            appendCompactVatLines(sb, vatRows, labels, lineWidth)
         }
 
         if (transaction.tipAmount > 0.0) {
@@ -1116,6 +1120,21 @@ class BluetoothPrinterService @Inject constructor(
     ) {
         rows.forEach { row ->
             sb.appendLine(formatCompactVatLine(row, labels, lineWidth))
+        }
+    }
+
+    private fun appendVatTable(
+        sb: StringBuilder,
+        rows: List<com.chaslay.pos.domain.model.VatBreakdownRow>,
+        labels: ReceiptLabels,
+        lineWidth: Int
+    ) {
+        sb.appendLine(vatRow(labels.vatType, labels.vatNet, labels.vatTax, labels.brut, lineWidth))
+        rows.forEach { row ->
+            val typeLabel = "${labels.vatTitle}: ${ReceiptVatCalculator.formatRate(row.rate)}%"
+            sb.appendLine(
+                vatRow(typeLabel, twoDp(row.net), twoDp(row.tva), twoDp(row.brut), lineWidth)
+            )
         }
     }
 

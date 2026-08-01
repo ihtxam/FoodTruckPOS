@@ -1088,7 +1088,11 @@ router.get("/webpos-config", async (req: Request, res: Response) => {
           status: t.status,
         })),
         posPrintSettings,
-        posCheckoutSettings,
+        posCheckoutSettings: {
+          ...posCheckoutSettings,
+          vatIncludedInPrice: merchant.taxIncludedInPrice === true,
+        },
+        taxIncludedInPrice: merchant.taxIncludedInPrice === true,
         shopLogoUrl: merchant.shopLogoUrl || null,
         panelLanguage: merchant.panelLanguage || "en",
       },

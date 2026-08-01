@@ -355,8 +355,8 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
     return resolvePosTaxRate(merchant.taxTakeawayRate, vat, 2.6);
   }, [merchant, effectiveChannel]);
 
-  /** Menu prices include VAT — tax line shows extracted TVA, not added on top. */
-  const vatIncludedInPrice = true;
+  /** Menu prices include VAT (gross); prices are not tax-exclusive. */
+  const vatIncludedInPrice = merchant?.taxIncludedInPrice === true;
 
   const checkoutSettings = useMemo(
     () => normalizePosCheckoutSettings(paymentConfig?.posCheckoutSettings),

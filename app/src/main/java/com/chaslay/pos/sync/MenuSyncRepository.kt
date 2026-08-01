@@ -172,6 +172,7 @@ class MenuSyncRepository @Inject constructor(
             vatNumber = dto.vatNumber?.takeIf { it.isNotBlank() } ?: current.vatNumber,
             takeawayVatRate = dto.taxTakeawayRate?.takeIf { it > 0.0 } ?: current.takeawayVatRate,
             dineInVatRate = dto.taxDineInRate?.takeIf { it > 0.0 } ?: current.dineInVatRate,
+            vatIncludedInPrice = dto.taxIncludedInPrice ?: current.vatIncludedInPrice,
             defaultLanguage = dto.defaultLanguage?.takeIf { it.isNotBlank() } ?: current.defaultLanguage,
             openHour = hours?.getOrNull(0) ?: current.openHour,
             openMinute = hours?.getOrNull(1) ?: current.openMinute,

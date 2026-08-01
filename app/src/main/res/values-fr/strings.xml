@@ -111,6 +111,8 @@
     <string name="phone">Téléphone</string>
     <string name="website">Site web</string>
     <string name="save">Sauvegarder</string>
+    <string name="app_version">Version de l’application</string>
+    <string name="app_version_format">%1$s (%2$d)</string>
     <string name="edit">editer</string>
     <string name="new_order">Nouvelle commande</string>
     <string name="new_short">NOUVEAU</string>

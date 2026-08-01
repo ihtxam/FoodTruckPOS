@@ -58,6 +58,8 @@ export function resolvePosTaxRate(
   return defaultRate;
 }
 
+/** Extract VAT from a gross (tax-included) amount. */
+export function extractVatFromGross(gross: number, ratePercent: number): number {
   if (!Number.isFinite(gross) || gross <= 0 || ratePercent <= 0) return 0;
   return roundMoney2(gross - gross / (1 + ratePercent / 100));
 }

@@ -17,6 +17,8 @@ export type PosCheckoutSettings = {
   quickCashDenominations: number[];
   splitBillsEnabled: boolean;
   maxSplitParts: number;
+  /** Menu prices include VAT (gross); synced to POS devices. */
+  vatIncludedInPrice: boolean;
 };
 
 export const DEFAULT_POS_CHECKOUT: PosCheckoutSettings = {
@@ -34,6 +36,7 @@ export const DEFAULT_POS_CHECKOUT: PosCheckoutSettings = {
   quickCashDenominations: [10, 20, 50, 100],
   splitBillsEnabled: true,
   maxSplitParts: 8,
+  vatIncludedInPrice: false,
 };
 
 function asNumberArray(v: unknown, fallback: number[]): number[] {
@@ -86,5 +89,6 @@ export function normalizePosCheckoutSettings(raw: unknown): PosCheckoutSettings 
     quickCashDenominations: dens.length ? dens : DEFAULT_POS_CHECKOUT.quickCashDenominations,
     splitBillsEnabled: src.splitBillsEnabled !== false,
     maxSplitParts,
+    vatIncludedInPrice: src.vatIncludedInPrice === true,
   };
 }

@@ -84,6 +84,7 @@ export class MerchantSettingsService {
       taxTakeawayRate: merchant.taxTakeawayRate,
       taxDineInRate: merchant.taxDineInRate,
       taxDeliveryRate: merchant.taxDeliveryRate,
+      taxIncludedInPrice: merchant.taxIncludedInPrice === true,
       slug: merchant.slug,
       subdomain: merchant.subdomain,
       customDomain: merchant.customDomain,
@@ -152,6 +153,7 @@ export class MerchantSettingsService {
       taxTakeawayRate?: number;
       taxDineInRate?: number;
       taxDeliveryRate?: number;
+      taxIncludedInPrice?: boolean;
       slug?: string;
       subdomain?: string;
       customDomain?: string | null;
@@ -217,6 +219,7 @@ export class MerchantSettingsService {
     if (updates.taxTakeawayRate !== undefined) patch.taxTakeawayRate = updates.taxTakeawayRate.toString();
     if (updates.taxDineInRate !== undefined) patch.taxDineInRate = updates.taxDineInRate.toString();
     if (updates.taxDeliveryRate !== undefined) patch.taxDeliveryRate = updates.taxDeliveryRate.toString();
+    if (updates.taxIncludedInPrice !== undefined) patch.taxIncludedInPrice = !!updates.taxIncludedInPrice;
     if (updates.shopEnabled !== undefined) patch.shopEnabled = !!updates.shopEnabled;
     if (updates.acceptingOrders !== undefined) patch.acceptingOrders = !!updates.acceptingOrders;
     if (updates.acceptingReservations !== undefined) {

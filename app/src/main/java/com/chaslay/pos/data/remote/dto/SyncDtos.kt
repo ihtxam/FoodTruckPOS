@@ -44,6 +44,7 @@ data class SyncBusinessDto(
     @SerializedName("tax_takeaway_rate") val taxTakeawayRate: Double? = null,
     @SerializedName("tax_dine_in_rate") val taxDineInRate: Double? = null,
     @SerializedName("tax_delivery_rate") val taxDeliveryRate: Double? = null,
+    @SerializedName("tax_included_in_price") val taxIncludedInPrice: Boolean? = null,
     @SerializedName("default_language") val defaultLanguage: String? = null,
     @SerializedName("store_hours") val storeHours: Map<String, Map<String, List<SyncStoreHoursSlotDto>>>? = null
 )
@@ -146,7 +147,8 @@ data class SyncCheckoutDto(
     val quickCashEnabled: Boolean = true,
     val quickCashDenominations: List<Double> = listOf(10.0, 20.0, 50.0, 100.0),
     val splitBillsEnabled: Boolean = true,
-    val maxSplitParts: Int = 8
+    val maxSplitParts: Int = 8,
+    val vatIncludedInPrice: Boolean = false
 )
 
 data class PaymentConfigResponse(

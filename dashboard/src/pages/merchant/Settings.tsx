@@ -11,6 +11,7 @@ import {
   Printer,
 } from 'lucide-react';
 import api from '@/lib/api';
+import { dashboardVersionLabel } from '@/lib/app-version';
 import { useI18n, type Locale } from '@/lib/i18n';
 import { compressImageIfNeeded } from '@/lib/compress-image';
 
@@ -26,6 +27,7 @@ interface SettingsData {
   taxTakeawayRate?: string | null;
   taxDineInRate?: string | null;
   taxDeliveryRate?: string | null;
+  taxIncludedInPrice?: boolean;
   slug?: string | null;
   subdomain?: string | null;
   customDomain?: string | null;
@@ -328,6 +330,7 @@ export default function Settings() {
         taxDineInRate: settings.taxDineInRate != null ? Number(settings.taxDineInRate) : undefined,
         taxDeliveryRate:
           settings.taxDeliveryRate != null ? Number(settings.taxDeliveryRate) : undefined,
+        taxIncludedInPrice: !!settings.taxIncludedInPrice,
         slug: settings.slug || undefined,
         subdomain: settings.subdomain || undefined,
         customDomain: settings.customDomain?.trim() || null,
@@ -938,6 +941,48 @@ export default function Settings() {
                       onChange={(e) => setSettings({ ...settings, taxDeliveryRate: e.target.value })}
                     />
                   </Field>
+                </div>
+              </Section>
+              <Section title={t('taxPriceMode')} description={t('taxPriceModeHint')}>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <label
+                    className={`flex cursor-pointer items-start gap-2.5 rounded-md border px-3 py-2.5 text-sm ${
+                      !settings.taxIncludedInPrice
+                        ? 'border-[var(--text)] bg-[var(--bg-muted)]'
+                        : 'border-[var(--border)]'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="taxPriceMode"
+                      className="mt-0.5"
+                      checked={!settings.taxIncludedInPrice}
+                      onChange={() => setSettings({ ...settings, taxIncludedInPrice: false })}
+                    />
+                    <span>
+                      <span className="font-medium block">{t('taxExcludedInPrice')}</span>
+                      <span className="text-xs muted">{t('taxExcludedInPriceHint')}</span>
+                    </span>
+                  </label>
+                  <label
+                    className={`flex cursor-pointer items-start gap-2.5 rounded-md border px-3 py-2.5 text-sm ${
+                      settings.taxIncludedInPrice
+                        ? 'border-[var(--text)] bg-[var(--bg-muted)]'
+                        : 'border-[var(--border)]'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="taxPriceMode"
+                      className="mt-0.5"
+                      checked={!!settings.taxIncludedInPrice}
+                      onChange={() => setSettings({ ...settings, taxIncludedInPrice: true })}
+                    />
+                    <span>
+                      <span className="font-medium block">{t('taxIncludedInPrice')}</span>
+                      <span className="text-xs muted">{t('taxIncludedInPriceHint')}</span>
+                    </span>
+                  </label>
                 </div>
               </Section>
               <div className="flex justify-end border-t border-[var(--border)] pt-4">
@@ -2075,6 +2120,7 @@ export default function Settings() {
           )}
         </div>
       </div>
+      <p className="text-center text-xs text-stone-400">{dashboardVersionLabel}</p>
     </div>
   );
 }
