@@ -51,15 +51,15 @@ data class PrinterLinkCategory(val id: Long, val name: String, val products: Lis
 
 enum class SettingsSection(@StringRes val titleRes: Int) {
     GENERAL(R.string.settings_section_general),
-    VAT(R.string.settings_section_vat),
+    LICENSE(R.string.settings_section_license),
     TABLES(R.string.settings_section_tables),
+    VAT(R.string.settings_section_vat),
     PAYMENTS(R.string.settings_section_payments),
     PRINTERS(R.string.settings_section_printers),
     RECEIPTS(R.string.settings_section_receipts),
     FLOOR_DEVICES(R.string.settings_section_floor_devices),
     USERS_ACCOUNTS(R.string.settings_section_users),
-    APPEARANCE(R.string.settings_section_appearance),
-    LICENSE(R.string.settings_section_license)
+    APPEARANCE(R.string.settings_section_appearance)
 }
 
 data class SettingsUiState(
@@ -137,6 +137,7 @@ data class SettingsUiState(
     val crashLogContent: String = "",
     val isPrinterBusy: Boolean = false,
     val posMode: PosMode = PosMode.RESTAURANT,
+    val coursesEnabled: Boolean = false,
     val openHour: String = "10",
     val openMinute: String = "0",
     val closeHour: String = "22",
@@ -241,6 +242,7 @@ class SettingsViewModel @Inject constructor(
                     logoUri = settings.logoUri,
                     receiptTemplateName = settings.receiptTemplateName,
                     posMode = settings.posMode,
+                    coursesEnabled = settings.coursesEnabled,
                     trackCoversFromSeatingPlan = settings.trackCoversFromSeatingPlan,
                     floorSyncEnabled = settings.floorSyncEnabled,
                     floorDeviceRole = FloorDeviceRole.fromApi(settings.floorDeviceRole),
@@ -438,6 +440,7 @@ class SettingsViewModel @Inject constructor(
 
     fun updateBusinessName(value: String) = _uiState.update { it.copy(businessName = value) }
     fun updatePosMode(mode: PosMode) = _uiState.update { it.copy(posMode = mode) }
+    fun updateCoursesEnabled(enabled: Boolean) = _uiState.update { it.copy(coursesEnabled = enabled) }
     fun updateTrackCoversFromSeatingPlan(enabled: Boolean) =
         _uiState.update { it.copy(trackCoversFromSeatingPlan = enabled) }
 
@@ -692,9 +695,15 @@ class SettingsViewModel @Inject constructor(
         }
     }
     fun updateRoundingStep(value: String) = _uiState.update { it.copy(roundingStep = value) }
-    fun updateCashEnabled(enabled: Boolean) = _uiState.update { it.copy(cashEnabled = enabled) }
-    fun updateCardEnabled(enabled: Boolean) = _uiState.update { it.copy(cardEnabled = enabled) }
-    fun updateTerminalEnabled(enabled: Boolean) = _uiState.update { it.copy(terminalEnabled = enabled) }
+    fun updateCashEnabled(enabled: Boolean) = _uiState.update {
+        it.copy(cashEnabled = enabled, paymentMethodsManagedByCloud = false)
+    }
+    fun updateCardEnabled(enabled: Boolean) = _uiState.update {
+        it.copy(cardEnabled = enabled, paymentMethodsManagedByCloud = false)
+    }
+    fun updateTerminalEnabled(enabled: Boolean) = _uiState.update {
+        it.copy(terminalEnabled = enabled, paymentMethodsManagedByCloud = false)
+    }
     fun updatePrinterPrintReceipts(enabled: Boolean) = _uiState.update { it.copy(printerPrintReceipts = enabled) }
     fun updatePrinterPrintReports(enabled: Boolean) = _uiState.update { it.copy(printerPrintReports = enabled) }
     fun updatePrinterPrintKitchen(enabled: Boolean) = _uiState.update { it.copy(printerPrintKitchen = enabled) }
@@ -1058,27 +1067,12 @@ class SettingsViewModel @Inject constructor(
             openMinute = state.openMinute.toIntOrNull()?.coerceIn(0, 59) ?: 0,
             closeHour = state.closeHour.toIntOrNull()?.coerceIn(0, 23) ?: 22,
             closeMinute = state.closeMinute.toIntOrNull()?.coerceIn(0, 59) ?: 0,
-            cashEnabled = if (currentSettings.paymentMethodsManagedByCloud) {
-                currentSettings.cashEnabled
-            } else {
-                state.cashEnabled
-            },
-            cardEnabled = if (currentSettings.paymentMethodsManagedByCloud) {
-                currentSettings.cardEnabled
-            } else {
-                state.cardEnabled
-            },
-            terminalEnabled = if (currentSettings.paymentMethodsManagedByCloud) {
-                currentSettings.terminalEnabled
-            } else {
-                state.terminalEnabled
-            },
-            expressEnabled = if (currentSettings.paymentMethodsManagedByCloud) {
-                currentSettings.expressEnabled
-            } else {
-                state.expressEnabled
-            },
-            paymentMethodsManagedByCloud = currentSettings.paymentMethodsManagedByCloud,
+            cashEnabled = state.cashEnabled,
+            cardEnabled = state.cardEnabled,
+            terminalEnabled = state.terminalEnabled,
+            expressEnabled = state.expressEnabled,
+            // POS Settings wins when staff change toggles locally.
+            paymentMethodsManagedByCloud = state.paymentMethodsManagedByCloud,
             printerPrintReceipts = state.printerPrintReceipts,
             printerPrintReports = state.printerPrintReports,
             printerPrintKitchen = state.printerPrintKitchen,
@@ -1104,6 +1098,7 @@ class SettingsViewModel @Inject constructor(
             logoUri = state.logoUri,
             receiptTemplateName = state.receiptTemplateName,
             posMode = state.posMode,
+            coursesEnabled = state.coursesEnabled,
             trackCoversFromSeatingPlan = state.trackCoversFromSeatingPlan,
             floorSyncEnabled = state.floorSyncEnabled,
             floorDeviceRole = state.floorDeviceRole.apiValue,

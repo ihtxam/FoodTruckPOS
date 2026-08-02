@@ -3,6 +3,7 @@ package com.chaslay.pos.ui.license
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -26,6 +28,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
@@ -45,7 +48,23 @@ fun LicenseSettingsSection(
     val form by viewModel.formState.collectAsStateWithLifecycle()
     val dateFmt = remember { java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault()) }
 
-    Text(stringResource(R.string.license_settings_title), fontWeight = FontWeight.Bold, fontSize = 18.sp)
+    Text(
+        stringResource(R.string.license_settings_title),
+        fontWeight = FontWeight.Bold,
+        fontSize = 18.sp
+    )
+    Spacer(modifier = Modifier.height(8.dp))
+
+    val bannerBg = when (license.gateState) {
+        LicenseGateState.TRIAL -> Color(0xFFFFF3E0)
+        LicenseGateState.ALLOWED -> Color(0xFFE8F5E9)
+        else -> Color(0xFFFFEBEE)
+    }
+    val bannerFg = when (license.gateState) {
+        LicenseGateState.TRIAL -> Color(0xFFE65100)
+        LicenseGateState.ALLOWED -> Color(0xFF2E7D32)
+        else -> Color(0xFFC62828)
+    }
     val statusText = when (license.gateState) {
         LicenseGateState.TRIAL -> stringResource(R.string.license_status_trial, license.trialDaysRemaining)
         LicenseGateState.ALLOWED -> {
@@ -55,12 +74,23 @@ fun LicenseSettingsSection(
         LicenseGateState.EXPIRED, LicenseGateState.NEEDS_ACTIVATION -> stringResource(R.string.license_status_expired)
         LicenseGateState.LOADING -> "..."
     }
-    Text(statusText, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text(
+        text = statusText,
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(bannerBg, RoundedCornerShape(10.dp))
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        color = bannerFg,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 15.sp
+    )
+    Spacer(modifier = Modifier.height(8.dp))
     Text(
         text = stringResource(R.string.license_activate_early_body),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
+    Spacer(modifier = Modifier.height(12.dp))
     LicenseActivationForm(
         activationCode = form.activationCode,
         deviceId = form.liveDeviceId.ifBlank { license.snapshot.deviceId },

@@ -67,9 +67,13 @@ import com.chaslay.pos.domain.model.CategoryPrintSetting
 import com.chaslay.pos.domain.model.PrintTarget
 import com.chaslay.pos.domain.model.SupportedCurrency
 import com.chaslay.pos.printer.DiscoveredPrinter
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import com.chaslay.pos.ui.license.LicenseSettingsSection
-import com.chaslay.pos.ui.tableplan.TablePlanDesignerScreen
-import com.chaslay.pos.ui.theme.ChaslayBrand
+import com.chaslay.pos.ui.tableplan.TablePlanDesignerContent
+import com.chaslay.pos.ui.theme.vectronColors
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
@@ -77,6 +81,7 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val colors = vectronColors()
     val context = LocalContext.current
     var currencyExpanded by remember { mutableStateOf(false) }
     var languageExpanded by remember { mutableStateOf(false) }
@@ -99,25 +104,28 @@ fun SettingsScreen(
         viewModel.discoverPrinters(hasBluetoothPermission)
     }
 
-    var showTablePlanDesigner by remember { mutableStateOf(false) }
-    if (showTablePlanDesigner) {
-        TablePlanDesignerScreen(onBack = { showTablePlanDesigner = false })
-        return
-    }
+    val showTablesDesigner =
+        state.selectedSection == SettingsSection.TABLES && state.posMode == PosMode.RESTAURANT
 
     Row(
         modifier = Modifier
             .fillMaxSize()
-            .background(ChaslayBrand.White)
+            .background(colors.background)
     ) {
         Column(
             modifier = Modifier
                 .width(200.dp)
                 .fillMaxHeight()
-                .background(ChaslayBrand.Black)
+                .background(colors.panelLight)
                 .padding(8.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
+            Text(
+                stringResource(R.string.nav_settings),
+                fontWeight = FontWeight.Bold,
+                color = colors.textPrimary,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+            )
             SettingsSection.entries.filter { section ->
                 when (section) {
                     SettingsSection.USERS_ACCOUNTS -> userAccess.canManageUsers()
@@ -125,19 +133,70 @@ fun SettingsScreen(
                     else -> true
                 }
             }.forEach { section ->
-                TextButton(
-                    onClick = { viewModel.selectSection(section) },
-                    modifier = Modifier.fillMaxWidth()
+                val selected = state.selectedSection == section
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (selected) Color(0xFF00897B) else Color.Transparent)
+                        .clickable { viewModel.selectSection(section) }
+                        .padding(horizontal = 12.dp, vertical = 12.dp)
                 ) {
                     Text(
                         stringResource(section.titleRes),
-                        fontWeight = if (state.selectedSection == section) FontWeight.Bold else FontWeight.Normal,
-                        color = if (state.selectedSection == section) ChaslayBrand.White else ChaslayBrand.Gray400,
-                        modifier = Modifier.fillMaxWidth()
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                        color = if (selected) Color.White else colors.textPrimary,
+                        fontSize = 13.sp
                     )
                 }
             }
         }
+        if (showTablesDesigner) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                        Text(
+                            stringResource(R.string.track_covers_seating_plan),
+                            color = colors.textPrimary,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            stringResource(R.string.track_covers_help),
+                            color = colors.textSecondary,
+                            fontSize = 11.sp
+                        )
+                    }
+                    Switch(
+                        checked = state.trackCoversFromSeatingPlan,
+                        onCheckedChange = {
+                            viewModel.updateTrackCoversFromSeatingPlan(it)
+                            viewModel.saveSettings()
+                        }
+                    )
+                }
+                TablePlanDesignerContent(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                )
+            }
+        } else {
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight()
+        ) {
         Column(
             modifier = Modifier
                 .weight(1f)
@@ -146,54 +205,12 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
         if (state.selectedSection == SettingsSection.GENERAL) {
-        Text(stringResource(R.string.general_settings), fontWeight = FontWeight.Bold, fontSize = 18.sp)
-
-        Text(stringResource(R.string.menu_sync_title), fontWeight = FontWeight.SemiBold)
-        Text(stringResource(R.string.menu_sync_help), style = MaterialTheme.typography.bodySmall)
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Checkbox(
-                checked = state.syncBusinessInfo,
-                onCheckedChange = viewModel::updateSyncBusinessInfo
-            )
-            Text(
-                stringResource(R.string.menu_sync_business_info),
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.weight(1f)
-            )
-        }
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Button(
-                onClick = viewModel::pullOnlineMenuReplace,
-                enabled = !state.isMenuSyncing,
-                modifier = Modifier.weight(1f)
-            ) {
-                Text(
-                    if (state.isMenuSyncing) stringResource(R.string.menu_syncing)
-                    else stringResource(R.string.menu_sync_replace)
-                )
-            }
-            OutlinedButton(
-                onClick = viewModel::pullOnlineMenuMerge,
-                enabled = !state.isMenuSyncing,
-                modifier = Modifier.weight(1f)
-            ) {
-                Text(stringResource(R.string.menu_sync_merge))
-            }
-        }
-        OutlinedButton(
-            onClick = viewModel::pushMenuToPanel,
-            enabled = !state.isMenuSyncing,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(stringResource(R.string.menu_sync_push))
-        }
-        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            stringResource(R.string.general_settings),
+            fontWeight = FontWeight.Bold,
+            fontSize = 18.sp,
+            color = colors.textPrimary
+        )
 
         OutlinedTextField(
             value = state.businessName,
@@ -245,6 +262,20 @@ fun SettingsScreen(
                     }
                 )
             }
+        }
+
+        if (state.posMode == PosMode.RESTAURANT) {
+            Spacer(modifier = Modifier.height(8.dp))
+            SettingSwitch(
+                stringResource(R.string.enable_courses),
+                state.coursesEnabled,
+                viewModel::updateCoursesEnabled
+            )
+            Text(
+                stringResource(R.string.enable_courses_help),
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.textSecondary
+            )
         }
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -398,56 +429,41 @@ fun SettingsScreen(
         )
         }
 
-        if (state.selectedSection == SettingsSection.TABLES && state.posMode == PosMode.RESTAURANT) {
-        Text(stringResource(R.string.table_settings), fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        if (state.selectedSection == SettingsSection.PAYMENTS) {
         Text(
-            stringResource(R.string.table_plan_help),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            stringResource(R.string.payment_settings),
+            fontWeight = FontWeight.Bold,
+            fontSize = 18.sp,
+            color = colors.textPrimary
         )
-        Button(
-            onClick = { showTablePlanDesigner = true },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(stringResource(R.string.open_table_plan_designer))
-        }
-        SettingSwitch(
-            stringResource(R.string.track_covers_seating_plan),
-            state.trackCoversFromSeatingPlan,
-            viewModel::updateTrackCoversFromSeatingPlan
-        )
+        // Cash / Card / Terminal first — always editable on the POS device.
         Text(
-            stringResource(R.string.track_covers_help),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            stringResource(R.string.payment_methods),
+            fontWeight = FontWeight.SemiBold,
+            color = colors.textPrimary
         )
+        SettingSwitch(stringResource(R.string.payment_cash), state.cashEnabled, viewModel::updateCashEnabled)
+        SettingSwitch(stringResource(R.string.payment_card), state.cardEnabled, viewModel::updateCardEnabled)
+        SettingSwitch(stringResource(R.string.payment_terminal), state.terminalEnabled, viewModel::updateTerminalEnabled)
         Spacer(modifier = Modifier.height(8.dp))
-        OutlinedTextField(
-            value = state.newTableName,
-            onValueChange = viewModel::updateNewTableName,
-            label = { Text(stringResource(R.string.table_name)) },
-            modifier = Modifier.fillMaxWidth()
-        )
-        Button(onClick = viewModel::addTable) {
-            Text(stringResource(R.string.add_table))
-        }
-        if (state.tables.isNotEmpty()) {
-            Text(stringResource(R.string.existing_tables, state.tables.size))
-            state.tables.take(8).forEach { name ->
-                Text("• $name", style = MaterialTheme.typography.bodySmall)
+        Text(stringResource(R.string.default_rounding), color = colors.textPrimary)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf("0" to "None", "0.05" to "0.05", "0.10" to "0.10", "0.50" to "0.50", "1.00" to "1.00").forEach { (value, label) ->
+                FilterChip(
+                    selected = state.roundingStep == value,
+                    onClick = { viewModel.updateRoundingStep(value) },
+                    label = { Text(label) }
+                )
             }
         }
-        }
-
-        if (state.selectedSection == SettingsSection.PAYMENTS) {
-        Text(stringResource(R.string.payment_settings), fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
         SettingSwitch(stringResource(R.string.tap_to_pay_enabled), state.tapToPayEnabled, viewModel::updateTapToPay)
         SettingSwitch(stringResource(R.string.adyen_terminal), state.adyenTerminalEnabled, viewModel::updateAdyenEnabled)
         if (state.adyenTerminalEnabled) {
             Text(
                 stringResource(R.string.adyen_setup_help),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = colors.textSecondary
             )
             OutlinedTextField(
                 value = state.adyenApiKey,
@@ -481,7 +497,7 @@ fun SettingsScreen(
                 viewModel::updateAdyenLiveEnvironment
             )
             if (state.adyenLiveEnvironment) {
-                Text(stringResource(R.string.adyen_live_region), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.adyen_live_region), fontSize = 12.sp, color = colors.textSecondary)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf("EU", "US", "AU", "APSE").forEach { region ->
                         FilterChip(
@@ -507,29 +523,6 @@ fun SettingsScreen(
                     else stringResource(R.string.test_adyen_connection)
                 )
             }
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(stringResource(R.string.default_rounding))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("0" to "None", "0.05" to "0.05", "0.10" to "0.10", "0.50" to "0.50", "1.00" to "1.00").forEach { (value, label) ->
-                FilterChip(
-                    selected = state.roundingStep == value,
-                    onClick = { viewModel.updateRoundingStep(value) },
-                    label = { Text(label) }
-                )
-            }
-        }
-        SettingSwitch(stringResource(R.string.payment_cash), state.cashEnabled, viewModel::updateCashEnabled, enabled = !state.paymentMethodsManagedByCloud)
-        SettingSwitch(stringResource(R.string.payment_card), state.cardEnabled, viewModel::updateCardEnabled, enabled = !state.paymentMethodsManagedByCloud)
-        SettingSwitch(stringResource(R.string.payment_terminal), state.terminalEnabled, viewModel::updateTerminalEnabled, enabled = !state.paymentMethodsManagedByCloud)
-        if (state.paymentMethodsManagedByCloud) {
-            Text(
-                stringResource(R.string.payment_methods_managed_by_panel),
-                style = MaterialTheme.typography.bodySmall,
-                color = Color.Gray,
-                modifier = Modifier.padding(top = 4.dp)
-            )
         }
         }
 
@@ -925,35 +918,53 @@ fun SettingsScreen(
             LicenseSettingsSection()
         }
 
-        state.message?.let { Text(it) }
+        state.message?.let { Text(it, color = colors.textPrimary) }
 
-        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                stringResource(R.string.app_version),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                stringResource(
-                    R.string.app_version_format,
-                    BuildConfig.VERSION_NAME,
-                    BuildConfig.VERSION_CODE
-                ),
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium
-            )
+        if (state.selectedSection == SettingsSection.GENERAL) {
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    stringResource(R.string.app_version),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.textSecondary
+                )
+                Text(
+                    stringResource(
+                        R.string.app_version_format,
+                        BuildConfig.VERSION_NAME,
+                        BuildConfig.VERSION_CODE
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = colors.textPrimary
+                )
+            }
+            // Extra space so last fields aren't covered by sticky Save.
+            Spacer(modifier = Modifier.height(8.dp))
         }
+        } // end scrollable content
 
-        Spacer(modifier = Modifier.height(16.dp))
-        Button(onClick = viewModel::saveSettings, modifier = Modifier.fillMaxWidth()) {
-            Text(stringResource(R.string.save))
+        // Sticky Save — always visible (not under system nav / not lost in scroll).
+        if (state.selectedSection != SettingsSection.LICENSE) {
+            HorizontalDivider()
+            Button(
+                onClick = viewModel::saveSettings,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF00897B)
+                )
+            ) {
+                Text(stringResource(R.string.save), fontWeight = FontWeight.SemiBold)
+            }
         }
         }
+        } // end non-tables content
     }
 
     if (state.showAddPrinterDialog) {

@@ -36,9 +36,32 @@ android {
         }
     }
 
+    signingConfigs {
+        // Sideload/test phones reject unsigned APKs with "package is not valid".
+        // Use RELEASE_* props when set; otherwise sign release with the debug keystore.
+        create("release") {
+            val releaseStore = (project.findProperty("RELEASE_STORE_FILE") as String?)
+                ?.takeIf { it.isNotBlank() }
+                ?.let { rootProject.file(it) }
+                ?.takeIf { it.isFile }
+            if (releaseStore != null) {
+                storeFile = releaseStore
+                storePassword = project.findProperty("RELEASE_STORE_PASSWORD") as String?
+                keyAlias = project.findProperty("RELEASE_KEY_ALIAS") as String?
+                keyPassword = project.findProperty("RELEASE_KEY_PASSWORD") as String?
+            } else {
+                storeFile = signingConfigs.getByName("debug").storeFile
+                storePassword = signingConfigs.getByName("debug").storePassword
+                keyAlias = signingConfigs.getByName("debug").keyAlias
+                keyPassword = signingConfigs.getByName("debug").keyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -123,7 +146,7 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
 
-/** Copies release/debug APKs to Downloads as chaslaypos-<versionName>.apk for testing. */
+/** Copies signed release/debug APKs to Downloads as chaslaypos-<versionName>.apk for phone testing. */
 afterEvaluate {
     fun registerCopyApkTask(taskName: String, assembleTaskName: String, variantFolder: String, suffix: String) {
         tasks.register(taskName) {
@@ -133,11 +156,16 @@ afterEvaluate {
                 val apkDir = layout.buildDirectory.dir("outputs/apk/$variantFolder").get().asFile
                 val intermediatesDir = layout.buildDirectory.dir("intermediates/apk/$variantFolder").get().asFile
 
+                // Prefer signed universal APKs; never ship *-unsigned.apk (phones reject them).
                 val source = sequenceOf(apkDir, intermediatesDir)
                     .flatMap { it.walkTopDown() }
                     .filter { it.isFile && it.extension.equals("apk", ignoreCase = true) }
+                    .filter { !it.name.contains("unsigned", ignoreCase = true) }
                     .maxByOrNull { it.lastModified() }
-                    ?: error("No APK found in $apkDir or $intermediatesDir — run $assembleTaskName first")
+                    ?: error(
+                        "No signed APK found in $apkDir or $intermediatesDir — run $assembleTaskName first. " +
+                            "Do not install *-unsigned.apk (causes 'package is not valid' on phones)."
+                    )
                 val fileName = if (suffix.isEmpty()) {
                     "chaslaypos-$versionName.apk"
                 } else {
@@ -146,7 +174,8 @@ afterEvaluate {
                 val dest = rootProject.layout.projectDirectory.file("../$fileName").asFile
                 dest.parentFile?.mkdirs()
                 source.copyTo(dest, overwrite = true)
-                logger.lifecycle("Test APK: ${dest.absolutePath}")
+                logger.lifecycle("Test APK (signed, universal ABIs): ${dest.absolutePath}")
+                logger.lifecycle("Install: adb install -r \"${dest.absolutePath}\"")
             }
         }
         tasks.named(assembleTaskName) {

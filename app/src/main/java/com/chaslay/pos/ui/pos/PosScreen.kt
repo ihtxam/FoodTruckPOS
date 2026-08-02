@@ -118,8 +118,6 @@ import com.chaslay.pos.domain.model.TableWithOrderInfo
 import com.chaslay.pos.domain.model.UserAccess
 import com.chaslay.pos.ui.ongoing.OngoingOrdersScreen
 import com.chaslay.pos.ui.orderhistory.OrderHistoryScreen
-import com.chaslay.pos.ui.license.LicenseRenewalBanner
-import com.chaslay.pos.ui.license.LicenseViewModel
 import com.chaslay.pos.ui.navigation.AppRoute
 import com.chaslay.pos.receipt.ReceiptQrGenerator
 import androidx.compose.ui.draw.clip
@@ -168,7 +166,6 @@ fun PosScreen(
     viewModel: PosViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    val licenseState by hiltViewModel<LicenseViewModel>().licenseState.collectAsStateWithLifecycle()
     val activity = LocalContext.current as? Activity
     val context = LocalContext.current
 
@@ -365,8 +362,6 @@ fun PosScreen(
             onNavigate = onNavigate,
             onLogout = onLogout
         )
-        LicenseRenewalBanner(licenseState)
-
         Row(modifier = Modifier.weight(1f)) {
             val orderingItemsForRail = state.cart.items.filter { !it.sentToKitchen }
             CartActionSidebar(

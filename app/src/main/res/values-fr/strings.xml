@@ -54,7 +54,9 @@
     <string name="take_away_delivery">À emporter / Livraison</string>
     <string name="table_settings">Tables</string>
     <string name="table_name">Nom du tableau</string>
-    <string name="add_table">Ajouter tableau</string>
+    <string name="add_table">Ajouter une table</string>
+    <string name="enable_courses">Activer les services (courses)</string>
+    <string name="enable_courses_help">Regroupez les articles en Service 1, Service 2… et envoyez-les en cuisine un par un.</string>
     <string name="existing_tables">Tables %1$d configurées</string>
     <string name="item_adjustments">Paramétrage des remises sur articles</string>
     <string name="keypad_clear">CL</string>

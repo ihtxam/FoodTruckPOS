@@ -36,6 +36,8 @@
     <string name="settings_section_appearance">Appearance</string>
     <string name="settings_section_diagnostics">Diagnostics</string>
     <string name="settings_section_license">License</string>
+    <string name="enable_courses">Enable courses</string>
+    <string name="enable_courses_help">Group dine-in items into Course 1, Course 2… and fire them to the kitchen one at a time.</string>
     <string name="license_settings_title">License &amp; activation</string>
     <string name="license_status_trial">Trial active — %1$d day(s) remaining</string>
     <string name="license_status_active">Licensed until %1$s</string>
@@ -418,6 +420,7 @@
     <string name="users_accounts">Users &amp; roles</string>
     <string name="users_accounts_help">Create staff accounts with POS PINs, assign roles, and reset passwords.</string>
     <string name="users_list">Staff accounts</string>
+    <string name="no_users_yet">No users yet. Tap Add user to create one.</string>
     <string name="roles_list">Roles &amp; permissions</string>
     <string name="add_user">Add user</string>
     <string name="edit_user">Edit user</string>
@@ -469,6 +472,7 @@
     <string name="payment_cash">Accept Cash</string>
     <string name="payment_card">Accept Card</string>
     <string name="payment_terminal">Accept Terminal</string>
+    <string name="payment_methods">Payment methods</string>
     <string name="payment_methods_managed_by_panel">Payment methods are managed in the Chaslay merchant panel and sync to this device.</string>
     <string name="printer_roles">Printer Job Assignment</string>
     <string name="print_receipts">Receipts</string>
@@ -580,7 +584,8 @@
     <!-- Table plan -->
     <string name="table_plan_designer">Table plan designer</string>
     <string name="open_table_plan_designer">Open table plan designer</string>
-    <string name="table_plan_help">Drag tables to arrange your floor. Tap a table to set name, seat capacity, and shape.</string>
+    <string name="table_plan_help">Drag tables to arrange your floor. Tap a table to edit name, seats, and shape in the side panel.</string>
+    <string name="table_plan_edit_hint">Changes apply when you save.</string>
     <string name="seat_capacity">Seat capacity</string>
     <string name="table_shape">Table shape</string>
     <string name="shape_round">Round</string>

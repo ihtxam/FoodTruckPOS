@@ -101,11 +101,13 @@ fun FloorPlanCanvas(
     BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFFF5F5F0))
-            .border(1.dp, Color(0xFFCCCCCC))
+            .background(Color(0xFFECEFF1))
+            .border(1.dp, Color(0xFFB0BEC5))
     ) {
         val canvasW = maxWidth
         val canvasH = maxHeight
+        // Guard against zero-size layout (parent Column without weight).
+        if (canvasW.value < 8f || canvasH.value < 8f) return@BoxWithConstraints
 
         elements.forEach { element ->
             DraggablePlanItem(

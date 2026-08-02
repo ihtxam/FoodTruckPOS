@@ -151,9 +151,7 @@ class TerminalSyncRepository @Inject constructor(
             )
         }
 
-        config.features?.let { features ->
-            merged = merged.copy(coursesEnabled = features.coursesEnabled)
-        }
+        // coursesEnabled is managed in POS Settings ? General (not overwritten by panel sync).
 
         config.checkout?.let { checkout ->
             val tipCsv = checkout.tipPresetsPercent

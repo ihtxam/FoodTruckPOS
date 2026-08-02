@@ -102,6 +102,7 @@ fun MenuHubScreen(viewModel: MenuViewModel = hiltViewModel()) {
                         stringResource(
                             when (section) {
                                 MenuSection.PRODUCT_LIST -> R.string.product_list
+                                MenuSection.MENU_SYNC -> R.string.menu_sync_title
                                 MenuSection.MENU_ORDER -> R.string.menu_order
                                 MenuSection.MENU_TEMPLATE -> R.string.menu_template
                                 MenuSection.IMPORT_EXPORT -> R.string.menu_import_export
@@ -119,6 +120,7 @@ fun MenuHubScreen(viewModel: MenuViewModel = hiltViewModel()) {
         Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
             when (state.section) {
                 MenuSection.PRODUCT_LIST -> CatalogScreen()
+                MenuSection.MENU_SYNC -> MenuSyncSection()
                 MenuSection.MENU_ORDER -> MenuSortSection(
                     categories = sortState.first,
                     products = sortState.second,

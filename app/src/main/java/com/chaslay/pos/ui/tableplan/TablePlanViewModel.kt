@@ -51,7 +51,12 @@ class TablePlanViewModel @Inject constructor(
             val floorId = _uiState.value.selectedFloorId.takeIf { id ->
                 floors.any { it.id == id }
             } ?: floors.firstOrNull()?.id ?: 1L
-            val tables = tableOrderRepository.getTablesForFloor(floorId)
+            var tables = tableOrderRepository.getTablesForFloor(floorId)
+            // Old/broken layouts often dump every table into one thin strip — re-grid once.
+            if (tablesAreClustered(tables)) {
+                tableOrderRepository.autoLayoutFloor(floorId)
+                tables = tableOrderRepository.getTablesForFloor(floorId)
+            }
             val elements = tableOrderRepository.getFloorElements(floorId)
             _uiState.update {
                 it.copy(
@@ -65,9 +70,36 @@ class TablePlanViewModel @Inject constructor(
         }
     }
 
+    private fun tablesAreClustered(tables: List<RestaurantTableEntity>): Boolean {
+        if (tables.size < 2) return false
+        val xs = tables.map { it.planX }
+        val ys = tables.map { it.planY }
+        val xSpan = (xs.maxOrNull() ?: 0f) - (xs.minOrNull() ?: 0f)
+        val ySpan = (ys.maxOrNull() ?: 0f) - (ys.minOrNull() ?: 0f)
+        // All nearly on one row/column, or piled at the origin.
+        return (ySpan < 0.06f && tables.size >= 3) ||
+            (xSpan < 0.06f && tables.size >= 3) ||
+            tables.all { it.planX <= 0.02f && it.planY <= 0.02f }
+    }
+
+    fun clearSelection() {
+        _uiState.update {
+            it.copy(
+                selectedTableId = null,
+                selectedElementId = null,
+                showEditDialog = false,
+                showElementEditDialog = false
+            )
+        }
+    }
+
     fun selectFloor(floorId: Long) {
         viewModelScope.launch {
-            val tables = tableOrderRepository.getTablesForFloor(floorId)
+            var tables = tableOrderRepository.getTablesForFloor(floorId)
+            if (tablesAreClustered(tables)) {
+                tableOrderRepository.autoLayoutFloor(floorId)
+                tables = tableOrderRepository.getTablesForFloor(floorId)
+            }
             val elements = tableOrderRepository.getFloorElements(floorId)
             _uiState.update {
                 it.copy(
@@ -136,13 +168,9 @@ class TablePlanViewModel @Inject constructor(
         }
     }
 
-    fun dismissEditDialog() {
-        _uiState.update { it.copy(showEditDialog = false, selectedTableId = null) }
-    }
+    fun dismissEditDialog() = clearSelection()
 
-    fun dismissElementEditDialog() {
-        _uiState.update { it.copy(showElementEditDialog = false, selectedElementId = null) }
-    }
+    fun dismissElementEditDialog() = clearSelection()
 
     fun updateEditName(value: String) = _uiState.update { it.copy(editName = value) }
     fun updateEditSeats(value: String) = _uiState.update { it.copy(editSeats = value) }
