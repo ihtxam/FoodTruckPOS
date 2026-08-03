@@ -64,7 +64,7 @@ const APPLY_CHANNELS: { key: HoursChannelKey; label: string; hint: string }[] = 
   {
     key: 'display',
     label: 'Homepage banner',
-    hint: 'Hours shown on the shop page — does not gate ordering',
+    hint: 'Hours shown on the shop page - does not gate ordering',
   },
 ];
 
@@ -92,7 +92,7 @@ function mkWeek(slots: Slot[]): ChannelHours {
   return Object.fromEntries(DAYS.map((d) => [d.key, cloneSlots(slots)]));
 }
 
-/** Default: lunch + dinner split (11–14 and 17–23). */
+/** Default: lunch + dinner split (11-14 and 17-23). */
 function emptyHours(): StoreHours {
   const lunchDinner: Slot[] = [
     { open: '11:00', close: '14:00' },
@@ -135,7 +135,7 @@ function mkWeekFromChannel(ch: ChannelHours): ChannelHours {
 
 function formatDaySlots(slots: Slot[] | undefined): string {
   if (!slots?.length) return 'Closed';
-  return slots.map((s) => `${s.open}–${s.close}`).join(', ');
+  return slots.map((s) => `${s.open}-${s.close}`).join(', ');
 }
 
 function summarizeChannel(ch: ChannelHours): string {
@@ -151,7 +151,7 @@ function summarizeChannel(ch: ChannelHours): string {
     }
   }
   return groups
-    .map((g) => (g.start === g.end ? `${g.start} ${g.text}` : `${g.start}–${g.end} ${g.text}`))
+    .map((g) => (g.start === g.end ? `${g.start} ${g.text}` : `${g.start}-${g.end} ${g.text}`))
     .join(' · ');
 }
 
@@ -379,7 +379,7 @@ export default function OnlineShop() {
       ? []
       : draftSlots.filter((s) => s.open && s.close).map((s) => ({ open: s.open, close: s.close }));
     if (!markClosed && !slots.length) {
-      toast.error('Add at least one open–close time');
+      toast.error('Add at least one open-close time');
       return;
     }
     const channels = Array.from(new Set<HoursChannelKey>([editChannel, ...alsoCopyTo]));
@@ -899,7 +899,7 @@ export default function OnlineShop() {
 
             <div>
               <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                <span className="text-sm font-medium">Quick set — days</span>
+                <span className="text-sm font-medium">Quick set - days</span>
                 <div className="flex flex-wrap gap-1.5 text-xs">
                   <button type="button" className="px-2 py-1 rounded border bg-white" onClick={() => selectPresetDays('all')}>
                     All week
@@ -1057,7 +1057,7 @@ export default function OnlineShop() {
             <div className="rounded-lg border border-stone-200 bg-white p-3 space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">
-                  {editChannelLabel} — day by day
+                  {editChannelLabel} - day by day
                 </p>
                 <div className="flex flex-wrap gap-1.5 text-xs">
                   <button
@@ -1094,7 +1094,7 @@ export default function OnlineShop() {
                                 setEditDaySlots(d.key, next);
                               }}
                             />
-                            <span>–</span>
+                            <span>-</span>
                             <input
                               type="time"
                               className="input w-auto py-1"
@@ -1215,7 +1215,7 @@ export default function OnlineShop() {
           <div className="md:col-span-3 text-sm font-medium">
             {editingZoneId ? 'Editing zone' : 'New zone'}
             {editingZoneId && keepExistingPolygon && draftRing.length >= 3 && (
-              <span className="text-gray-500 font-normal"> — existing shape loaded (redraw optional)</span>
+              <span className="text-gray-500 font-normal"> - existing shape loaded (redraw optional)</span>
             )}
           </div>
           <input
@@ -1293,7 +1293,7 @@ export default function OnlineShop() {
             {zones.length === 0 && (
               <tr>
                 <td colSpan={5} className="py-6 text-gray-500">
-                  No zones yet — draw one on the map.
+                  No zones yet - draw one on the map.
                 </td>
               </tr>
             )}

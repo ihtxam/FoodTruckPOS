@@ -393,7 +393,7 @@ export default function Offers() {
                 className="input"
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
-                placeholder="Happy hour 20% — Food"
+                placeholder="Happy hour 20% - Food"
                 required
               />
             </label>
@@ -605,7 +605,7 @@ export default function Offers() {
               {form.offerType === 'percent_category' ? (
                 <div>
                   <p className="text-xs muted mb-1">
-                    Or specific products only ({form.productIds.length} selected — overrides
+                    Or specific products only ({form.productIds.length} selected - overrides
                     categories when set)
                   </p>
                   <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto">
@@ -637,7 +637,7 @@ export default function Offers() {
               </p>
               <div>
                 <p className="text-xs muted mb-1">
-                  Paid choices — select products customers pick from ({form.buyProductIds.length}{' '}
+                  Paid choices - select products customers pick from ({form.buyProductIds.length}{' '}
                   selected)
                 </p>
                 <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto">
@@ -656,13 +656,13 @@ export default function Offers() {
                     </button>
                   ))}
                   {products.length === 0 ? (
-                    <span className="text-xs muted">No products — add some in Products first</span>
+                    <span className="text-xs muted">No products - add some in Products first</span>
                   ) : null}
                 </div>
               </div>
               <div>
                 <p className="text-xs muted mb-1">
-                  Free choices — select products for the free pick ({form.getProductIds.length}{' '}
+                  Free choices - select products for the free pick ({form.getProductIds.length}{' '}
                   selected)
                 </p>
                 <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto">
@@ -686,7 +686,7 @@ export default function Offers() {
           )}
 
           <div>
-            <p className="text-xs muted mb-1">Channels (empty = all) — for pickup-only, select Pickup</p>
+            <p className="text-xs muted mb-1">Channels (empty = all) - for pickup-only, select Pickup</p>
             <div className="flex flex-wrap gap-2">
               {[
                 { id: 'takeaway', label: 'Pickup' },
@@ -842,7 +842,7 @@ export default function Offers() {
       <div className="card">
         <h2 className="text-base font-semibold mb-3">Your offers</h2>
         {offers.length === 0 ? (
-          <p className="text-sm muted">No offers yet — create one or load demo scenarios.</p>
+          <p className="text-sm muted">No offers yet - create one or load demo scenarios.</p>
         ) : (
           <ul className="divide-y divide-[var(--border)]">
             {offers.map((o) => (
@@ -865,7 +865,7 @@ export default function Offers() {
                       ? ` · ${o.daysOfWeek.join(', ')}`
                       : ' · always'}
                     {o.timeStart || o.timeEnd
-                      ? ` · ${o.timeStart || '…'}–${o.timeEnd || '…'}`
+                      ? ` · ${o.timeStart || '…'}-${o.timeEnd || '…'}`
                       : ''}
                     {o.channels?.length ? ` · ${o.channels.join(', ')}` : ' · all channels'}
                   </p>

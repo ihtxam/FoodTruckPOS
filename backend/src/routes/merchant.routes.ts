@@ -1028,7 +1028,15 @@ router.get("/settings", async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error("Error getting settings:", error);
-    res.status(500).json({ error: error instanceof Error ? error.message : "Failed to get settings" });
+    const raw = error instanceof Error ? error.message : "Failed to get settings";
+    const needsShiftMigrate =
+      /shifts_enabled|pos_color_theme|pos_shifts/i.test(raw) &&
+      /does not exist|column|relation/i.test(raw);
+    res.status(500).json({
+      error: needsShiftMigrate
+        ? "Database is missing cash-shift columns. Run backend/sql/ensure-shifts.sql (or drizzle-kit push)."
+        : raw,
+    });
   }
 });
 
@@ -1075,7 +1083,13 @@ router.get("/webpos-config", async (req: Request, res: Response) => {
           cash: merchant.webposCashEnabled !== false,
           card: merchant.webposCardEnabled !== false,
           terminal: merchant.webposTerminalEnabled !== false && terminalReady,
+          giftCard:
+            merchant.webposGiftCardEnabled === true &&
+            !!(merchant.giftCardSettings as { enabled?: boolean } | null)?.enabled,
         },
+        giftCardSettings: (await import("@/lib/gift-card-settings")).normalizeGiftCardSettings(
+          merchant.giftCardSettings
+        ),
         terminalReady,
         adyenConfigured: !!merchant.adyenApiKey && !!merchant.adyenMerchantAccount,
         adyenLiveEnvironment: !!merchant.adyenLiveEnvironment,
@@ -1119,7 +1133,13 @@ router.get("/pos/shifts/current", async (req: Request, res: Response) => {
     res.json({ success: true, ...data });
   } catch (error) {
     console.error("Error getting current shift:", error);
-    res.status(500).json({ error: error instanceof Error ? error.message : "Failed to get shift" });
+    const raw = error instanceof Error ? error.message : "Failed to get shift";
+    const needsMigrate = /pos_shifts/i.test(raw) && /does not exist|relation/i.test(raw);
+    res.status(500).json({
+      error: needsMigrate
+        ? "Database is missing pos_shifts. Run backend/sql/ensure-shifts.sql (or drizzle-kit push)."
+        : raw,
+    });
   }
 });
 
@@ -1186,7 +1206,15 @@ router.put("/settings", async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error("Error updating settings:", error);
-    res.status(400).json({ error: error instanceof Error ? error.message : "Failed to update settings" });
+    const raw = error instanceof Error ? error.message : "Failed to update settings";
+    const needsShiftMigrate =
+      /shifts_enabled|pos_color_theme|pos_shifts/i.test(raw) &&
+      /does not exist|column|relation/i.test(raw);
+    res.status(400).json({
+      error: needsShiftMigrate
+        ? "Database is missing cash-shift columns. Run backend/sql/ensure-shifts.sql (or drizzle-kit push), then retry."
+        : raw,
+    });
   }
 });
 

@@ -16,6 +16,8 @@ COPY package.json tsconfig.json drizzle.config.ts ./
 COPY src ./src
 COPY drizzle ./drizzle
 COPY assets ./assets
+# Print-agent installers (EXE may be bind-mounted at runtime; JSON/README always present)
+COPY public ./public
 
 EXPOSE 3000
 CMD ["npx", "tsx", "src/index.ts"]

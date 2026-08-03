@@ -91,7 +91,7 @@ export default function Billing() {
           clientKey: session.clientKey,
           session: { id: session.id, sessionData: session.sessionData },
           onPaymentCompleted: async (result: { resultCode?: string }) => {
-            setPayMsg('Payment completed — activating plan…');
+            setPayMsg('Payment completed - activating plan…');
             try {
               await api.post('/merchant/billing/confirm', {
                 paymentId,
@@ -251,7 +251,7 @@ export default function Billing() {
             <div>
               <h2 className="text-lg font-semibold">Pay for {checkoutPlan.name}</h2>
               <p className="text-sm text-gray-600">
-                Secure checkout via Adyen — payment goes to the platform account.
+                Secure checkout via Adyen - payment goes to the platform account.
               </p>
             </div>
             <button
@@ -289,7 +289,7 @@ export default function Billing() {
               {payments.map((p) => (
                 <tr key={p.id} className="border-b last:border-0">
                   <td className="py-2 pr-3">{new Date(p.paidAt || p.createdAt).toLocaleString()}</td>
-                  <td className="py-2 pr-3">{p.plan?.name || '—'}</td>
+                  <td className="py-2 pr-3">{p.plan?.name || '-'}</td>
                   <td className="py-2 pr-3 capitalize">{p.billingCycle}</td>
                   <td className="py-2 pr-3">{money(p.amount, p.currency)}</td>
                   <td className="py-2 capitalize">{p.status}</td>

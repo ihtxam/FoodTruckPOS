@@ -7,6 +7,8 @@ export type PosCheckoutDiscountPreset = {
 };
 
 export type CourseSendMode = "fire_per_course" | "send_all_once";
+export type CartSide = "left" | "right";
+export type PostSuccessTarget = "register" | "tables";
 
 export type PosCheckoutSettings = {
   tipsEnabled: boolean;
@@ -27,6 +29,10 @@ export type PosCheckoutSettings = {
    * - send_all_once: SEND all once; individual fire disabled afterwards
    */
   courseSendMode: CourseSendMode;
+  /** WebPOS cart panel side. Default right. */
+  cartSide: CartSide;
+  /** After a successful payment, navigate to this WebPOS tab. */
+  postSuccessTarget: PostSuccessTarget;
 };
 
 export const DEFAULT_POS_CHECKOUT: PosCheckoutSettings = {
@@ -46,6 +52,8 @@ export const DEFAULT_POS_CHECKOUT: PosCheckoutSettings = {
   maxSplitParts: 8,
   vatIncludedInPrice: false,
   courseSendMode: "fire_per_course",
+  cartSide: "right",
+  postSuccessTarget: "register",
 };
 
 function asNumberArray(v: unknown, fallback: number[]): number[] {
@@ -90,6 +98,10 @@ export function normalizePosCheckoutSettings(raw: unknown): PosCheckoutSettings 
   const courseSendMode: CourseSendMode =
     src.courseSendMode === "send_all_once" ? "send_all_once" : "fire_per_course";
 
+  const cartSide: CartSide = src.cartSide === "left" ? "left" : "right";
+  const postSuccessTarget: PostSuccessTarget =
+    src.postSuccessTarget === "tables" ? "tables" : "register";
+
   return {
     tipsEnabled: src.tipsEnabled !== false,
     tipPresetsPercent: tipPresets.length ? tipPresets : DEFAULT_POS_CHECKOUT.tipPresetsPercent,
@@ -103,5 +115,7 @@ export function normalizePosCheckoutSettings(raw: unknown): PosCheckoutSettings 
     maxSplitParts,
     vatIncludedInPrice: src.vatIncludedInPrice === true,
     courseSendMode,
+    cartSide,
+    postSuccessTarget,
   };
 }

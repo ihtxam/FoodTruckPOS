@@ -860,7 +860,7 @@ function Stepper({
           className="px-3 py-1.5 text-slate-600 hover:bg-slate-50"
           onClick={() => onChange(Math.max(min, value - 1))}
         >
-          −
+          -
         </button>
         <span className="min-w-[2rem] text-center text-sm font-semibold">{value}</span>
         <button

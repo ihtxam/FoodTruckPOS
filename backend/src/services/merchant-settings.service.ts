@@ -130,6 +130,7 @@ export class MerchantSettingsService {
       webposCashEnabled: merchant.webposCashEnabled !== false,
       webposCardEnabled: merchant.webposCardEnabled !== false,
       webposTerminalEnabled: merchant.webposTerminalEnabled !== false,
+      webposGiftCardEnabled: merchant.webposGiftCardEnabled === true,
       onlineCardFeeFixed: merchant.onlineCardFeeFixed ?? "0",
       onlineCardFeePercent: merchant.onlineCardFeePercent ?? "0",
       panelLanguage: merchant.panelLanguage || "en",
@@ -196,6 +197,7 @@ export class MerchantSettingsService {
       webposCashEnabled?: boolean;
       webposCardEnabled?: boolean;
       webposTerminalEnabled?: boolean;
+      webposGiftCardEnabled?: boolean;
       onlineCardFeeFixed?: number;
       onlineCardFeePercent?: number;
       panelLanguage?: string;
@@ -282,6 +284,7 @@ export class MerchantSettingsService {
     if (updates.webposCashEnabled !== undefined) patch.webposCashEnabled = !!updates.webposCashEnabled;
     if (updates.webposCardEnabled !== undefined) patch.webposCardEnabled = !!updates.webposCardEnabled;
     if (updates.webposTerminalEnabled !== undefined) patch.webposTerminalEnabled = !!updates.webposTerminalEnabled;
+    if (updates.webposGiftCardEnabled !== undefined) patch.webposGiftCardEnabled = !!updates.webposGiftCardEnabled;
     if (updates.onlineCardFeeFixed !== undefined) {
       const n = Number(updates.onlineCardFeeFixed);
       if (!Number.isFinite(n) || n < 0) throw new Error("onlineCardFeeFixed must be >= 0");

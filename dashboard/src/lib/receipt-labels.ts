@@ -17,6 +17,8 @@ export type ReceiptLabels = {
   scanDigitalReceipt: string;
   thankYou: string;
   kitchen: string;
+  /** Kitchen void / cancel ticket title */
+  cancelledTicket: string;
   dineIn: string;
   takeaway: string;
   delivery: string;
@@ -54,6 +56,14 @@ export type ReceiptLabels = {
   tip: string;
   customer: string;
   deliveryAddress: string;
+  cashDrawer: string;
+  openingFloat: string;
+  cashSalesDuringShift: string;
+  expectedInDrawer: string;
+  countedClosingCash: string;
+  cashVariance: string;
+  floatCarriesForward: string;
+  floatCarriesForwardNote: string;
 };
 
 const EN: ReceiptLabels = {
@@ -73,6 +83,7 @@ const EN: ReceiptLabels = {
   scanDigitalReceipt: 'Scan for digital receipt',
   thankYou: 'Thank you',
   kitchen: 'KITCHEN',
+  cancelledTicket: 'CANCELLED',
   dineIn: 'DINE-IN',
   takeaway: 'TAKEAWAY',
   delivery: 'DELIVERY',
@@ -110,6 +121,15 @@ const EN: ReceiptLabels = {
   tip: 'Tip',
   customer: 'Customer',
   deliveryAddress: 'Delivery address',
+  cashDrawer: 'CASH DRAWER',
+  openingFloat: 'Opening float',
+  cashSalesDuringShift: 'Cash sales (shift)',
+  expectedInDrawer: 'Expected in drawer',
+  countedClosingCash: 'Counted / closing cash',
+  cashVariance: 'Variance',
+  floatCarriesForward: 'Carries forward as base',
+  floatCarriesForwardNote:
+    'Opening float stays in the drawer as the next shift starting till.',
 };
 
 const FR: ReceiptLabels = {
@@ -129,6 +149,7 @@ const FR: ReceiptLabels = {
   scanDigitalReceipt: 'Scannez pour le recu digital',
   thankYou: 'Merci',
   kitchen: 'CUISINE',
+  cancelledTicket: 'ANNULE',
   dineIn: 'SUR PLACE',
   takeaway: 'EMPORTER',
   delivery: 'LIVRAISON',
@@ -166,6 +187,15 @@ const FR: ReceiptLabels = {
   tip: 'Pourboire',
   customer: 'Client',
   deliveryAddress: 'Adresse de livraison',
+  cashDrawer: 'CAISSE / FOND DE BASE',
+  openingFloat: 'Fond de base',
+  cashSalesDuringShift: 'Ventes especes (shift)',
+  expectedInDrawer: 'Caisse attendue',
+  countedClosingCash: 'Especes comptees',
+  cashVariance: 'Ecart',
+  floatCarriesForward: 'Se reporte (fond suivant)',
+  floatCarriesForwardNote:
+    'Le fond de base reste en caisse et se reporte comme prochain fond d\'ouverture.',
 };
 
 const DE: ReceiptLabels = {
@@ -185,6 +215,7 @@ const DE: ReceiptLabels = {
   scanDigitalReceipt: 'Scannen fuer digitalen Beleg',
   thankYou: 'Danke',
   kitchen: 'KUECHE',
+  cancelledTicket: 'STORNIERT',
   dineIn: 'VOR ORT',
   takeaway: 'ZUM MITNEHMEN',
   delivery: 'LIEFERUNG',
@@ -222,6 +253,15 @@ const DE: ReceiptLabels = {
   tip: 'Trinkgeld',
   customer: 'Kunde',
   deliveryAddress: 'Lieferadresse',
+  cashDrawer: 'KASSENABSTIMMUNG',
+  openingFloat: 'Anfangsbestand',
+  cashSalesDuringShift: 'Barverkaeufe (Schicht)',
+  expectedInDrawer: 'Erwarteter Bestand',
+  countedClosingCash: 'Gezaehltes Bargeld',
+  cashVariance: 'Differenz',
+  floatCarriesForward: 'Bleibt als Wechselgeld',
+  floatCarriesForwardNote:
+    'Der Anfangsbestand bleibt in der Kasse und ist der Startbestand der naechsten Schicht.',
 };
 
 export function receiptLabels(lang: string | null | undefined): ReceiptLabels {

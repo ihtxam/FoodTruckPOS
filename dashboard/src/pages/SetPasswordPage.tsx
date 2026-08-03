@@ -50,7 +50,7 @@ export default function SetPasswordPage() {
     setSaving(true);
     try {
       await axios.post(`${API_BASE}/auth/set-password`, { token, password });
-      toast.success('Password created — you can sign in now');
+      toast.success('Password created - you can sign in now');
       navigate('/login', { replace: true });
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Failed to set password');
@@ -60,7 +60,7 @@ export default function SetPasswordPage() {
   };
 
   useEffect(() => {
-    document.title = `${APP_NAME} — Create password`;
+    document.title = `${APP_NAME} - Create password`;
   }, []);
 
   return (

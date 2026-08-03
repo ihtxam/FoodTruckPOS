@@ -6,10 +6,11 @@ Local HTTP service (`http://127.0.0.1:9101`) used by WebPOS for silent ESC/POS R
 
 1. Download **Chaslay Print Agent** from the merchant dashboard:
    - **Settings ? Receipts & printers ? Download Print Agent**
-   - Or open: `https://api.chaslay.com/downloads/chaslay-print-agent-setup.exe`
+   - Or open: `https://app.chaslay.com/downloads/chaslay-print-agent-setup.exe`
+     (same file via `https://api.chaslay.com/downloads/...`)
 2. Run the setup EXE once.
 3. It installs to `%LOCALAPPDATA%\ChaslayPrintAgent\`, registers **Windows Startup**, and starts the agent.
-4. Reboot or log out/in ó the agent starts automatically (no `start.bat` each time).
+4. Reboot or log out/in ù the agent starts automatically (no `start.bat` each time).
 
 ### Manual CLI
 
@@ -44,7 +45,9 @@ Outputs:
 |------|---------|
 | `dist/chaslay-print-agent.exe` | Runtime agent |
 | `dist/chaslay-print-agent-setup.exe` | Same binary; double-click installs + auto-start |
-| `backend/public/downloads/chaslay-print-agent-setup.exe` | Served by API at `/downloads/...` |
+| `backend/public/downloads/chaslay-print-agent-setup.exe` | Served by API at `/downloads/...` (gitignored; deploy rebuilds) |
+
+**Deploy note:** EXEs are not in git. `scripts/deploy-hetzner.sh` cross-compiles with `pkg` and bind-mounts `backend/public/downloads` into the API container. See `backend/public/downloads/README.md`.
 
 ### How packaging works
 
@@ -57,7 +60,7 @@ Outputs:
 
 - **Windows only** (RAW Win32 print API).
 - EXE is **unsigned** unless you codesign it (SmartScreen may warn).
-- Binds to `127.0.0.1` only ó not exposed on the LAN.
+- Binds to `127.0.0.1` only ù not exposed on the LAN.
 - Not a Windows Service by default (per-user Startup is enough for WebPOS on the cashier PC). To run as a service, wrap the installed EXE with NSSM or Task Scheduler (SYSTEM).
 
 ## API

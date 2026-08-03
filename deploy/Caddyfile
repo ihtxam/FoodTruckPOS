@@ -7,6 +7,11 @@
 }
 
 {$DOMAIN} {
+	# Print-agent / installers — never SPA-fallback, never compress
+	handle /downloads/* {
+		reverse_proxy api:3000
+	}
+
 	encode gzip zstd
 
 	header {

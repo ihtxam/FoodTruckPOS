@@ -1,10 +1,12 @@
 import {
   ArrowLeftRight,
+  Ban,
   MessageSquare,
+  MoreHorizontal,
   Printer,
   User,
 } from 'lucide-react';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useI18n } from '@/lib/i18n';
 import WebPosNumericKeypad from './WebPosNumericKeypad';
 import type { CartLine, KeypadMode, PosChannel } from './types';
@@ -22,7 +24,7 @@ type Props = {
   onKeypadBufferChange: (buf: string) => void;
   onKeypadApply: () => void;
   channel: PosChannel | null;
-  onChannelChange: (ch: PosChannel) => void;
+  onChannelChange: (ch: 'takeaway' | 'delivery') => void;
   activeCourse: number;
   coursesEnabled: boolean;
   courseNumbers: number[];
@@ -31,6 +33,7 @@ type Props = {
   tableLabel?: string | null;
   tabNumber?: string | null;
   customerLabel?: string | null;
+  fulfillmentLabel?: string | null;
   busy: boolean;
   orderSent: boolean;
   showNewOrder: boolean;
@@ -45,8 +48,16 @@ type Props = {
   onSend: () => void;
   onNewOrder: () => void;
   onPayment: () => void;
+  onCancelOrder: () => void;
+  onCancelItem: () => void;
+  onPayLater: () => void;
+  onEditFulfillment?: () => void;
   showSend: boolean;
   hideTab: boolean;
+  canCancelOrder: boolean;
+  canCancelItem: boolean;
+  /** Cart docked left or right of product grid */
+  dockSide?: 'left' | 'right';
 };
 
 function lineExtrasLabel(l: CartLine) {
@@ -65,12 +76,21 @@ function lineExtrasLabel(l: CartLine) {
   } else if (l.comboSelections.length && l.selectedExtras.length) {
     parts.push(...l.selectedExtras.map((e) => e.name));
   }
-  return parts.join(' ù ');
+  return parts.join(', ');
 }
 
 type CartRow =
   | { kind: 'course'; course: number }
   | { kind: 'line'; line: CartLine };
+
+function nextChannelLabel(
+  channel: PosChannel | null,
+  t: (k: string) => string
+): string {
+  if (channel === 'takeaway') return t('delivery');
+  if (channel === 'delivery') return t('dineIn');
+  return t('takeaway');
+}
 
 export default function WebPosCartPanel({
   cart,
@@ -94,6 +114,7 @@ export default function WebPosCartPanel({
   tableLabel,
   tabNumber,
   customerLabel,
+  fulfillmentLabel,
   busy,
   orderSent,
   showNewOrder,
@@ -108,12 +129,21 @@ export default function WebPosCartPanel({
   onSend,
   onNewOrder,
   onPayment,
+  onCancelOrder,
+  onCancelItem,
+  onPayLater,
+  onEditFulfillment,
   showSend,
   hideTab,
+  canCancelOrder,
+  canCancelItem,
+  dockSide = 'right',
 }: Props) {
   const { t } = useI18n();
   const hasItems = cart.length > 0;
   const keypadExpanded = hasItems;
+  const [moreOpen, setMoreOpen] = useState(false);
+  const sideBorder = dockSide === 'right' ? 'border-l' : 'border-r';
 
   const rows = useMemo(() => {
     if (!coursesEnabled || courseNumbers.length === 0) {
@@ -134,7 +164,9 @@ export default function WebPosCartPanel({
   }, [cart, courseNumbers, coursesEnabled]);
 
   return (
-    <aside className="webpos-cart-panel flex w-full shrink-0 flex-col border-r border-stone-200 bg-white lg:w-[min(22rem,34vw)]">
+    <aside
+      className={`webpos-cart-panel flex w-full shrink-0 flex-col ${sideBorder} border-stone-200 bg-white lg:w-[min(22rem,34vw)]`}
+    >
       {/* Channel: Takeaway / Delivery above cart */}
       <div className="shrink-0 grid grid-cols-2 gap-1.5 border-b border-stone-100 px-2 py-2">
         {(
@@ -159,10 +191,10 @@ export default function WebPosCartPanel({
       </div>
 
       {/* Action / breadcrumb row */}
-      <div className="shrink-0 grid grid-cols-4 gap-1 border-b border-stone-100 px-2 py-1.5">
+      <div className="shrink-0 grid grid-cols-5 gap-1 border-b border-stone-100 px-2 py-1.5">
         <button type="button" className="webpos-mini-btn" onClick={onCustomer} title={t('webPosCustomer')}>
           <User size={14} />
-          <span>{customerLabel || t('webPosAddClient')}</span>
+          <span className="truncate max-w-full">{customerLabel || t('webPosAddClient')}</span>
         </button>
         <button
           type="button"
@@ -181,27 +213,101 @@ export default function WebPosCartPanel({
           title={t('webPosConvertChannel')}
         >
           <ArrowLeftRight size={14} />
-          <span>
-            {channel === 'dine_in' ? t('takeaway') : t('dineIn')}
-          </span>
+          <span className="truncate max-w-full">{nextChannelLabel(channel, t)}</span>
         </button>
         <button
           type="button"
-          className="webpos-mini-btn"
-          onClick={onKitchenMessage}
-          title={t('webPosKitchenMessage')}
+          className="webpos-mini-btn text-rose-700 disabled:text-stone-400"
+          onClick={onCancelOrder}
+          disabled={!canCancelOrder || busy}
+          title={t('webPosCancelOrder')}
         >
-          <MessageSquare size={14} />
-          <span>{t('webPosMsgShort')}</span>
+          <Ban size={14} />
+          <span>{t('webPosCancelShort')}</span>
         </button>
+        <div className="relative">
+          <button
+            type="button"
+            className="webpos-mini-btn w-full"
+            onClick={() => setMoreOpen((v) => !v)}
+            title={t('webPosMoreActions')}
+          >
+            <MoreHorizontal size={14} />
+            <span>{t('webPosMoreShort')}</span>
+          </button>
+          {moreOpen ? (
+            <>
+              <button
+                type="button"
+                className="fixed inset-0 z-10 cursor-default"
+                aria-label={t('close')}
+                onClick={() => setMoreOpen(false)}
+              />
+              <div className="absolute right-0 top-full z-20 mt-1 w-44 rounded-xl border border-stone-200 bg-white py-1 shadow-lg">
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-stone-700 hover:bg-stone-50"
+                  onClick={() => {
+                    setMoreOpen(false);
+                    onKitchenMessage();
+                  }}
+                >
+                  <MessageSquare size={14} />
+                  {t('webPosKitchenMessage')}
+                </button>
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-40"
+                  disabled={!canCancelItem || busy}
+                  onClick={() => {
+                    setMoreOpen(false);
+                    onCancelItem();
+                  }}
+                >
+                  <Ban size={14} />
+                  {t('webPosCancelItem')}
+                </button>
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-40"
+                  disabled={!hasItems || busy || channel === 'dine_in' || !channel}
+                  onClick={() => {
+                    setMoreOpen(false);
+                    onPayLater();
+                  }}
+                >
+                  {t('webPosPayLater')}
+                </button>
+              </div>
+            </>
+          ) : null}
+        </div>
       </div>
 
-      {(tableLabel || tabNumber || orderNote || channel === 'dine_in') && (
+      {(tableLabel ||
+        tabNumber ||
+        orderNote ||
+        channel === 'dine_in' ||
+        fulfillmentLabel ||
+        channel === 'takeaway' ||
+        channel === 'delivery') && (
         <div className="shrink-0 flex flex-wrap items-center gap-1.5 border-b border-stone-100 px-3 py-1.5 text-[11px] text-stone-500">
           {channel === 'dine_in' ? (
             <span className="rounded bg-sky-100 px-1.5 py-0.5 font-semibold text-sky-800">
               {t('dineIn')}
             </span>
+          ) : null}
+          {channel === 'takeaway' || channel === 'delivery' ? (
+            <button
+              type="button"
+              onClick={onEditFulfillment}
+              className="rounded bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-900 hover:bg-amber-200"
+              title={t('webPosTapToSetTime')}
+            >
+              {channel === 'delivery' ? t('delivery') : t('takeaway')}
+              {': '}
+              {fulfillmentLabel || t('webPosAsap')}
+            </button>
           ) : null}
           {tableLabel ? (
             <span className="rounded bg-rose-100 px-1.5 py-0.5 font-semibold text-rose-800">
@@ -299,21 +405,21 @@ export default function WebPosCartPanel({
         </div>
       </div>
 
-      {/* Keypad: minimized when empty, expanded after first product */}
+      {/* Keypad: compact, docked at bottom for more cart space */}
       <div
         className={`shrink-0 border-t border-stone-100 bg-stone-50 transition-all ${
-          keypadExpanded ? 'px-2 py-2' : 'px-2 py-1'
+          keypadExpanded ? 'px-1.5 py-1' : 'px-1.5 py-0.5'
         }`}
       >
         {coursesEnabled ? (
-          <div className="mb-1.5">
+          <div className="mb-1">
             <button
               type="button"
-              className="w-full rounded-lg bg-violet-100 py-2 text-xs font-bold uppercase tracking-wide text-violet-900 ring-1 ring-violet-300 hover:bg-violet-200"
+              className="w-full rounded-md bg-violet-100 py-1.5 text-[11px] font-bold uppercase tracking-wide text-violet-900 ring-1 ring-violet-300 hover:bg-violet-200"
               onClick={onCourse}
               disabled={!hasItems}
             >
-              {t('webPosCourse')} ù {activeCourse}
+              {t('webPosCourse')} - {activeCourse}
             </button>
           </div>
         ) : null}
@@ -325,9 +431,10 @@ export default function WebPosCartPanel({
             onBufferChange={onKeypadBufferChange}
             onApply={onKeypadApply}
             disabled={!selectedLineId}
+            compact
           />
         ) : (
-          <p className="py-1 text-center text-[10px] font-medium uppercase tracking-wide text-stone-400">
+          <p className="py-0.5 text-center text-[10px] font-medium uppercase tracking-wide text-stone-400">
             {t('webPosKeypadMinimized')}
           </p>
         )}

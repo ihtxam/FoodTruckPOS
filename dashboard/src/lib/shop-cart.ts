@@ -24,7 +24,7 @@ export interface ShopCartItem {
   /** Product id */
   id: string;
   name: string;
-  /** Catalog category — needed for category-scoped offers at checkout */
+  /** Catalog category - needed for category-scoped offers at checkout */
   categoryId?: string | null;
   /** Unit price including selected extras */
   price: number;
@@ -47,7 +47,7 @@ export interface ShopCartItem {
   offerBadge?: string;
   /**
    * Groups lines from one deal add (2+1 / package). Same id = one locked offer block
-   * that can only be removed as a whole — no per-line qty edits.
+   * that can only be removed as a whole - no per-line qty edits.
    */
   offerInstanceId?: string;
   /** Offer title shown on the locked cart block */

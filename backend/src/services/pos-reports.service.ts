@@ -278,6 +278,29 @@ export class PosReportsService {
       total: round2(v.total),
     }));
 
+    // Closed shifts overlapping the report period (for opening float / fond de base on EOD).
+    const closedShifts = await db.query.posShifts.findMany({
+      where: and(
+        eq(schema.posShifts.merchantId, merchantId),
+        eq(schema.posShifts.status, "closed"),
+        gte(schema.posShifts.closedAt, range.start),
+        lte(schema.posShifts.closedAt, range.end)
+      ),
+      orderBy: [desc(schema.posShifts.closedAt)],
+    });
+
+    const shiftCash = closedShifts.map((s) => ({
+      openingFloat: round2(money(s.openingCash)),
+      cashSales: round2(money(s.cashSales)),
+      expectedCash: round2(money(s.expectedCash)),
+      closingCashCounted:
+        s.closingCashCounted != null ? round2(money(s.closingCashCounted)) : null,
+      variance: s.variance != null ? round2(money(s.variance)) : null,
+      staffName: s.staffName || null,
+      openedAt: s.openedAt?.toISOString?.() ?? null,
+      closedAt: s.closedAt?.toISOString?.() ?? null,
+    }));
+
     return {
       range: {
         preset: opts.preset || "today",
@@ -321,6 +344,8 @@ export class PosReportsService {
       cashTotal: round2(payments.cash?.total || 0),
       cardTotal: round2(payments.card?.total || 0),
       terminalTotal: round2(payments.terminal?.total || 0),
+      /** Opening float (fond de base) + drawer reconciliation per closed shift */
+      shiftCash,
       businessName: merchant?.name || "",
     };
   }

@@ -373,7 +373,7 @@ export default function WebsiteCms() {
           <select className="input" value={newTemplate} onChange={(e) => setNewTemplate(e.target.value)}>
             {templates.map((tpl) => (
               <option key={tpl.key} value={tpl.key}>
-                {tpl.name} — {tpl.description}
+                {tpl.name} - {tpl.description}
               </option>
             ))}
           </select>

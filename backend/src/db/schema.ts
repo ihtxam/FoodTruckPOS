@@ -124,6 +124,13 @@ export const merchants = pgTable(
     webposCashEnabled: boolean("webpos_cash_enabled").default(true).notNull(),
     webposCardEnabled: boolean("webpos_card_enabled").default(true).notNull(),
     webposTerminalEnabled: boolean("webpos_terminal_enabled").default(true).notNull(),
+    /** Allow Gift Card as a WebPOS tender (requires gift card settings enabled) */
+    webposGiftCardEnabled: boolean("webpos_gift_card_enabled").default(false).notNull(),
+    /**
+     * Gift card / stored-value settings:
+     * { enabled, presetDenominations, minAmount, maxAmount, reloadEnabled, customAmountEnabled }
+     */
+    giftCardSettings: json("gift_card_settings").$type<Record<string, unknown> | null>(),
     /** Fixed CHF surcharge added to online card checkouts */
     onlineCardFeeFixed: decimal("online_card_fee_fixed", { precision: 10, scale: 2 }).default("0"),
     /** Percent surcharge on (subtotal+tax+delivery+tip) for online card checkouts */
@@ -1284,6 +1291,7 @@ export const loyaltyCards = pgTable(
     balance: decimal("balance", { precision: 10, scale: 2 }).default("0"),
     pointsBalance: integer("points_balance").default(0),
     status: varchar("status", { length: 50 }).default("active").notNull(), // active, suspended, expired
+    suspendedReason: text("suspended_reason"),
     issuedAt: timestamp("issued_at").defaultNow().notNull(),
     expiresAt: timestamp("expires_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -1312,12 +1320,88 @@ export const loyaltyTransactions = pgTable(
     transactionType: varchar("transaction_type", { length: 50 }).notNull(), // purchase, reload, redemption, points_earned
     amount: decimal("amount", { precision: 10, scale: 2 }),
     points: integer("points"),
+    balanceAfter: decimal("balance_after", { precision: 10, scale: 2 }),
+    description: text("description"),
     orderId: uuid("order_id").references(() => orders.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => ({
     merchantIdIdx: index("loyalty_transactions_merchant_id_idx").on(table.merchantId),
     cardIdIdx: index("loyalty_transactions_card_id_idx").on(table.cardId),
+  })
+);
+
+// ============================================================================
+// GIFT CARDS (physical RFID / future e-card) — stored value + optional membership
+// One physical card can hold prepaid CHF balance AND optional customer membership/points.
+// ============================================================================
+
+export const giftCards = pgTable(
+  "gift_cards",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    merchantId: uuid("merchant_id")
+      .notNull()
+      .references(() => merchants.id, { onDelete: "cascade" }),
+    /** RFID UID for physical cards, or generated code for e-cards */
+    cardNumber: varchar("card_number", { length: 255 }).notNull(),
+    /** physical | e_card (e_card = phase-2 stub) */
+    cardMediaType: varchar("card_media_type", { length: 20 }).default("physical").notNull(),
+    /** Stored-value / gift balance in CHF */
+    balance: decimal("balance", { precision: 10, scale: 2 }).default("0").notNull(),
+    status: varchar("status", { length: 50 }).default("active").notNull(), // active, suspended, expired
+    suspendedReason: text("suspended_reason"),
+    /** Optional membership: linked customer for points / visits */
+    customerId: uuid("customer_id").references(() => customers.id, { onDelete: "set null" }),
+    membershipEnabled: boolean("membership_enabled").default(false).notNull(),
+    pointsBalance: integer("points_balance").default(0).notNull(),
+    holderName: varchar("holder_name", { length: 255 }),
+    holderEmail: varchar("holder_email", { length: 255 }),
+    holderPhone: varchar("holder_phone", { length: 40 }),
+    /** Phase-2 e-card: delivery email / QR payload (stub fields) */
+    ecardEmail: varchar("ecard_email", { length: 255 }),
+    ecardCode: varchar("ecard_code", { length: 64 }),
+    issuedAt: timestamp("issued_at").defaultNow().notNull(),
+    expiresAt: timestamp("expires_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    merchantIdIdx: index("gift_cards_merchant_id_idx").on(table.merchantId),
+    cardNumberIdx: uniqueIndex("gift_cards_merchant_card_number_idx").on(
+      table.merchantId,
+      table.cardNumber
+    ),
+    ecardCodeIdx: uniqueIndex("gift_cards_ecard_code_idx").on(table.ecardCode),
+    statusIdx: index("gift_cards_status_idx").on(table.status),
+    customerIdIdx: index("gift_cards_customer_id_idx").on(table.customerId),
+  })
+);
+
+export const giftCardTransactions = pgTable(
+  "gift_card_transactions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    merchantId: uuid("merchant_id")
+      .notNull()
+      .references(() => merchants.id, { onDelete: "cascade" }),
+    cardId: uuid("card_id")
+      .notNull()
+      .references(() => giftCards.id, { onDelete: "cascade" }),
+    /** sell | reload | redeem | adjust | membership_issue | points_earn | points_redeem */
+    transactionType: varchar("transaction_type", { length: 50 }).notNull(),
+    amount: decimal("amount", { precision: 10, scale: 2 }),
+    balanceAfter: decimal("balance_after", { precision: 10, scale: 2 }),
+    points: integer("points"),
+    pointsAfter: integer("points_after"),
+    orderId: uuid("order_id").references(() => orders.id, { onDelete: "set null" }),
+    description: text("description"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    merchantIdIdx: index("gift_card_transactions_merchant_id_idx").on(table.merchantId),
+    cardIdIdx: index("gift_card_transactions_card_id_idx").on(table.cardId),
+    orderIdIdx: index("gift_card_transactions_order_id_idx").on(table.orderId),
   })
 );
 
@@ -1546,6 +1630,8 @@ export const merchantsRelations = relations(merchants, ({ many }) => ({
   paymentTransactions: many(paymentTransactions),
   loyaltyCards: many(loyaltyCards),
   loyaltyTransactions: many(loyaltyTransactions),
+  giftCards: many(giftCards),
+  giftCardTransactions: many(giftCardTransactions),
   loyaltyPointLots: many(loyaltyPointLots),
   loyaltyPointEvents: many(loyaltyPointEvents),
   dailyReports: many(dailyReports),
@@ -1638,6 +1724,27 @@ export const loyaltyCardsRelations = relations(loyaltyCards, ({ one, many }) => 
   merchant: one(merchants, { fields: [loyaltyCards.merchantId], references: [merchants.id] }),
   customer: one(customers, { fields: [loyaltyCards.customerId], references: [customers.id] }),
   transactions: many(loyaltyTransactions),
+}));
+
+export const giftCardsRelations = relations(giftCards, ({ one, many }) => ({
+  merchant: one(merchants, { fields: [giftCards.merchantId], references: [merchants.id] }),
+  customer: one(customers, { fields: [giftCards.customerId], references: [customers.id] }),
+  transactions: many(giftCardTransactions),
+}));
+
+export const giftCardTransactionsRelations = relations(giftCardTransactions, ({ one }) => ({
+  merchant: one(merchants, {
+    fields: [giftCardTransactions.merchantId],
+    references: [merchants.id],
+  }),
+  card: one(giftCards, {
+    fields: [giftCardTransactions.cardId],
+    references: [giftCards.id],
+  }),
+  order: one(orders, {
+    fields: [giftCardTransactions.orderId],
+    references: [orders.id],
+  }),
 }));
 
 export const loyaltyPointLotsRelations = relations(loyaltyPointLots, ({ one }) => ({

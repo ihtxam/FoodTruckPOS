@@ -75,7 +75,7 @@ function ProductGrid({
   items: Array<{ id: string; name: string; price: number; description?: string; image?: string }>;
   showPrices: boolean;
 }) {
-  if (!items.length) return <p className="text-sm text-stone-500">—</p>;
+  if (!items.length) return <p className="text-sm text-stone-500">-</p>;
   return (
     <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
       {items.map((item) => (
@@ -207,7 +207,7 @@ function PosMenuBlock(props: CmsPuckProps['PosMenu']) {
       </div>
       {!menu.length ? (
         <p className="text-sm text-stone-500 border border-dashed border-stone-300 p-6 text-center">
-          POS menu — live catalog appears on the published site
+          POS menu - live catalog appears on the published site
         </p>
       ) : mode === 'featured' ? (
         <ProductGrid items={featured} showPrices={showPrices !== false} />
@@ -234,7 +234,7 @@ function ShopHoursBlock({ title, channel }: CmsPuckProps['ShopHours']) {
   const day = DAY_KEYS[new Date().getDay()];
   const slots = ch[day] || [];
   const label = slots.length
-    ? slots.map((s) => `${s.open}–${s.close}`).join(', ')
+    ? slots.map((s) => `${s.open}-${s.close}`).join(', ')
     : t('shopClosedToday');
   return (
     <section className="max-w-5xl mx-auto px-4 py-10">

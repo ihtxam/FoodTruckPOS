@@ -226,7 +226,7 @@ export default function Categories() {
                       <DragHandle attributes={attributes} listeners={listeners} />
                     </td>
                     <td className="py-2.5 px-2 font-medium">{category.name}</td>
-                    <td className="py-2.5 px-2 muted">{category.description || '—'}</td>
+                    <td className="py-2.5 px-2 muted">{category.description || '-'}</td>
                     <td className="py-2.5 px-2 text-right space-x-3 whitespace-nowrap">
                       <button
                         type="button"

@@ -131,20 +131,23 @@ export default function WebPosTopBar({
           {shiftsEnabled ? (
             <button
               type="button"
-              className={`hidden h-9 items-center gap-1.5 rounded-lg px-2.5 text-xs font-bold sm:inline-flex ${
+              className={`inline-flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-xs font-bold ${
                 shiftOpen
                   ? 'bg-[var(--webpos-accent)] text-white hover:opacity-90'
-                  : 'border border-stone-200 text-stone-700 hover:bg-stone-50'
+                  : 'border border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100'
               }`}
               onClick={() => (shiftOpen ? onCloseShift?.() : onStartShift?.())}
               title={shiftOpen ? t('webPosShiftClose') : t('webPosShiftStart')}
             >
               <span
                 className={`inline-block h-2 w-2 rounded-full ${
-                  shiftOpen ? 'bg-white' : 'bg-amber-400'
+                  shiftOpen ? 'bg-white' : 'bg-amber-500'
                 }`}
               />
-              {shiftOpen ? t('webPosShiftClose') : t('webPosShiftStart')}
+              <span className="hidden sm:inline">
+                {shiftOpen ? t('webPosShiftClose') : t('webPosShiftStart')}
+              </span>
+              <span className="sm:hidden">{shiftOpen ? t('webPosShiftOpenBadge') : t('webPosShiftMenu')}</span>
             </button>
           ) : null}
 

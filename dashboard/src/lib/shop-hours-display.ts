@@ -19,8 +19,8 @@ function dayLabel(key: string, locale: string) {
 }
 
 function slotsText(slots: Array<{ open: string; close: string }> | undefined) {
-  if (!slots?.length) return '—';
-  return slots.map((s) => `${s.open}–${s.close}`).join(', ');
+  if (!slots?.length) return '-';
+  return slots.map((s) => `${s.open}-${s.close}`).join(', ');
 }
 
 /**
@@ -42,8 +42,8 @@ export function summarizeStoreHours(
     const label =
       i === j
         ? dayLabel(DAYS[i].key, locale)
-        : `${dayLabel(DAYS[i].key, locale)} – ${dayLabel(DAYS[j].key, locale)}`;
-    rows.push({ label, hours: texts[i] === '—' ? (locale === 'de' ? 'Geschlossen' : locale === 'fr' ? 'Fermé' : 'Closed') : texts[i] });
+        : `${dayLabel(DAYS[i].key, locale)} - ${dayLabel(DAYS[j].key, locale)}`;
+    rows.push({ label, hours: texts[i] === '-' ? (locale === 'de' ? 'Geschlossen' : locale === 'fr' ? 'Fermé' : 'Closed') : texts[i] });
     i = j + 1;
   }
   return rows;

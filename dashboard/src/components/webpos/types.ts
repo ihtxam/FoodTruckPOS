@@ -6,7 +6,15 @@ export type PosView = PosTab | 'checkout' | 'success';
 
 export type KeypadMode = 'qty' | 'percent' | 'price';
 
-export type PosPaymentMethod = 'cash' | 'card' | 'terminal' | 'pay_later';
+export type PosPaymentMethod = 'cash' | 'card' | 'terminal' | 'pay_later' | 'gift_card';
+
+export type GiftCardLineMeta = {
+  op: 'sell' | 'reload';
+  cardNumber: string;
+  cardId?: string;
+  mediaType: 'physical' | 'e_card';
+  amount: number;
+};
 
 export type CartLine = {
   lineId: string;
@@ -23,6 +31,8 @@ export type CartLine = {
   courseNumber?: number;
   lineDiscountPercent?: number;
   sentToKitchen?: boolean;
+  /** Gift card sell/reload — credited after successful payment */
+  giftCard?: GiftCardLineMeta;
 };
 
 export type Category = { id: string; name: string; color?: string | null };
@@ -43,3 +53,29 @@ export type Product = {
 };
 
 export type PostSuccessTarget = 'register' | 'tables';
+
+/** In-memory open cart draft for a table / tab / channel (session only). */
+export type OpenCartDraft = {
+  cart: CartLine[];
+  channel: PosChannel | null;
+  tableId: string | null;
+  tableLabel: string | null;
+  tabNumber: string | null;
+  orderNote: string;
+  activeCourse: number;
+  orderSent: boolean;
+  coursesBulkSent: boolean;
+  selectedLineId: string | null;
+  keypadBuffer: string;
+};
+
+export function openCartDraftKey(opts: {
+  tableId?: string | null;
+  tabNumber?: string | null;
+  channel?: PosChannel | null;
+}): string {
+  if (opts.tableId) return `table:${opts.tableId}`;
+  if (opts.tabNumber) return `tab:${opts.tabNumber}`;
+  if (opts.channel === 'delivery') return 'channel:delivery';
+  return 'channel:takeaway';
+}

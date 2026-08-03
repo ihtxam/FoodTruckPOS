@@ -19,7 +19,7 @@ export function qrImageUrl(data: string, size = 180): string {
 }
 
 /**
- * ESC/POS QR code (Function 165/167/169/180 — common on Epson-compatible thermals).
+ * ESC/POS QR code (Function 165/167/169/180 - common on Epson-compatible thermals).
  * Returns raw bytes: store QR data + print.
  */
 export function escposQrCode(data: string, moduleSize = 4): Uint8Array {

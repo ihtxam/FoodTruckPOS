@@ -2,6 +2,10 @@
 
 Complete web dashboard for superadmin and merchant management in the POS SaaS platform.
 
+## Install as a Windows app (PWA)
+
+WebPOS can be installed from Edge/Chrome as a standalone desktop app (Start Menu, own window). See **[PWA.md](./PWA.md)** for install steps. Prefer PWA over Electron/Tauri for a lightweight “double-click POS.”
+
 ## Features
 
 ### Superadmin Dashboard

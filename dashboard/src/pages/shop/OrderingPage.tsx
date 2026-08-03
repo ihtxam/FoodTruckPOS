@@ -307,7 +307,7 @@ export default function OrderingPage() {
             : roundMoney2(Number(item.catalogPrice ?? item.price ?? 0) - extrasTotal);
         const catalogUnit = roundMoney2(base + markup + extrasTotal);
 
-        // Offer already baked (2+1 free / package / % off) — keep relative deal, refresh catalog
+        // Offer already baked (2+1 free / package / % off) - keep relative deal, refresh catalog
         if (item.offerId) {
           const wasFree = (item.catalogPrice != null && item.price === 0) || item.offerBadge?.toLowerCase().includes('free');
           if (wasFree || item.price === 0) {
@@ -718,7 +718,7 @@ export default function OrderingPage() {
       setError(deliveryInfo.message || t('shopMinOrderNotMet'));
       return;
     }
-    // Closed now is OK when scheduled orders are enabled — checkout offers later slots.
+    // Closed now is OK when scheduled orders are enabled - checkout offers later slots.
     const next = {
       ...draft,
       scheduledFor: channelMeta?.open ? draft.scheduledFor : draft.scheduledFor || '',
@@ -832,7 +832,7 @@ export default function OrderingPage() {
       <div className="px-5 py-4 border-b border-stone-200">
         <h2 className="text-xl font-bold tracking-tight">{t('shopBasket')}</h2>
         <p className="text-sm text-stone-500 mt-1">
-          {channelButtons.find((c) => c.id === channel)?.label} · {channelMeta?.etaMinutes || 30}–
+          {channelButtons.find((c) => c.id === channel)?.label} · {channelMeta?.etaMinutes || 30}-
           {(channelMeta?.etaMinutes || 30) + 10} min
         </p>
       </div>
@@ -977,7 +977,7 @@ export default function OrderingPage() {
                       className="w-7 h-7 border border-stone-300"
                       onClick={() => updateQuantity(item.lineId, item.quantity - 1)}
                     >
-                      −
+                      -
                     </button>
                     <span className="w-5 text-center font-semibold">{item.quantity}</span>
                     <button
@@ -1065,10 +1065,10 @@ export default function OrderingPage() {
         {error && <p className="text-red-600 text-sm">{error}</p>}
         {!channelMeta?.open && (
           <p className="text-amber-700 text-sm">
-            {t('shopClosedNow')} · {channelMeta?.todayLabel || '—'}
+            {t('shopClosedNow')} · {channelMeta?.todayLabel || '-'}
             {allowScheduledOrders
-              ? ` — ${t('shopContinueScheduleLater')}`
-              : ` — ${t('shopOrdersOnlyWhenOpen')}`}
+              ? ` - ${t('shopContinueScheduleLater')}`
+              : ` - ${t('shopOrdersOnlyWhenOpen')}`}
           </p>
         )}
 
@@ -1238,7 +1238,7 @@ export default function OrderingPage() {
             <span className="truncate font-medium">{merchant?.name}</span>
             <span className="text-stone-300">|</span>
             <span className="tabular-nums whitespace-nowrap">
-              {etaMin}–{etaMin + 10} {t('shopMins')}
+              {etaMin}-{etaMin + 10} {t('shopMins')}
             </span>
             {channelButtons.length > 1 ? <ChevronDown className="h-3.5 w-3.5 text-stone-400 shrink-0" /> : null}
           </button>

@@ -1,8 +1,8 @@
 /** ESC/POS text encoding for Western European thermal printers (IBM CP850). */
 
-import { repairCatalogText } from '@/lib/text-encoding';
+import { normalizeDashes, repairCatalogText } from '@/lib/text-encoding';
 
-/** IBM CP850 ù ù=0x8A, ù=0x88, ù=0x82, ù=0x81, ù=0x9D */
+/** IBM CP850 mapping for Western European letters (byte values). */
 const UNICODE_TO_CP850: Record<string, number> = {
   '\u00C0': 0xb7, '\u00C1': 0xb5, '\u00C2': 0xb6, '\u00C3': 0xc7,
   '\u00C4': 0x8e, '\u00C5': 0x8f, '\u00C6': 0x92, '\u00C7': 0x80,
@@ -24,11 +24,12 @@ const UNICODE_TO_CP850: Record<string, number> = {
 };
 
 export function normalizeForEscPosPrint(text: string): string {
-  return repairCatalogText(text)
+  return normalizeDashes(repairCatalogText(text))
     .replace(/\uFFFD/g, ' ')
-    .replace(/\u2019|\u2018/g, "'")
+    .replace(/\u2019|\u2018|\u02BC/g, "'")
     .replace(/\u201C|\u201D/g, '"')
-    .replace(/\u2013|\u2014/g, '-');
+    .replace(/\u2026/g, '...')
+    .replace(/\u00A0/g, ' ');
 }
 
 /** Encode text to CP850 bytes for ESC/POS printers. */
@@ -60,5 +61,5 @@ export function escposCp850Encode(text: string): Uint8Array {
   return Uint8Array.from(out);
 }
 
-/** ESC t 2 ù select CP850 on Epson-compatible printers. */
+/** ESC t 2 - select CP850 on Epson-compatible printers. */
 export const ESC_CODEPAGE_CP850 = new Uint8Array([0x1b, 0x74, 0x02]);

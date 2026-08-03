@@ -8,7 +8,7 @@ Native **Android POS** (`app/`) plus **ManuPOS** backend panel, online shop, and
 |-------|------|
 | Android POS | `app/` (unchanged) |
 | API (TypeScript / Drizzle) | `backend/` |
-| Superadmin + merchant + shop UI | `dashboard/` |
+| Superadmin + merchant + shop UI | `dashboard/` (PWA install: see `dashboard/PWA.md`) |
 | Chaslay domains | `deploy/Caddyfile.chaslay` |
 | Compose | `docker-compose.yml` |
 

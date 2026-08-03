@@ -91,10 +91,10 @@ export default function Customers() {
             {customers.map((customer) => (
               <tr key={customer.id} className="border-b last:border-0">
                 <td className="py-3 font-medium">
-                  {[customer.firstName, customer.lastName].filter(Boolean).join(' ') || '—'}
+                  {[customer.firstName, customer.lastName].filter(Boolean).join(' ') || '-'}
                 </td>
-                <td className="py-3">{customer.email || '—'}</td>
-                <td className="py-3">{customer.phone || '—'}</td>
+                <td className="py-3">{customer.email || '-'}</td>
+                <td className="py-3">{customer.phone || '-'}</td>
                 <td className="py-3">{customer.loyaltyPoints ?? 0}</td>
                 <td className="py-3">CHF {Number(customer.totalSpent || 0).toFixed(2)}</td>
               </tr>

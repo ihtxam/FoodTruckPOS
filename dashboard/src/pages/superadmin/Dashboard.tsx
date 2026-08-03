@@ -51,7 +51,7 @@ function SuperadminShell() {
           onLanguageChange={changeLanguage}
         />
 
-        <main className="panel-main flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 min-h-0">
+        <main className="panel-main flex-1 overflow-y-auto overflow-x-clip p-3 sm:p-4 min-h-0">
           <Routes>
             <Route index element={<Overview />} />
             <Route path="merchants" element={<Merchants />} />

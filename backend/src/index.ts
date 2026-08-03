@@ -9,6 +9,7 @@ import merchantRoutes from "@/routes/merchant.routes";
 import paymentRoutes from "@/routes/payment.routes";
 import webshopRoutes from "@/routes/webshop.routes";
 import loyaltyRoutes from "@/routes/loyalty.routes";
+import giftCardsRoutes from "@/routes/gift-cards.routes";
 import syncRoutes from "@/routes/sync.routes";
 import terminalsRoutes from "@/routes/terminals.routes";
 import shopRoutes from "@/routes/shop.routes";
@@ -97,14 +98,20 @@ const downloadsRoot = path.join(__dirname, "..", "public", "downloads");
 app.use(
   "/downloads",
   express.static(downloadsRoot, {
-    fallthrough: true,
+    // Missing file → 404 from static (do not fall through to SPA-style handlers)
+    fallthrough: false,
     maxAge: "1h",
     setHeaders(res, filePath) {
       if (filePath.endsWith(".exe")) {
         res.setHeader("Content-Type", "application/octet-stream");
         res.setHeader("Content-Disposition", `attachment; filename="${path.basename(filePath)}"`);
+        // Prevent proxies from gzip/brotli-transforming the binary
+        res.setHeader("Content-Encoding", "identity");
+        res.setHeader("X-Content-Type-Options", "nosniff");
+        res.setHeader("Cache-Control", "public, max-age=3600");
+      } else {
+        res.setHeader("Cache-Control", "public, max-age=3600");
       }
-      res.setHeader("Cache-Control", "public, max-age=3600");
     },
   })
 );
@@ -129,6 +136,7 @@ app.use("/api/merchant", staffRoutes);
 app.use("/api/payment", paymentRoutes);
 app.use("/api/webshop", webshopRoutes);
 app.use("/api/loyalty", loyaltyRoutes);
+app.use("/api/gift-cards", giftCardsRoutes);
 app.use("/api/sync", syncRoutes);
 app.use("/api/terminals", terminalsRoutes);
 app.use("/api/shop", shopRoutes);

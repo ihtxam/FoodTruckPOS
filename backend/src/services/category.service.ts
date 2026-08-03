@@ -4,6 +4,7 @@ import {
   normalizeHexColor,
   paletteColorAt,
 } from "@/lib/category-colors";
+import { repairCatalogText } from "@/lib/text-encoding";
 import { eq, and, asc, desc, max, sql, count } from "drizzle-orm";
 
 export class CategoryService {
@@ -39,8 +40,8 @@ export class CategoryService {
         .insert(schema.categories)
         .values({
           merchantId,
-          name,
-          description,
+          name: repairCatalogText(name),
+          description: description ? repairCatalogText(description) : description,
           color: resolvedColor,
           sortOrder: Number(nextSort) || 0,
         })
@@ -145,9 +146,14 @@ export class CategoryService {
     const db = getDb();
 
     try {
+      const patched = { ...updates };
+      if (typeof patched.name === "string") patched.name = repairCatalogText(patched.name);
+      if (typeof patched.description === "string") {
+        patched.description = repairCatalogText(patched.description);
+      }
       const category = await db
         .update(schema.categories)
-        .set(updates)
+        .set(patched)
         .where(
           and(
             eq(schema.categories.id, categoryId),

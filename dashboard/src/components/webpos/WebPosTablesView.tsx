@@ -37,9 +37,15 @@ const STATUS_COLOR: Record<TableStatus, string> = {
 type Props = {
   onSelectTable?: (table: { id: string; label: string }) => void;
   selectedTableId?: string | null;
+  /** Table ids that have an in-session open draft cart */
+  draftTableIds?: string[];
 };
 
-export default function WebPosTablesView({ onSelectTable, selectedTableId }: Props) {
+export default function WebPosTablesView({
+  onSelectTable,
+  selectedTableId,
+  draftTableIds = [],
+}: Props) {
   const { t } = useI18n();
   const [loading, setLoading] = useState(true);
   const [plans, setPlans] = useState<FloorPlanData[]>([]);
@@ -118,6 +124,8 @@ export default function WebPosTablesView({ onSelectTable, selectedTableId }: Pro
         >
           {activePlan.tables.map((table) => {
             const selected = selectedTableId === table.id;
+            const hasDraft = draftTableIds.includes(table.id);
+            const statusColor = hasDraft ? STATUS_COLOR.occupied : STATUS_COLOR[table.status];
             return (
               <button
                 key={table.id}
@@ -132,13 +140,15 @@ export default function WebPosTablesView({ onSelectTable, selectedTableId }: Pro
                   width: table.width,
                   height: table.height,
                   transform: `rotate(${table.rotation || 0}deg)`,
-                  backgroundColor: `${STATUS_COLOR[table.status]}22`,
-                  borderColor: STATUS_COLOR[table.status],
+                  backgroundColor: `${statusColor}22`,
+                  borderColor: statusColor,
                   color: '#1c1917',
                 }}
               >
                 <span>{table.label}</span>
-                <span className="text-[10px] font-normal opacity-70">{table.capacity}p</span>
+                <span className="text-[10px] font-normal opacity-70">
+                  {hasDraft ? t('webPosOpenCart') : `${table.capacity}p`}
+                </span>
               </button>
             );
           })}

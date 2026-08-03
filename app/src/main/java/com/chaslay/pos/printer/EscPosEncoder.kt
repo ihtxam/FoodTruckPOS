@@ -7,16 +7,17 @@ import java.text.Normalizer
 object EscPosEncoder {
     private val CP850 = Charset.forName("CP850")
 
-    /** Normalize symbols / mojibake before CP850 encoding. */
+    /** Normalize symbols / mojibake / fancy dashes before CP850 encoding. */
     fun normalizeForPrint(text: String): String =
-        TextEncoding.repairCatalogText(text)
+        TextEncoding.normalizeDashes(TextEncoding.repairCatalogText(text))
             .replace('\uFFFD', ' ')
             .replace('\u2019', '\'')
             .replace('\u2018', '\'')
+            .replace('\u02BC', '\'')
             .replace('\u201C', '"')
             .replace('\u201D', '"')
-            .replace('\u2013', '-')
-            .replace('\u2014', '-')
+            .replace("\u2026", "...")
+            .replace('\u00A0', ' ')
 
     fun encode(text: String): ByteArray {
         val normalized = normalizeForPrint(text)
@@ -26,6 +27,7 @@ object EscPosEncoder {
                 char.code <= 0x7F -> bytes.add(char.code.toByte())
                 else -> {
                     val encoded = char.toString().toByteArray(CP850)
+                    // Charset may replace unsupported glyphs with '?'; only accept a real single-byte mapping.
                     if (encoded.size == 1 && encoded[0] != '?'.code.toByte()) {
                         bytes.add(encoded[0])
                     } else {

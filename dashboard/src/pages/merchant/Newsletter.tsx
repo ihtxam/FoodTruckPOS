@@ -190,7 +190,7 @@ export default function Newsletter() {
               className="input"
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
-              placeholder="{{businessName}} — news"
+              placeholder="{{businessName}} - news"
               required
             />
           </label>

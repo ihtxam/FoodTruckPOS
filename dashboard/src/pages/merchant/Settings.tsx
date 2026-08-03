@@ -5,10 +5,11 @@ import {
   CreditCard,
   Globe2,
   Languages,
-  LayoutGrid,
   Mail,
+  Monitor,
   Percent,
   Printer,
+  Search,
   UtensilsCrossed,
 } from 'lucide-react';
 import api from '@/lib/api';
@@ -55,6 +56,8 @@ interface SettingsData {
     splitBillsEnabled?: boolean;
     maxSplitParts?: number;
     courseSendMode?: 'fire_per_course' | 'send_all_once';
+    cartSide?: 'left' | 'right';
+    postSuccessTarget?: 'register' | 'tables';
   } | null;
   shopPathUrl?: string | null;
   shopSubdomainUrl?: string | null;
@@ -146,7 +149,22 @@ interface TerminalRow {
   status: string;
 }
 
-type TabId = 'business' | 'taxes' | 'tables' | 'shop' | 'operations' | 'payments' | 'receipt' | 'email' | 'language';
+type TabId =
+  | 'business'
+  | 'taxes'
+  | 'tables'
+  | 'shop'
+  | 'pos'
+  | 'payments'
+  | 'receipt'
+  | 'email'
+  | 'language';
+
+type SettingsSearchEntry = {
+  id: string;
+  tab: TabId;
+  keywords: string[];
+};
 
 function Field({
   label,
@@ -170,13 +188,25 @@ function Section({
   title,
   description,
   children,
+  id,
+  highlight,
+  dimmed,
 }: {
   title: string;
   description?: string;
   children: ReactNode;
+  id?: string;
+  highlight?: boolean;
+  dimmed?: boolean;
 }) {
   return (
-    <section className="space-y-4">
+    <section
+      id={id}
+      data-settings-section={id}
+      className={`space-y-4 rounded-md transition-colors ${
+        highlight ? 'bg-[var(--bg-muted)] ring-2 ring-[var(--ring)] p-3 sm:p-4' : ''
+      } ${dimmed ? 'opacity-40' : ''}`}
+    >
       <div>
         <h2 className="text-base font-semibold tracking-tight">{title}</h2>
         {description ? <p className="page-sub mt-1">{description}</p> : null}
@@ -255,12 +285,15 @@ export default function Settings() {
   const [savingReceipt, setSavingReceipt] = useState(false);
   const [savingTerminal, setSavingTerminal] = useState(false);
   const vacationImageInputRef = useRef<HTMLInputElement>(null);
+  const [settingsQuery, setSettingsQuery] = useState('');
+  const [highlightId, setHighlightId] = useState<string | null>(null);
   const [tab, setTab] = useState<TabId>(() => {
     try {
       const q = new URLSearchParams(window.location.search).get('tab');
       if (q === 'payments') return 'payments';
       if (q === 'tables') return 'tables';
       if (q === 'taxes') return 'taxes';
+      if (q === 'pos' || q === 'operations') return 'pos';
     } catch {
       /* ignore */
     }
@@ -274,7 +307,7 @@ export default function Settings() {
         { id: 'taxes' as const, label: t('settingsTaxes'), icon: Percent },
         { id: 'tables' as const, label: t('settingsTables'), icon: UtensilsCrossed },
         { id: 'shop' as const, label: t('shop'), icon: Globe2 },
-        { id: 'operations' as const, label: t('settingsOperations'), icon: LayoutGrid },
+        { id: 'pos' as const, label: t('settingsPos'), icon: Monitor },
         { id: 'payments' as const, label: t('settingsPayments'), icon: CreditCard },
         { id: 'receipt' as const, label: t('settingsReceipt'), icon: Printer },
         { id: 'email' as const, label: t('settingsEmail'), icon: Mail },
@@ -282,6 +315,197 @@ export default function Settings() {
       ] as const,
     [t]
   );
+
+  const searchIndex = useMemo<SettingsSearchEntry[]>(
+    () => [
+      {
+        id: 'pos-layout',
+        tab: 'pos',
+        keywords: [
+          'cart',
+          'cart side',
+          'cart position',
+          'left',
+          'right',
+          'layout',
+          'panier',
+          'position panier',
+          'gauche',
+          'droite',
+          'warenkorb',
+          'position',
+          'links',
+          'rechts',
+          'post success',
+          'after payment',
+          'navigate',
+          'après paiement',
+          'nach zahlung',
+          'theme',
+          'color',
+          'couleur',
+          'farbe',
+          'teal',
+          'violet',
+          t('posCartSide'),
+          t('posCartSideLeft'),
+          t('posCartSideRight'),
+          t('webPosPostSuccessNav'),
+          t('posColorTheme'),
+          t('posLayoutSettings'),
+        ],
+      },
+      {
+        id: 'pos-courses',
+        tab: 'pos',
+        keywords: [
+          'courses',
+          'course',
+          'cours',
+          'gänge',
+          'gange',
+          'gang',
+          'fire',
+          'kitchen',
+          'send mode',
+          t('coursesEnabled'),
+          t('courseSendMode'),
+        ],
+      },
+      {
+        id: 'pos-checkout',
+        tab: 'pos',
+        keywords: [
+          'tips',
+          'pourboire',
+          'trinkgeld',
+          'discount',
+          'remise',
+          'rabatt',
+          'quick cash',
+          'split',
+          'checkout',
+          t('posCheckoutSettings'),
+          t('tipsEnabled'),
+          t('discountsEnabled'),
+          t('quickCashEnabled'),
+          t('splitBillsEnabled'),
+        ],
+      },
+      {
+        id: 'pos-payments',
+        tab: 'pos',
+        keywords: [
+          'express',
+          'express checkout',
+          'cash',
+          'card',
+          'terminal',
+          'paiement',
+          'zahlung',
+          t('webposExpress'),
+          t('webposPaymentMethods'),
+          t('webposCash'),
+          t('webposCard'),
+          t('webposTerminal'),
+        ],
+      },
+      {
+        id: 'pos-shifts',
+        tab: 'pos',
+        keywords: [
+          'shift',
+          'shifts',
+          'caisse',
+          'kasse',
+          'float',
+          'operations',
+          'opérations',
+          t('settingsOperations'),
+          t('shiftsEnabled'),
+          t('webPosShiftMenu'),
+        ],
+      },
+      {
+        id: 'tables-floor',
+        tab: 'tables',
+        keywords: ['tables', 'floor', 'plan', 'pax', t('floorPlanEnabled'), t('paxOrderingEnabled')],
+      },
+      {
+        id: 'payments-adyen',
+        tab: 'payments',
+        keywords: ['adyen', 'swisspayout', 'terminal', t('adyenCredentials')],
+      },
+      {
+        id: 'business-profile',
+        tab: 'business',
+        keywords: ['business', 'name', 'address', 'vat', t('businessSettings')],
+      },
+      {
+        id: 'taxes-rates',
+        tab: 'taxes',
+        keywords: ['tax', 'vat', 'tva', 'mwst', t('taxRates')],
+      },
+      {
+        id: 'shop-online',
+        tab: 'shop',
+        keywords: ['shop', 'online', 'domain', 'subdomain', t('shop')],
+      },
+      {
+        id: 'receipt-print',
+        tab: 'receipt',
+        keywords: ['receipt', 'printer', 'kitchen', 'ticket', t('settingsReceipt')],
+      },
+      {
+        id: 'email-smtp',
+        tab: 'email',
+        keywords: ['email', 'smtp', 'marketing', t('settingsEmail')],
+      },
+      {
+        id: 'language-panel',
+        tab: 'language',
+        keywords: ['language', 'langue', 'sprache', t('language')],
+      },
+    ],
+    [t]
+  );
+
+  const normalizedQuery = settingsQuery.trim().toLowerCase();
+  const matchedSearch = useMemo(() => {
+    if (!normalizedQuery) return [] as SettingsSearchEntry[];
+    return searchIndex.filter((entry) =>
+      entry.keywords.some((kw) => kw.toLowerCase().includes(normalizedQuery))
+    );
+  }, [normalizedQuery, searchIndex]);
+
+  const matchedIds = useMemo(() => new Set(matchedSearch.map((m) => m.id)), [matchedSearch]);
+  const matchedTabs = useMemo(() => new Set(matchedSearch.map((m) => m.tab)), [matchedSearch]);
+
+  useEffect(() => {
+    if (!normalizedQuery) {
+      setHighlightId(null);
+      return;
+    }
+    const matches = searchIndex.filter((entry) =>
+      entry.keywords.some((kw) => kw.toLowerCase().includes(normalizedQuery))
+    );
+    if (matches.length === 0) {
+      setHighlightId(null);
+      return;
+    }
+    const best = matches[0];
+    setTab(best.tab);
+    setHighlightId(best.id);
+    const timer = window.setTimeout(() => {
+      document.getElementById(best.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 80);
+    return () => window.clearTimeout(timer);
+    // Jump only when the query text changes — not on every match-list identity change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [normalizedQuery]);
+
+  const isSectionVisible = (id: string) => !normalizedQuery || matchedIds.has(id);
+  const isSectionHighlight = (id: string) => highlightId === id;
 
   useEffect(() => {
     const load = async () => {
@@ -351,6 +575,10 @@ export default function Settings() {
         shiftsEnabled: !!settings.shiftsEnabled,
         posColorTheme: settings.posColorTheme || 'teal',
         posCheckoutSettings: settings.posCheckoutSettings || undefined,
+        webposExpressEnabled: settings.webposExpressEnabled !== false,
+        webposCashEnabled: settings.webposCashEnabled !== false,
+        webposCardEnabled: settings.webposCardEnabled !== false,
+        webposTerminalEnabled: settings.webposTerminalEnabled !== false,
         panelLanguage: settings.panelLanguage || locale,
         emailSmtpSettings: {
           enabled: !!settings.emailSmtpSettings?.enabled,
@@ -531,30 +759,58 @@ export default function Settings() {
   }
 
   return (
-    <div className={`mx-auto space-y-3 sm:space-y-4 ${tab === 'tables' ? 'max-w-6xl' : 'max-w-3xl'}`}>
-      <div>
-        <h1 className="page-title">{t('settings')}</h1>
-        <p className="page-sub">
-          {t('settingsFor')} <span className="font-medium text-[var(--text)]">{settings.name}</span>
-        </p>
+    <div className="mx-auto w-full max-w-6xl space-y-3 sm:space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="page-title">{t('settings')}</h1>
+          <p className="page-sub">
+            {t('settingsFor')} <span className="font-medium text-[var(--text)]">{settings.name}</span>
+          </p>
+        </div>
+        <label className="relative block w-full sm:max-w-sm">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
+          <input
+            className="input pl-9"
+            type="search"
+            value={settingsQuery}
+            onChange={(e) => setSettingsQuery(e.target.value)}
+            placeholder={t('settingsSearchPlaceholder')}
+            aria-label={t('settingsSearch')}
+          />
+        </label>
       </div>
+      {normalizedQuery ? (
+        <p className="text-xs muted">
+          {matchedSearch.length
+            ? t('settingsSearchMatches').replace('{count}', String(matchedSearch.length))
+            : t('settingsSearchNoMatches')}
+        </p>
+      ) : null}
 
-      <div className="card !p-0 overflow-x-hidden">
-        <div className="border-b border-[var(--border)] overflow-x-auto overscroll-x-contain touch-pan-x [-webkit-overflow-scrolling:touch]">
+      <div className="card !p-0 overflow-x-clip">
+        <div className="border-b border-[var(--border)] overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch]">
           <nav className="flex min-w-max gap-0.5 px-2 py-2" aria-label={t('settings')}>
             {tabs.map((item) => {
               const Icon = item.icon;
               const active = tab === item.id;
+              const searchHit = normalizedQuery ? matchedTabs.has(item.id) : false;
+              const searchMiss = normalizedQuery ? !searchHit : false;
               return (
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => setTab(item.id)}
+                  onClick={() => {
+                    setTab(item.id);
+                    if (normalizedQuery) {
+                      const first = matchedSearch.find((m) => m.tab === item.id);
+                      if (first) setHighlightId(first.id);
+                    }
+                  }}
                   className={`flex min-w-[4.75rem] flex-col items-center gap-1 rounded-md px-3 py-2 text-[11px] font-medium transition-colors ${
                     active
                       ? 'bg-[var(--bg-muted)] text-[var(--text)]'
                       : 'text-[var(--text-muted)] hover:bg-[var(--bg-muted)] hover:text-[var(--text)]'
-                  }`}
+                  } ${searchHit ? 'ring-1 ring-[var(--ring)]' : ''} ${searchMiss ? 'opacity-45' : ''}`}
                 >
                   <Icon className="h-4 w-4" />
                   <span className="whitespace-nowrap">{item.label}</span>
@@ -1117,7 +1373,13 @@ export default function Settings() {
           {tab === 'tables' && (
             <div className="space-y-5">
               <form onSubmit={onSave} className="space-y-5">
-                <Section title={t('settingsTables')} description={t('floorPlanSettingsHint')}>
+                <Section
+                  id="tables-floor"
+                  title={t('settingsTables')}
+                  description={t('floorPlanSettingsHint')}
+                  highlight={isSectionHighlight('tables-floor')}
+                  dimmed={normalizedQuery ? !isSectionVisible('tables-floor') : false}
+                >
                   <label className="flex items-start gap-2.5 rounded-md border border-[var(--border)] px-3 py-2.5 text-sm">
                     <input
                       type="checkbox"
@@ -1145,44 +1407,20 @@ export default function Settings() {
                       <span className="text-xs muted">{t('paxOrderingHint')}</span>
                     </span>
                   </label>
-                  <label className="flex items-start gap-2.5 rounded-md border border-[var(--border)] px-3 py-2.5 text-sm">
-                    <input
-                      type="checkbox"
-                      className="mt-0.5"
-                      checked={!!settings.coursesEnabled}
-                      onChange={(e) =>
-                        setSettings({
-                          ...settings,
-                          coursesEnabled: e.target.checked,
-                          floorPlanEnabled: e.target.checked ? true : settings.floorPlanEnabled,
-                        })
-                      }
-                    />
-                    <span>
-                      <span className="font-medium block">{t('coursesEnabled')}</span>
-                      <span className="text-xs muted">{t('coursesEnabledHint')}</span>
-                    </span>
-                  </label>
-                  {settings.coursesEnabled ? (
-                    <Field label={t('courseSendMode')} hint={t('courseSendModeHint')}>
-                      <select
-                        className="input"
-                        value={settings.posCheckoutSettings?.courseSendMode || 'fire_per_course'}
-                        onChange={(e) =>
-                          setSettings({
-                            ...settings,
-                            posCheckoutSettings: {
-                              ...(settings.posCheckoutSettings || {}),
-                              courseSendMode: e.target.value as 'fire_per_course' | 'send_all_once',
-                            },
-                          })
-                        }
-                      >
-                        <option value="fire_per_course">{t('courseSendModeFirePerCourse')}</option>
-                        <option value="send_all_once">{t('courseSendModeSendAllOnce')}</option>
-                      </select>
-                    </Field>
-                  ) : null}
+                  <p className="rounded-md border border-dashed border-[var(--border)] px-3 py-2.5 text-xs muted">
+                    {t('coursesMovedToPosHint')}{' '}
+                    <button
+                      type="button"
+                      className="font-medium text-[var(--text)] underline underline-offset-2"
+                      onClick={() => {
+                        setSettingsQuery('courses');
+                        setTab('pos');
+                        setHighlightId('pos-courses');
+                      }}
+                    >
+                      {t('settingsPos')}
+                    </button>
+                  </p>
                 </Section>
                 <div className="flex justify-end border-t border-[var(--border)] pt-4">
                   <button type="submit" className="btn-primary" disabled={saving}>
@@ -1196,81 +1434,75 @@ export default function Settings() {
             </div>
           )}
 
-          {tab === 'operations' && (
-            <form onSubmit={onSave} className="space-y-5">
-              <div>
-                <Section title={t('posCheckoutSettings')} description={t('posCheckoutHint')}>
-                  {(
-                    [
-                      ['tipsEnabled', 'tipsEnabled'],
-                      ['allowCustomTip', 'allowCustomTip'],
-                      ['discountsEnabled', 'discountsEnabled'],
-                      ['quickCashEnabled', 'quickCashEnabled'],
-                      ['splitBillsEnabled', 'splitBillsEnabled'],
-                    ] as const
-                  ).map(([key, labelKey]) => (
-                    <label
-                      key={key}
-                      className="flex items-start gap-2.5 rounded-md border border-[var(--border)] px-3 py-2.5 text-sm"
-                    >
-                      <input
-                        type="checkbox"
-                        className="mt-0.5"
-                        checked={settings.posCheckoutSettings?.[key] !== false}
-                        onChange={(e) =>
-                          setSettings({
-                            ...settings,
-                            posCheckoutSettings: {
-                              ...(settings.posCheckoutSettings || {}),
-                              [key]: e.target.checked,
-                            },
-                          })
-                        }
-                      />
-                      <span className="font-medium">{t(labelKey)}</span>
-                    </label>
-                  ))}
-                  <Field label={t('quickCashDenominations')} hint={t('quickCashDenominationsHint')}>
-                    <input
-                      className="input"
-                      value={(settings.posCheckoutSettings?.quickCashDenominations || [10, 20, 50, 100]).join(', ')}
-                      onChange={(e) => {
-                        const dens = e.target.value
-                          .split(/[,;\s]+/)
-                          .map((x) => Number(x))
-                          .filter((n) => Number.isFinite(n) && n > 0);
+          {tab === 'pos' && (
+            <form onSubmit={onSave} className="space-y-8">
+              <Section
+                id="pos-layout"
+                title={t('posLayoutSettings')}
+                description={t('posLayoutSettingsHint')}
+                highlight={isSectionHighlight('pos-layout')}
+                dimmed={normalizedQuery ? !isSectionVisible('pos-layout') : false}
+              >
+                <Field label={t('posCartSide')} hint={t('posCartSideHint')}>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {(
+                      [
+                        ['right', t('posCartSideRight')],
+                        ['left', t('posCartSideLeft')],
+                      ] as const
+                    ).map(([side, label]) => {
+                      const active = (settings.posCheckoutSettings?.cartSide || 'right') === side;
+                      return (
+                        <label
+                          key={side}
+                          className={`flex cursor-pointer items-center gap-2.5 rounded-md border px-3 py-2.5 text-sm ${
+                            active
+                              ? 'border-[var(--text)] bg-[var(--bg-muted)]'
+                              : 'border-[var(--border)]'
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="cartSide"
+                            className="mt-0.5"
+                            checked={active}
+                            onChange={() =>
+                              setSettings({
+                                ...settings,
+                                posCheckoutSettings: {
+                                  ...(settings.posCheckoutSettings || {}),
+                                  cartSide: side,
+                                },
+                              })
+                            }
+                          />
+                          <span className="font-medium">{label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </Field>
+                <div id="pos-post-success">
+                  <Field label={t('webPosPostSuccessNav')} hint={t('posPostSuccessHint')}>
+                    <select
+                      className="input max-w-md"
+                      value={settings.posCheckoutSettings?.postSuccessTarget || 'register'}
+                      onChange={(e) =>
                         setSettings({
                           ...settings,
                           posCheckoutSettings: {
                             ...(settings.posCheckoutSettings || {}),
-                            quickCashDenominations: dens.length ? dens : [10, 20, 50, 100],
+                            postSuccessTarget: e.target.value as 'register' | 'tables',
                           },
-                        });
-                      }}
-                    />
-                  </Field>
-                </Section>
-              </div>
-
-              <div className="border-t border-[var(--border)] pt-4">
-                <Section title={t('webPos')} description={t('webPosHint')}>
-                  <a href="/merchant/pos" className="btn-secondary inline-flex">
-                    {t('openWebPos')}
-                  </a>
-                  <label className="mt-3 flex items-start gap-2.5 rounded-md border border-[var(--border)] px-3 py-2.5 text-sm">
-                    <input
-                      type="checkbox"
-                      className="mt-0.5"
-                      checked={!!settings.shiftsEnabled}
-                      onChange={(e) =>
-                        setSettings({ ...settings, shiftsEnabled: e.target.checked })
+                        })
                       }
-                    />
-                    <span>
-                      <span className="font-medium block">{t('shiftsEnabled')}</span>
-                      <span className="text-xs muted">{t('shiftsEnabledHint')}</span>
-                    </span>
-                  </label>
+                    >
+                      <option value="register">{t('webPosTabRegister')}</option>
+                      <option value="tables">{t('webPosTabTables')}</option>
+                    </select>
+                  </Field>
+                </div>
+                <div id="pos-theme">
                   <Field label={t('posColorTheme')} hint={t('posColorThemeHint')}>
                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                       {(
@@ -1308,8 +1540,182 @@ export default function Settings() {
                       })}
                     </div>
                   </Field>
-                </Section>
-              </div>
+                </div>
+              </Section>
+
+              <Section
+                id="pos-shifts"
+                title={t('settingsOperations')}
+                description={t('shiftsEnabledHint')}
+                highlight={isSectionHighlight('pos-shifts')}
+                dimmed={normalizedQuery ? !isSectionVisible('pos-shifts') : false}
+              >
+                <label className="flex items-start gap-2.5 rounded-md border-2 border-[var(--border)] bg-[var(--bg-muted)] px-3 py-3 text-sm">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={!!settings.shiftsEnabled}
+                    onChange={(e) => setSettings({ ...settings, shiftsEnabled: e.target.checked })}
+                  />
+                  <span>
+                    <span className="font-medium block">{t('shiftsEnabled')}</span>
+                    <span className="text-xs muted">{t('shiftsEnabledHint')}</span>
+                    {settings.shiftsEnabled ? (
+                      <span className="mt-1.5 block text-xs font-medium text-teal-700">
+                        {t('webPosShiftOpenHint')}
+                      </span>
+                    ) : null}
+                  </span>
+                </label>
+                <a href="/merchant/pos" className="btn-secondary mt-3 inline-flex">
+                  {t('openWebPos')}
+                </a>
+              </Section>
+
+              <Section
+                id="pos-courses"
+                title={t('coursesEnabled')}
+                description={t('coursesEnabledHint')}
+                highlight={isSectionHighlight('pos-courses')}
+                dimmed={normalizedQuery ? !isSectionVisible('pos-courses') : false}
+              >
+                <label className="flex items-start gap-2.5 rounded-md border border-[var(--border)] px-3 py-2.5 text-sm">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={!!settings.coursesEnabled}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        coursesEnabled: e.target.checked,
+                        floorPlanEnabled: e.target.checked ? true : settings.floorPlanEnabled,
+                      })
+                    }
+                  />
+                  <span>
+                    <span className="font-medium block">{t('coursesEnabled')}</span>
+                    <span className="text-xs muted">{t('coursesEnabledHint')}</span>
+                  </span>
+                </label>
+                {settings.coursesEnabled ? (
+                  <Field label={t('courseSendMode')} hint={t('courseSendModeHint')}>
+                    <select
+                      className="input"
+                      value={settings.posCheckoutSettings?.courseSendMode || 'fire_per_course'}
+                      onChange={(e) =>
+                        setSettings({
+                          ...settings,
+                          posCheckoutSettings: {
+                            ...(settings.posCheckoutSettings || {}),
+                            courseSendMode: e.target.value as 'fire_per_course' | 'send_all_once',
+                          },
+                        })
+                      }
+                    >
+                      <option value="fire_per_course">{t('courseSendModeFirePerCourse')}</option>
+                      <option value="send_all_once">{t('courseSendModeSendAllOnce')}</option>
+                    </select>
+                  </Field>
+                ) : null}
+              </Section>
+
+              <Section
+                id="pos-checkout"
+                title={t('posCheckoutSettings')}
+                description={t('posCheckoutHint')}
+                highlight={isSectionHighlight('pos-checkout')}
+                dimmed={normalizedQuery ? !isSectionVisible('pos-checkout') : false}
+              >
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {(
+                    [
+                      ['tipsEnabled', 'tipsEnabled'],
+                      ['allowCustomTip', 'allowCustomTip'],
+                      ['discountsEnabled', 'discountsEnabled'],
+                      ['quickCashEnabled', 'quickCashEnabled'],
+                      ['splitBillsEnabled', 'splitBillsEnabled'],
+                    ] as const
+                  ).map(([key, labelKey]) => (
+                    <label
+                      key={key}
+                      className="flex items-start gap-2.5 rounded-md border border-[var(--border)] px-3 py-2.5 text-sm"
+                    >
+                      <input
+                        type="checkbox"
+                        className="mt-0.5"
+                        checked={settings.posCheckoutSettings?.[key] !== false}
+                        onChange={(e) =>
+                          setSettings({
+                            ...settings,
+                            posCheckoutSettings: {
+                              ...(settings.posCheckoutSettings || {}),
+                              [key]: e.target.checked,
+                            },
+                          })
+                        }
+                      />
+                      <span className="font-medium">{t(labelKey)}</span>
+                    </label>
+                  ))}
+                </div>
+                <Field label={t('quickCashDenominations')} hint={t('quickCashDenominationsHint')}>
+                  <input
+                    className="input"
+                    value={(settings.posCheckoutSettings?.quickCashDenominations || [10, 20, 50, 100]).join(
+                      ', '
+                    )}
+                    onChange={(e) => {
+                      const dens = e.target.value
+                        .split(/[,;\s]+/)
+                        .map((x) => Number(x))
+                        .filter((n) => Number.isFinite(n) && n > 0);
+                      setSettings({
+                        ...settings,
+                        posCheckoutSettings: {
+                          ...(settings.posCheckoutSettings || {}),
+                          quickCashDenominations: dens.length ? dens : [10, 20, 50, 100],
+                        },
+                      });
+                    }}
+                  />
+                </Field>
+              </Section>
+
+              <Section
+                id="pos-payments"
+                title={t('webposPaymentMethods')}
+                description={t('webposPaymentMethodsHint')}
+                highlight={isSectionHighlight('pos-payments')}
+                dimmed={normalizedQuery ? !isSectionVisible('pos-payments') : false}
+              >
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {(
+                    [
+                      ['webposExpressEnabled', t('webposExpress')] as const,
+                      ['webposCashEnabled', t('webposCash')] as const,
+                      ['webposCardEnabled', t('webposCard')] as const,
+                      ['webposTerminalEnabled', t('webposTerminal')] as const,
+                    ] as const
+                  ).map(([key, label]) => (
+                    <label
+                      key={key}
+                      className="flex items-center gap-2 rounded-lg border border-[var(--border)] px-3 py-2.5 text-sm"
+                    >
+                      <input
+                        type="checkbox"
+                        className="rounded"
+                        checked={settings?.[key] !== false}
+                        onChange={(e) =>
+                          setSettings((prev) =>
+                            prev ? { ...prev, [key]: e.target.checked } : prev
+                          )
+                        }
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+              </Section>
 
               <div className="flex justify-end border-t border-[var(--border)] pt-4">
                 <button type="submit" className="btn-primary" disabled={saving}>
@@ -1322,7 +1728,13 @@ export default function Settings() {
           {tab === 'payments' && (
             <div className="space-y-8">
               <form onSubmit={saveAdyen} className="space-y-5">
-                <Section title={t('adyenCredentials')} description={t('adyenSettingsHint')}>
+                <Section
+                  id="payments-adyen"
+                  title={t('adyenCredentials')}
+                  description={t('adyenSettingsHint')}
+                  highlight={isSectionHighlight('payments-adyen')}
+                  dimmed={normalizedQuery ? !isSectionVisible('payments-adyen') : false}
+                >
                   <p className="text-sm text-[var(--text-muted)]">
                     {t('swisspayoutNoAccount')}{' '}
                     <a
@@ -1412,63 +1824,47 @@ export default function Settings() {
               </form>
 
               <form onSubmit={saveWebposPayments} className="space-y-5 border-t border-[var(--border)] pt-6">
-                <Section title={t('webposPaymentMethods')} description={t('webposPaymentMethodsHint')}>
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    {(
-                      [
-                        ['webposExpressEnabled', t('webposExpress')] as const,
-                        ['webposCashEnabled', t('webposCash')] as const,
-                        ['webposCardEnabled', t('webposCard')] as const,
-                        ['webposTerminalEnabled', t('webposTerminal')] as const,
-                      ] as const
-                    ).map(([key, label]) => (
-                      <label
-                        key={key}
-                        className="flex items-center gap-2 rounded-lg border border-[var(--border)] px-3 py-2.5 text-sm"
-                      >
-                        <input
-                          type="checkbox"
-                          className="rounded"
-                          checked={settings?.[key] !== false}
-                          onChange={(e) =>
-                            setSettings((prev) =>
-                              prev ? { ...prev, [key]: e.target.checked } : prev
-                            )
-                          }
-                        />
-                        {label}
-                      </label>
-                    ))}
-                  </div>
-                  <div className="mt-4 space-y-2 border-t border-[var(--border)] pt-4">
-                    <p className="text-sm font-medium">{t('adyenTerminalEnv')}</p>
-                    <label className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        className="rounded"
-                        checked={!!settings?.adyenLiveEnvironment}
-                        onChange={(e) =>
-                          setSettings((prev) =>
-                            prev ? { ...prev, adyenLiveEnvironment: e.target.checked } : prev
-                          )
-                        }
-                      />
-                      {t('adyenLiveMode')}
-                    </label>
-                    <label className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        className="rounded"
-                        checked={!!settings?.adyenUseLegacyEndpoint}
-                        onChange={(e) =>
-                          setSettings((prev) =>
-                            prev ? { ...prev, adyenUseLegacyEndpoint: e.target.checked } : prev
-                          )
-                        }
-                      />
-                      {t('adyenLegacyEndpoint')}
-                    </label>
-                  </div>
+                <Section title={t('adyenTerminalEnv')}>
+                  <p className="text-xs muted">
+                    {t('webposPaymentMethodsMovedHint')}{' '}
+                    <button
+                      type="button"
+                      className="font-medium text-[var(--text)] underline underline-offset-2"
+                      onClick={() => {
+                        setSettingsQuery('express');
+                        setTab('pos');
+                        setHighlightId('pos-payments');
+                      }}
+                    >
+                      {t('settingsPos')}
+                    </button>
+                  </p>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      className="rounded"
+                      checked={!!settings?.adyenLiveEnvironment}
+                      onChange={(e) =>
+                        setSettings((prev) =>
+                          prev ? { ...prev, adyenLiveEnvironment: e.target.checked } : prev
+                        )
+                      }
+                    />
+                    {t('adyenLiveMode')}
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      className="rounded"
+                      checked={!!settings?.adyenUseLegacyEndpoint}
+                      onChange={(e) =>
+                        setSettings((prev) =>
+                          prev ? { ...prev, adyenUseLegacyEndpoint: e.target.checked } : prev
+                        )
+                      }
+                    />
+                    {t('adyenLegacyEndpoint')}
+                  </label>
                 </Section>
                 <div className="flex justify-end border-t border-[var(--border)] pt-4">
                   <button type="submit" className="btn-primary" disabled={savingWebposPay}>
@@ -1780,7 +2176,7 @@ export default function Settings() {
                         },
                       })
                     }
-                    placeholder="We miss you — order again from {{businessName}}"
+                    placeholder="We miss you - order again from {{businessName}}"
                   />
                 </Field>
                 <Field label={t('reorderReminderBody')} hint={t('newsletterPlaceholders')}>
@@ -2073,10 +2469,19 @@ export default function Settings() {
                   <a
                     className="btn-primary inline-flex"
                     href={
-                      (import.meta.env.VITE_API_URL || 'http://localhost:3000/api').replace(
-                        /\/api\/?$/,
-                        ''
-                      ) + '/downloads/chaslay-print-agent-setup.exe'
+                      // Production dashboard uses VITE_API_URL=/api → same-origin /downloads/*
+                      // (Caddy proxies /downloads to the API; never hit SPA index.html).
+                      // Absolute API hosts (local / custom) keep their origin.
+                      (() => {
+                        const api = (import.meta.env.VITE_API_URL || 'http://localhost:3000/api').replace(
+                          /\/api\/?$/,
+                          ''
+                        );
+                        if (!api || api.startsWith('/')) {
+                          return '/downloads/chaslay-print-agent-setup.exe';
+                        }
+                        return `${api}/downloads/chaslay-print-agent-setup.exe`;
+                      })()
                     }
                     download
                   >

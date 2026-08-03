@@ -199,7 +199,7 @@ export default function CheckoutPage() {
           })),
         });
         if (cancelled) return;
-        // Cart lines already include deal prices — don't subtract the same offer again
+        // Cart lines already include deal prices - don't subtract the same offer again
         if (hasBaked) {
           setOfferDiscount(0);
           const badges = [
@@ -339,7 +339,7 @@ export default function CheckoutPage() {
     );
   }, [scheduleDays, scheduleDayOffset]);
 
-  // When closed (or ASAP unavailable), force "later" and auto-pick first slot — only if scheduled orders are allowed.
+  // When closed (or ASAP unavailable), force "later" and auto-pick first slot - only if scheduled orders are allowed.
   useEffect(() => {
     if (!merchant) return;
     const allowScheduled = merchant.scheduledOrdersEnabled !== false;
@@ -876,7 +876,7 @@ export default function CheckoutPage() {
                               on ? 'text-white/70' : 'text-stone-500'
                             }`}
                           >
-                            {meta?.etaMinutes || 30}–{(meta?.etaMinutes || 30) + 10} {t('shopMins')}
+                            {meta?.etaMinutes || 30}-{(meta?.etaMinutes || 30) + 10} {t('shopMins')}
                             {meta && !meta.open ? ` · ${t('shopClosed')}` : ''}
                           </span>
                         </button>
@@ -888,7 +888,7 @@ export default function CheckoutPage() {
                 <div className="rounded-xl border border-stone-200 bg-stone-50 px-3 py-3">
                   <p className="text-sm font-semibold">{channelLabel}</p>
                   <p className="text-[11px] text-stone-500 mt-0.5">
-                    {merchant?.channels?.[draft.channel]?.etaMinutes || 30}–
+                    {merchant?.channels?.[draft.channel]?.etaMinutes || 30}-
                     {(merchant?.channels?.[draft.channel]?.etaMinutes || 30) + 10} {t('shopMins')}
                     {merchant?.channels?.[draft.channel] && !merchant.channels[draft.channel].open
                       ? ` · ${t('shopClosed')}`
@@ -1262,7 +1262,7 @@ export default function CheckoutPage() {
 
               {offerDiscount > 0 ? (
                 <p className="text-sm text-amber-800 bg-amber-50 border border-amber-100 px-3 py-2">
-                  {(offerLabels.join(', ') || t('shopOffer')) + `: − CHF ${offerDiscount.toFixed(2)}`}
+                  {(offerLabels.join(', ') || t('shopOffer')) + `: - CHF ${offerDiscount.toFixed(2)}`}
                 </p>
               ) : null}
 
@@ -1329,7 +1329,7 @@ export default function CheckoutPage() {
                               {t('shopPointsChip').replace('{n}', String(pointsToRedeem))}
                             </span>
                             <span className="font-semibold text-teal-900">
-                              − CHF {pointsDiscount.toFixed(2)}
+                              - CHF {pointsDiscount.toFixed(2)}
                             </span>
                           </div>
                           <p className="text-xs text-stone-500">
@@ -1513,7 +1513,7 @@ export default function CheckoutPage() {
                     {payWithPoints && pointsDiscount > 0 ? (
                       <>
                         {t('shopPayWithPoints')}
-                        {' (−'}CHF {pointsDiscount.toFixed(2)})
+                        {' (-'}CHF {pointsDiscount.toFixed(2)})
                         {!pointsCoverFullOrder && (
                           <>
                             <br />
@@ -1633,7 +1633,7 @@ export default function CheckoutPage() {
                             onClick={() => setLineQty(lineKey, i.quantity - 1)}
                             aria-label="-"
                           >
-                            −
+                            -
                           </button>
                           <span className="w-6 text-center font-semibold">{i.quantity}</span>
                           <button
@@ -1768,7 +1768,7 @@ export default function CheckoutPage() {
                         className="w-7 h-7 border border-stone-300 text-sm font-semibold"
                         onClick={() => setLineQty(lineKey, i.quantity - 1)}
                       >
-                        −
+                        -
                       </button>
                       <span className="w-5 text-center font-semibold">{i.quantity}</span>
                       <button
@@ -1800,13 +1800,13 @@ export default function CheckoutPage() {
             {offerDiscount > 0 && (
               <div className="flex justify-between text-amber-800">
                 <span>{offerLabels.join(', ') || t('shopOffer')}</span>
-                <span>− CHF {offerDiscount.toFixed(2)}</span>
+                <span>- CHF {offerDiscount.toFixed(2)}</span>
               </div>
             )}
             {pointsDiscount > 0 && (
               <div className="flex justify-between text-teal-800">
                 <span>{t('shopPointsDiscount')}</span>
-                <span>− CHF {pointsDiscount.toFixed(2)}</span>
+                <span>- CHF {pointsDiscount.toFixed(2)}</span>
               </div>
             )}
             {deliveryFee > 0 && (

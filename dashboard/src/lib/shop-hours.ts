@@ -112,7 +112,7 @@ export function isChannelOpenAt(
       return mins >= a || mins < b;
     });
   const todayLabel =
-    slots.length === 0 ? 'Closed today' : slots.map((s) => `${s.open}–${s.close}`).join(', ');
+    slots.length === 0 ? 'Closed today' : slots.map((s) => `${s.open}-${s.close}`).join(', ');
   return { open, todayLabel, slots };
 }
 

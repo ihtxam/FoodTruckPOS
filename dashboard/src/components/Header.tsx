@@ -29,7 +29,7 @@ export default function Header({
 
   const backToSuperadmin = () => {
     if (!stopImpersonation()) {
-      toast.error('Superadmin session expired — please sign in again');
+      toast.error('Superadmin session expired - please sign in again');
       navigate('/login');
       return;
     }

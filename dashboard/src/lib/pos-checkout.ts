@@ -5,6 +5,8 @@ export type PosCheckoutDiscountPreset = {
 };
 
 export type CourseSendMode = 'fire_per_course' | 'send_all_once';
+export type CartSide = 'left' | 'right';
+export type PostSuccessTarget = 'register' | 'tables';
 
 export type PosCheckoutSettings = {
   tipsEnabled: boolean;
@@ -20,6 +22,10 @@ export type PosCheckoutSettings = {
   vatIncludedInPrice: boolean;
   /** Kitchen course firing mode for WebPOS / POS */
   courseSendMode: CourseSendMode;
+  /** WebPOS cart panel side. Default right. */
+  cartSide: CartSide;
+  /** After a successful payment, navigate to this WebPOS tab. */
+  postSuccessTarget: PostSuccessTarget;
 };
 
 export const DEFAULT_POS_CHECKOUT: PosCheckoutSettings = {
@@ -39,6 +45,8 @@ export const DEFAULT_POS_CHECKOUT: PosCheckoutSettings = {
   maxSplitParts: 8,
   vatIncludedInPrice: false,
   courseSendMode: 'fire_per_course',
+  cartSide: 'right',
+  postSuccessTarget: 'register',
 };
 
 export function normalizePosCheckoutSettings(raw: unknown): PosCheckoutSettings {
@@ -74,5 +82,7 @@ export function normalizePosCheckoutSettings(raw: unknown): PosCheckoutSettings 
     maxSplitParts: Math.max(2, Math.min(20, Number(src.maxSplitParts) || 8)),
     vatIncludedInPrice: src.vatIncludedInPrice === true,
     courseSendMode: src.courseSendMode === 'send_all_once' ? 'send_all_once' : 'fire_per_course',
+    cartSide: src.cartSide === 'left' ? 'left' : 'right',
+    postSuccessTarget: src.postSuccessTarget === 'tables' ? 'tables' : 'register',
   };
 }

@@ -334,6 +334,9 @@ export class ChaslayCompatService {
         cash: merchant.webposCashEnabled !== false,
         card: merchant.webposCardEnabled !== false,
         terminal: merchant.webposTerminalEnabled !== false && terminalReady,
+        giftCard:
+          merchant.webposGiftCardEnabled === true &&
+          !!(merchant.giftCardSettings as { enabled?: boolean } | null)?.enabled,
       },
       features: {
         courses_enabled: !!merchant.coursesEnabled,

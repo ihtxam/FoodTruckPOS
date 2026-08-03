@@ -218,6 +218,51 @@ ensure_env_production
 ln -sfn "$ENV_FILE" "$REPO_DIR/.env.production"
 ln -sfn "$ENV_FILE" "$REPO_DIR/.env"
 
+# Print-agent EXE is gitignored (~40MB). Cross-compile Windows binary with pkg in Docker.
+echo "=== Build print-agent Windows EXE ==="
+DOWNLOADS_DIR="$REPO_DIR/backend/public/downloads"
+mkdir -p "$DOWNLOADS_DIR"
+SETUP_EXE="$DOWNLOADS_DIR/chaslay-print-agent-setup.exe"
+if [[ "${SKIP_PRINT_AGENT_BUILD:-0}" != "1" ]]; then
+  BUILT_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+  if docker run --rm \
+    -e "BUILT_AT=$BUILT_AT" \
+    -v "$REPO_DIR/print-agent:/app" \
+    -v "$DOWNLOADS_DIR:/out" \
+    -w /app \
+    node:20-bookworm \
+    bash -c 'set -euo pipefail
+      npm ci
+      mkdir -p dist
+      npx pkg . --targets node18-win-x64 --output dist/chaslay-print-agent.exe
+      cp -f dist/chaslay-print-agent.exe dist/chaslay-print-agent-setup.exe
+      cp -f dist/chaslay-print-agent.exe /out/chaslay-print-agent.exe
+      cp -f dist/chaslay-print-agent-setup.exe /out/chaslay-print-agent-setup.exe
+      printf "%s\n" \
+        "{" \
+        "  \"name\": \"chaslay-print-agent\"," \
+        "  \"version\": \"1.2.0\"," \
+        "  \"setupFile\": \"chaslay-print-agent-setup.exe\"," \
+        "  \"builtAt\": \"${BUILT_AT}\"," \
+        "  \"platform\": \"win32-x64\"," \
+        "  \"signed\": false" \
+        "}" > /out/chaslay-print-agent.json
+      # Sanity: PE MZ header
+      head -c 2 /out/chaslay-print-agent-setup.exe | grep -q MZ
+      ls -la /out/chaslay-print-agent*.exe
+    '; then
+    echo "Print-agent EXE ready: $SETUP_EXE ($(wc -c < "$SETUP_EXE" | tr -d " ") bytes)"
+  else
+    echo "WARNING: print-agent build failed. /downloads will 404 until rebuilt."
+    echo "  Manual: powershell -File print-agent/build-installer.ps1 then scp EXE to $DOWNLOADS_DIR"
+  fi
+else
+  echo "SKIP_PRINT_AGENT_BUILD=1 - using existing $SETUP_EXE (if any)"
+fi
+if [[ ! -f "$SETUP_EXE" ]] || [[ "$(wc -c < "$SETUP_EXE" | tr -d " ")" -lt 1000000 ]]; then
+  echo "WARNING: $SETUP_EXE missing or too small - Windows will report a corrupted download"
+fi
+
 echo "=== Stop legacy backend compose (frees :80/:443) ==="
 if [[ -f "$REPO_DIR/backend/docker-compose.yml" ]]; then
   (cd "$REPO_DIR/backend" && docker compose down || true)
@@ -245,6 +290,19 @@ echo "local api: ${API_HEALTH:-unreachable}"
 curl -sf https://api.chaslay.com/health || true
 echo
 
+# Print-agent download must be a real PE, not SPA HTML / JSON 404
+PRINT_HDR="$(curl -sI https://app.chaslay.com/downloads/chaslay-print-agent-setup.exe || true)"
+PRINT_LEN="$(printf '%s' "$PRINT_HDR" | awk -F': ' 'tolower($1)=="content-length"{gsub(/\r/,""); print $2; exit}')"
+PRINT_CT="$(printf '%s' "$PRINT_HDR" | awk -F': ' 'tolower($1)=="content-type"{gsub(/\r/,""); print $2; exit}')"
+PRINT_MAGIC="$(curl -sL https://app.chaslay.com/downloads/chaslay-print-agent-setup.exe | head -c 2 | od -An -tx1 | tr -d ' \n' || true)"
+echo "print-agent download: Content-Type=${PRINT_CT:-?} Content-Length=${PRINT_LEN:-?} magic=${PRINT_MAGIC:-?}"
+if [[ "${PRINT_MAGIC:-}" != "4d5a" ]] || [[ "${PRINT_LEN:-0}" -lt 1000000 ]]; then
+  echo "WARNING: print-agent download is not a valid Windows EXE (expected MZ / ~40MB)"
+else
+  echo "print-agent download OK (MZ PE)"
+fi
+echo
+
 POS_AUTH_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://127.0.0.1:3000/v1/pos/auth/login \
   -H 'Content-Type: application/json' \
   -d '{"email":"healthcheck@chaslay.local","password":"wrong"}' || true)
@@ -268,7 +326,7 @@ echo "=== Email provider check ==="
 if grep -qE '^BREVO_API_KEY=.+' "$ENV_FILE" && grep -qE '^BREVO_FROM_EMAIL=.+' "$ENV_FILE"; then
   echo "Brevo ready for merchant invite emails"
 else
-  echo "WARNING: Brevo not fully configured — invite links will be copy-only until BREVO_API_KEY + BREVO_FROM_EMAIL are set"
+  echo "WARNING: Brevo not fully configured ? invite links will be copy-only until BREVO_API_KEY + BREVO_FROM_EMAIL are set"
 fi
 
 echo "=== Deploy complete ==="

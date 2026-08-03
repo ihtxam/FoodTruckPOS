@@ -540,7 +540,7 @@ export default function Products() {
       toast.success(
         `Import done: +${r.categoriesCreated} categories, +${r.productsCreated} products, ~${r.productsUpdated} updated`
       );
-      if (r.errors?.length) toast.error(`${r.errors.length} row error(s) — check file`);
+      if (r.errors?.length) toast.error(`${r.errors.length} row error(s) - check file`);
       await load();
     } catch (error: any) {
       toast.error(error.response?.data?.error || 'Import failed');
@@ -740,7 +740,7 @@ export default function Products() {
                     )}
                     <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm">
                       <span className="font-semibold text-emerald-700">{money(product.price)}</span>
-                      <span className="text-slate-500">SKU: {product.sku || '—'}</span>
+                      <span className="text-slate-500">SKU: {product.sku || '-'}</span>
                       <span className={stockOk ? 'text-emerald-600' : 'text-amber-600'}>
                         Stock: {product.stock}
                       </span>
@@ -843,7 +843,7 @@ export default function Products() {
                     <InfoCard label={t('category')} value={categoryName(product.categoryId)} />
                     <InfoCard label={t('type')} value={productTypeLabel(product)} />
                     <InfoCard label={t('stock')} value={`${product.stock} units`} />
-                    <InfoCard label={t('barcode')} value={product.barcode || '—'} />
+                    <InfoCard label={t('barcode')} value={product.barcode || '-'} />
                   </div>
                 </div>
               )}
@@ -945,7 +945,7 @@ export default function Products() {
                     />
                   ) : (
                     <div className="flex h-16 w-16 items-center justify-center rounded-md border border-dashed border-[var(--border)] text-xs muted">
-                      —
+                      -
                     </div>
                   )}
                   <div className="flex flex-wrap gap-2">
@@ -984,7 +984,7 @@ export default function Products() {
                   type="number"
                   min="1"
                   step="1"
-                  placeholder="e.g. 200 — leave empty for none"
+                  placeholder="e.g. 200 - leave empty for none"
                   value={form.loyaltyRewardPoints}
                   onChange={(e) => setForm({ ...form, loyaltyRewardPoints: e.target.value })}
                 />

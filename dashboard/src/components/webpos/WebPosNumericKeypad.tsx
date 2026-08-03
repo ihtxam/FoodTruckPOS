@@ -12,6 +12,10 @@ type Props = {
   showModeButtons?: boolean;
   showQuickAdd?: boolean;
   applyLabel?: string;
+  applyDisabled?: boolean;
+  /** Tighter keys for cart panel */
+  compact?: boolean;
+  hideApply?: boolean;
 };
 
 export default function WebPosNumericKeypad({
@@ -24,6 +28,9 @@ export default function WebPosNumericKeypad({
   showModeButtons = true,
   showQuickAdd = false,
   applyLabel,
+  applyDisabled,
+  compact = false,
+  hideApply = false,
 }: Props) {
   const { t } = useI18n();
 
@@ -46,11 +53,14 @@ export default function WebPosNumericKeypad({
   };
 
   const numKeys = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
+  const keyClass = compact
+    ? 'webpos-keypad-key webpos-keypad-key--compact'
+    : 'webpos-keypad-key';
 
   return (
-    <div className="webpos-keypad space-y-2">
+    <div className={`webpos-keypad ${compact ? 'space-y-1' : 'space-y-2'}`}>
       {showModeButtons ? (
-        <div className="grid grid-cols-3 gap-1.5">
+        <div className={`grid grid-cols-3 ${compact ? 'gap-1' : 'gap-1.5'}`}>
           {(
             [
               ['qty', t('webPosKeypadQty')],
@@ -63,7 +73,9 @@ export default function WebPosNumericKeypad({
               type="button"
               disabled={disabled}
               onClick={() => onModeChange(id)}
-              className={`rounded-lg py-2 text-xs font-bold uppercase tracking-wide transition ${
+              className={`rounded-md text-xs font-bold uppercase tracking-wide transition ${
+                compact ? 'py-1' : 'py-2 rounded-lg'
+              } ${
                 mode === id
                   ? 'bg-[var(--webpos-accent-soft)] text-[var(--webpos-accent-text)] ring-1 ring-[var(--webpos-accent-ring)]'
                   : 'bg-white text-stone-600 ring-1 ring-stone-200 hover:bg-stone-50'
@@ -75,15 +87,15 @@ export default function WebPosNumericKeypad({
         </div>
       ) : null}
 
-      <div className={`grid gap-1.5 ${showQuickAdd ? 'grid-cols-[1fr_auto]' : 'grid-cols-1'}`}>
-        <div className="grid grid-cols-3 gap-1.5">
+      <div className={`grid ${compact ? 'gap-1' : 'gap-1.5'} ${showQuickAdd ? 'grid-cols-[1fr_auto]' : 'grid-cols-1'}`}>
+        <div className={`grid grid-cols-3 ${compact ? 'gap-1' : 'gap-1.5'}`}>
           {numKeys.map((k) => (
             <button
               key={k}
               type="button"
               disabled={disabled}
               onClick={() => push(k)}
-              className="webpos-keypad-key"
+              className={keyClass}
             >
               {k}
             </button>
@@ -92,15 +104,15 @@ export default function WebPosNumericKeypad({
             type="button"
             disabled={disabled}
             onClick={toggleSign}
-            className="webpos-keypad-key bg-amber-50 text-amber-900 ring-amber-200"
+            className={`${keyClass} bg-amber-50 text-amber-900 ring-amber-200`}
           >
-            +/?
+            +/-
           </button>
           <button
             type="button"
             disabled={disabled}
             onClick={() => push('0')}
-            className="webpos-keypad-key"
+            className={keyClass}
           >
             0
           </button>
@@ -108,7 +120,7 @@ export default function WebPosNumericKeypad({
             type="button"
             disabled={disabled}
             onClick={() => push('.')}
-            className="webpos-keypad-key bg-orange-50 text-orange-900 ring-orange-200"
+            className={`${keyClass} bg-orange-50 text-orange-900 ring-orange-200`}
           >
             .
           </button>
@@ -116,15 +128,15 @@ export default function WebPosNumericKeypad({
             type="button"
             disabled={disabled}
             onClick={backspace}
-            className="webpos-keypad-key bg-red-50 text-red-700 ring-red-200"
+            className={`${keyClass} bg-red-50 text-red-700 ring-red-200`}
             aria-label={t('webPosBackspace')}
           >
-            <Delete size={18} className="mx-auto" />
+            <Delete size={compact ? 15 : 18} className="mx-auto" />
           </button>
         </div>
 
         {showQuickAdd ? (
-          <div className="flex flex-col gap-1.5">
+          <div className={`flex flex-col ${compact ? 'gap-1' : 'gap-1.5'}`}>
             {[10, 20, 50].map((n) => (
               <button
                 key={n}
@@ -134,7 +146,7 @@ export default function WebPosNumericKeypad({
                   const base = Number(buffer) || 0;
                   onBufferChange(String(Math.round((base + n) * 100) / 100));
                 }}
-                className="webpos-keypad-key bg-emerald-50 text-emerald-800 ring-emerald-200 min-w-[3.5rem]"
+                className={`${keyClass} min-w-[3rem] bg-emerald-50 text-emerald-800 ring-emerald-200`}
               >
                 +{n}
               </button>
@@ -143,14 +155,18 @@ export default function WebPosNumericKeypad({
         ) : null}
       </div>
 
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={onApply}
-        className="webpos-accent-btn w-full rounded-lg py-2 text-sm font-semibold disabled:opacity-40"
-      >
-        {applyLabel || t('webPosKeypadApply')}
-      </button>
+      {!hideApply ? (
+        <button
+          type="button"
+          disabled={disabled || applyDisabled}
+          onClick={onApply}
+          className={`webpos-accent-btn w-full rounded-lg text-sm font-semibold disabled:opacity-40 ${
+            compact ? 'py-1.5' : 'py-2'
+          }`}
+        >
+          {applyLabel || t('webPosKeypadApply')}
+        </button>
+      ) : null}
     </div>
   );
 }

@@ -42,9 +42,9 @@ export default function WebPosProductArea({
 
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-stone-100">
-      {/* Compact horizontal category chips ù keeps product grid dominant */}
+      {/* Category chips ù fixed sizes, wrap to a second row when needed */}
       <div className="shrink-0 border-b border-stone-200/80 bg-stone-100/90 px-3 py-2">
-        <div className="webpos-cat-scroll flex gap-1.5 overflow-x-auto pb-0.5">
+        <div className="webpos-cat-scroll flex flex-wrap gap-1.5">
           <button
             type="button"
             onClick={() => onCategoryChange('all')}
@@ -52,8 +52,9 @@ export default function WebPosProductArea({
               categoryId === 'all' ? 'ring-2 ring-[var(--webpos-accent-ring)] ring-offset-1' : ''
             }`}
             style={{ backgroundColor: '#e7e5e4' }}
+            title={t('webPosAllCategories')}
           >
-            {t('webPosAllCategories')}
+            <span className="min-w-0 w-full truncate">{t('webPosAllCategories')}</span>
           </button>
           {categories.map((c, i) => {
             const color = categoryColor(c.id, i, c.color);
@@ -67,8 +68,9 @@ export default function WebPosProductArea({
                   active ? 'ring-2 ring-[var(--webpos-accent-ring)] ring-offset-1' : ''
                 }`}
                 style={{ backgroundColor: color }}
+                title={c.name}
               >
-                {c.name}
+                <span className="min-w-0 w-full truncate">{c.name}</span>
               </button>
             );
           })}

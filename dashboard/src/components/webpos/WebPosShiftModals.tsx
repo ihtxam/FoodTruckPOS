@@ -161,7 +161,17 @@ export function WebPosCloseShiftModal({
         <h2 className="text-lg font-bold text-stone-900">{t('webPosShiftCloseTitle')}</h2>
         <p className="mt-1 text-sm text-stone-600">{t('webPosShiftCloseHint')}</p>
 
-        <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
+        <div className="mt-4 rounded-xl border border-[var(--webpos-accent)]/30 bg-[var(--webpos-accent)]/5 p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-[var(--webpos-accent)]">
+            {t('webPosShiftOpeningCash')}
+          </p>
+          <p className="mt-0.5 text-2xl font-bold tabular-nums text-stone-900">
+            {openingCash.toFixed(2)} <span className="text-base font-semibold text-stone-500">CHF</span>
+          </p>
+          <p className="mt-1 text-xs text-stone-600">{t('webPosShiftFloatCarriesForward')}</p>
+        </div>
+
+        <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
           <div className="rounded-xl bg-stone-50 p-3">
             <p className="text-xs text-stone-500">{t('webPosShiftCashSales')}</p>
             <p className="text-lg font-bold tabular-nums">{(live?.cashSales ?? 0).toFixed(2)} CHF</p>
@@ -169,6 +179,11 @@ export function WebPosCloseShiftModal({
           <div className="rounded-xl bg-stone-50 p-3">
             <p className="text-xs text-stone-500">{t('webPosShiftExpectedDrawer')}</p>
             <p className="text-lg font-bold tabular-nums">{expected.toFixed(2)} CHF</p>
+            <p className="mt-0.5 text-[11px] text-stone-500">
+              {t('webPosShiftExpectedFormula')
+                .replace('{float}', openingCash.toFixed(2))
+                .replace('{sales}', (live?.cashSales ?? 0).toFixed(2))}
+            </p>
           </div>
           <div className="rounded-xl bg-stone-50 p-3">
             <p className="text-xs text-stone-500">{t('webPosShiftCardSales')}</p>

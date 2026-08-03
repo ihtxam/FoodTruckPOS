@@ -115,7 +115,7 @@ export default function OrderConfirmationPage() {
 
   useEffect(() => {
     if (order?.store?.name) {
-      document.title = shopDocumentTitle(`${order.store.name} — ${order.orderNumber}`);
+      document.title = shopDocumentTitle(`${order.store.name} - ${order.orderNumber}`);
     }
   }, [order?.store?.name, order?.orderNumber]);
 
@@ -375,7 +375,7 @@ export default function OrderConfirmationPage() {
           {order.customerEmail && <p className="text-stone-600">{order.customerEmail}</p>}
           <p className="text-stone-700 pt-1">
             {order.fulfillmentChannel === 'delivery'
-              ? `${t('shopDeliverTo')}: ${order.shippingAddress || '—'}`
+              ? `${t('shopDeliverTo')}: ${order.shippingAddress || '-'}`
               : `${t('shopPickupAt')}: ${order.store?.address || order.shippingAddress || t('shopRestaurant')}${
                   order.store?.city ? `, ${order.store.city}` : ''
                 }`}
@@ -420,7 +420,7 @@ export default function OrderConfirmationPage() {
             {Number(order.pointsDiscount || 0) > 0 && (
               <Row
                 label={t('shopPointsDiscount')}
-                value={`− ${money(order.pointsDiscount || 0)}`}
+                value={`- ${money(order.pointsDiscount || 0)}`}
               />
             )}
             <Row label={t('shopTax')} value={money(order.taxAmount)} />
@@ -456,7 +456,7 @@ export default function OrderConfirmationPage() {
             {Number(order.pointsRedeemed || 0) > 0 && (
               <Row
                 label={t('shopPointsRedeemed')}
-                value={`−${order.pointsRedeemed} ${t('shopPoints')}`}
+                value={`-${order.pointsRedeemed} ${t('shopPoints')}`}
               />
             )}
           </div>
@@ -505,7 +505,7 @@ function translateOrderStatus(status: string, t: (key: string) => string) {
 }
 
 function translatePaymentStatus(status: string | null, t: (key: string) => string) {
-  if (!status) return '—';
+  if (!status) return '-';
   const key = `shopPayStatus_${status}`;
   const translated = t(key);
   if (translated !== key) return translated;

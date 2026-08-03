@@ -110,6 +110,17 @@ docker compose exec api npm run migrate
 docker compose exec api npm run seed
 ```
 
+**Cash shifts (WebPOS):** Schema is applied by `drizzle-kit push` in the `migrate` service. If Settings → POS → Operations (“Require cash shifts”) fails to save, or WebPOS never shows Start/Close shift, run the idempotent SQL once:
+
+```bash
+# from repo root on the server
+docker compose --env-file .env.production exec -T db \
+  psql -U "${POSTGRES_USER:-manupos}" -d "${POSTGRES_DB:-manupos}" \
+  < backend/sql/ensure-shifts.sql
+```
+
+See `backend/sql/ensure-shifts.sql`.
+
 **`.env` secrets:**
 
 | Variable | Notes |
@@ -120,6 +131,15 @@ docker compose exec api npm run seed
 | `SUPERADMIN_PASSWORD` | Set once in `/root/chaslay-secrets/backend.env`; stored in Postgres and survives redeploys |
 
 `Caddyfile` is already set for `api.chaslay.com`, `shop.chaslay.com`, `app.chaslay.com`.
+
+**Print agent EXE:** `backend/public/downloads/*.exe` is gitignored. Deploy cross-compiles it with `pkg` (Docker `node:20-bookworm`) into that folder and Caddy proxies `/downloads/*` on `app.chaslay.com` to the API (so the SPA never returns HTML as a fake `.exe`). Verify after deploy:
+
+```bash
+curl -sI https://app.chaslay.com/downloads/chaslay-print-agent-setup.exe
+# 200 + application/octet-stream + ~40MB Content-Length
+```
+
+Skip rebuild: `SKIP_PRINT_AGENT_BUILD=1 bash scripts/deploy-hetzner.sh`
 
 **Superadmin panel:** https://app.chaslay.com (password saved in database after first login)
 

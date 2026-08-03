@@ -358,7 +358,21 @@ export type KitchenTicketOpts = {
   /** Print COURSE N headers when items have courseNumber */
   groupByCourse?: boolean;
   tableLabel?: string | null;
+  /** Void ticket: title CANCELLED + strikethrough item lines */
+  cancelled?: boolean;
+  cancelReason?: string | null;
 };
+
+/** Unicode combining long stroke for text/preview strikethrough. */
+export function strikethroughText(text: string): string {
+  return [...text].map((ch) => (ch === '\n' ? ch : `${ch}\u0336`)).join('');
+}
+
+/** CP850-safe visual strikethrough for thermal printers. */
+export function strikethroughEscPosLabel(text: string): string {
+  const trimmed = text.trim();
+  return trimmed ? `- ${trimmed} -` : trimmed;
+}
 
 /** e.g. "TAKEAWAY : ASAP" or "TAKEAWAY : 17:00" */
 function formatChannelWhen(
@@ -376,11 +390,28 @@ function kitchenItemCount(items: WebPosReceiptItem[]): number {
 }
 
 type KitchenLine = {
-  kind: 'center' | 'header' | 'item' | 'normal';
+  kind: 'center' | 'header' | 'item' | 'normal' | 'strike';
   text: string;
 };
 
-function buildKitchenTicketLines(opts: KitchenTicketOpts): {
+function formatKitchenItemLine(
+  item: KitchenTicketItem,
+  width: number,
+  cancelled: boolean,
+  forEscPos: boolean
+): KitchenLine {
+  const raw = `${item.quantity}x ${item.name}`.slice(0, Math.max(8, width - (cancelled ? 4 : 0)));
+  if (!cancelled) return { kind: 'item', text: `${raw}\n` };
+  if (forEscPos) {
+    return { kind: 'strike', text: `${strikethroughEscPosLabel(raw).slice(0, width)}\n` };
+  }
+  return { kind: 'strike', text: `${strikethroughText(raw)}\n` };
+}
+
+function buildKitchenTicketLines(
+  opts: KitchenTicketOpts,
+  forEscPos = false
+): {
   width: number;
   L: ReturnType<typeof receiptLabels>;
   lines: KitchenLine[];
@@ -395,12 +426,14 @@ function buildKitchenTicketLines(opts: KitchenTicketOpts): {
     timeZone: 'Europe/Zurich',
   });
   const totalQty = kitchenItemCount(opts.items);
-  const user = (opts.userName || '').trim() || '—';
+  const user = (opts.userName || '').trim() || '-';
   const source = String(opts.orderSource || 'WEBPOS').trim().toUpperCase() || 'WEBPOS';
-  const ticketNo = (opts.orderNumber || '—').trim();
+  const ticketNo = (opts.orderNumber || '-').trim();
+  const cancelled = !!opts.cancelled;
+  const title = cancelled ? L.cancelledTicket : L.kitchen;
 
   const lines: KitchenLine[] = [
-    { kind: 'center', text: `${centerLine(L.kitchen, width)}\n` },
+    { kind: 'center', text: `${centerLine(title, width)}\n` },
     { kind: 'center', text: `${centerLine(ticketNo, width)}\n` },
     { kind: 'header', text: `${formatChannelWhen(L, opts.channel, opts.scheduledFor)}\n` },
     { kind: 'normal', text: `${thin}\n` },
@@ -413,9 +446,19 @@ function buildKitchenTicketLines(opts: KitchenTicketOpts): {
     });
   }
 
+  if (cancelled && opts.cancelReason) {
+    lines.push({
+      kind: 'normal',
+      text: `${String(opts.cancelReason).slice(0, width)}\n`,
+    });
+    lines.push({ kind: 'normal', text: `${thin}\n` });
+  }
+
   const items = opts.items;
   const hasCourses =
-    opts.groupByCourse !== false && items.some((i) => i.courseNumber != null && i.courseNumber > 0);
+    !cancelled &&
+    opts.groupByCourse !== false &&
+    items.some((i) => i.courseNumber != null && i.courseNumber > 0);
 
   if (hasCourses) {
     const courses = Array.from(
@@ -424,18 +467,12 @@ function buildKitchenTicketLines(opts: KitchenTicketOpts): {
     for (const course of courses) {
       lines.push({ kind: 'header', text: `COURSE ${course}\n` });
       for (const item of items.filter((i) => (i.courseNumber || 1) === course)) {
-        lines.push({
-          kind: 'item',
-          text: `${item.quantity}x ${item.name}`.slice(0, width) + '\n',
-        });
+        lines.push(formatKitchenItemLine(item, width, cancelled, forEscPos));
       }
     }
   } else {
     for (const item of items) {
-      lines.push({
-        kind: 'item',
-        text: `${item.quantity}x ${item.name}`.slice(0, width) + '\n',
-      });
+      lines.push(formatKitchenItemLine(item, width, cancelled, forEscPos));
     }
   }
 
@@ -453,13 +490,13 @@ function buildKitchenTicketLines(opts: KitchenTicketOpts): {
 
 /** Plain-text kitchen ticket (fallback / preview). */
 export function generateKitchenTicketText(opts: KitchenTicketOpts): string {
-  return buildKitchenTicketLines(opts)
+  return buildKitchenTicketLines(opts, false)
     .lines.map((l) => l.text)
     .join('');
 }
 
 function escKitchenSize(scale: 1 | 2 | 3): Uint8Array {
-  // GS ! n — 0 normal, 0x01 double height, 0x11 double width+height
+  // GS ! n - 0 normal, 0x01 double height, 0x11 double width+height
   const n = scale === 3 ? 0x11 : scale === 2 ? 0x01 : 0x00;
   return new Uint8Array([0x1d, 0x21, n]);
 }
@@ -472,9 +509,14 @@ function escAlign(mode: 0 | 1 | 2): Uint8Array {
   return new Uint8Array([0x1b, 0x61, mode]);
 }
 
+/** ESC/POS underline (closest hardware strikethrough on most thermal printers). */
+function escUnderline(on: boolean): Uint8Array {
+  return new Uint8Array([0x1b, 0x2d, on ? 1 : 0]);
+}
+
 /** Kitchen ticket as ESC/POS with bold + enlarged text (default scale 2 ≈ 12pt tall). */
 export function generateKitchenTicketEscPos(opts: KitchenTicketOpts): Uint8Array {
-  const { lines } = buildKitchenTicketLines(opts);
+  const { lines } = buildKitchenTicketLines(opts, true);
   const headerScale = (opts.headerTextScale === 1 || opts.headerTextScale === 3
     ? opts.headerTextScale
     : 2) as 1 | 2 | 3;
@@ -490,6 +532,7 @@ export function generateKitchenTicketEscPos(opts: KitchenTicketOpts): Uint8Array
         escAlign(1),
         escKitchenSize(headerScale),
         escBold(bold || headerScale > 1),
+        escUnderline(false),
         escposCp850Encode(line.text.trimStart())
       );
     } else if (line.kind === 'header') {
@@ -497,17 +540,34 @@ export function generateKitchenTicketEscPos(opts: KitchenTicketOpts): Uint8Array
         escAlign(0),
         escKitchenSize(headerScale),
         escBold(bold || headerScale > 1),
+        escUnderline(false),
         escposCp850Encode(line.text)
+      );
+    } else if (line.kind === 'strike') {
+      parts.push(
+        escAlign(0),
+        escKitchenSize(itemScale),
+        escBold(true),
+        escUnderline(true),
+        escposCp850Encode(line.text),
+        escUnderline(false)
       );
     } else if (line.kind === 'item') {
       parts.push(
         escAlign(0),
         escKitchenSize(itemScale),
         escBold(bold || itemScale > 1),
+        escUnderline(false),
         escposCp850Encode(line.text)
       );
     } else {
-      parts.push(escAlign(0), escKitchenSize(1), escBold(false), escposCp850Encode(line.text));
+      parts.push(
+        escAlign(0),
+        escKitchenSize(1),
+        escBold(false),
+        escUnderline(false),
+        escposCp850Encode(line.text)
+      );
     }
   }
 
@@ -515,6 +575,7 @@ export function generateKitchenTicketEscPos(opts: KitchenTicketOpts): Uint8Array
     escAlign(0),
     escKitchenSize(1),
     escBold(false),
+    escUnderline(false),
     new Uint8Array([0x1b, 0x64, 0x04]),
     new Uint8Array([0x1d, 0x56, 0x41, 0x10])
   );
@@ -526,6 +587,16 @@ export type EodVatRow = {
   net: number;
   tva: number;
   brut: number;
+};
+
+/** Cash drawer reconciliation for a closed (or closing) shift. */
+export type EodShiftCash = {
+  openingFloat: number;
+  cashSales: number;
+  expectedCash: number;
+  closingCashCounted?: number | null;
+  variance?: number | null;
+  staffName?: string | null;
 };
 
 export type EodReportPrint = {
@@ -551,6 +622,8 @@ export type EodReportPrint = {
   paymentRows: Array<{ method: string; count: number; total: number; percent?: number }>;
   orderTypeRows?: Array<{ label: string; count: number; total: number; percent?: number }>;
   channelRows?: Array<{ channel: string; count: number; total: number }>;
+  /** Opening float / fond de base + drawer reconciliation (one or more shifts). */
+  shiftCash?: EodShiftCash | EodShiftCash[];
   businessName?: string;
   language?: string;
   /** Default 80mm to match Android LINE_WIDTH_80 */
@@ -706,6 +779,53 @@ export function generateEodReportText(report: EodReportPrint): string {
       const name = p.name.slice(0, nameWidth).padEnd(Math.min(nameWidth, width - 6));
       r += (name + String(p.quantity).padStart(6)).slice(0, width) + '\n';
     }
+  }
+
+  const shiftRows = report.shiftCash
+    ? Array.isArray(report.shiftCash)
+      ? report.shiftCash
+      : [report.shiftCash]
+    : [];
+  if (shiftRows.length) {
+    r += '\n';
+    r += thin + '\n';
+    r += centerLine(L.cashDrawer, width) + '\n';
+    r += thin + '\n';
+    for (let i = 0; i < shiftRows.length; i++) {
+      const s = shiftRows[i]!;
+      if (shiftRows.length > 1) {
+        const label = s.staffName
+          ? `${i + 1}. ${s.staffName}`
+          : `${i + 1}`;
+        r += centerLine(label.slice(0, width), width) + '\n';
+      }
+      r += padLine(L.openingFloat, money(s.openingFloat), width) + '\n';
+      r += centerLine(`(${L.floatCarriesForward})`, width) + '\n';
+      r += padLine(L.cashSalesDuringShift, money(s.cashSales), width) + '\n';
+      r += padLine(L.expectedInDrawer, money(s.expectedCash), width) + '\n';
+      if (s.closingCashCounted != null) {
+        r += padLine(L.countedClosingCash, money(s.closingCashCounted), width) + '\n';
+      }
+      if (s.variance != null) {
+        r += padLine(L.cashVariance, money(s.variance), width) + '\n';
+      }
+      if (i < shiftRows.length - 1) r += thin + '\n';
+    }
+    r += thin + '\n';
+    // Wrap carry-forward note to paper width
+    const note = L.floatCarriesForwardNote;
+    const words = note.split(/\s+/);
+    let line = '';
+    for (const w of words) {
+      const next = line ? `${line} ${w}` : w;
+      if (next.length > width && line) {
+        r += line + '\n';
+        line = w;
+      } else {
+        line = next;
+      }
+    }
+    if (line) r += line + '\n';
   }
 
   if (report.footer?.trim()) {

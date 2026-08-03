@@ -132,7 +132,7 @@ function App() {
             }
           />
 
-          {/* shop.domain/{slug} — Chaslay-style path shops */}
+          {/* shop.domain/{slug} - Chaslay-style path shops */}
           {shopHub && (
             <>
               <Route
@@ -194,7 +194,7 @@ function App() {
             </>
           )}
 
-          {/* {slug}.domain — merchant subdomain shops */}
+          {/* {slug}.domain - merchant subdomain shops */}
           {merchantSubdomain && (
             <>
               <Route

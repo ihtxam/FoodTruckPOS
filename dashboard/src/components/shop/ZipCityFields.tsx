@@ -72,7 +72,7 @@ export default function ZipCityFields({
       }
     }, 180);
     return () => window.clearTimeout(timer);
-    // city intentionally omitted — autofill only when empty
+    // city intentionally omitted - autofill only when empty
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shopKey, zipCode]);
 

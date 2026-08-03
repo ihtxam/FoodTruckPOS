@@ -215,7 +215,7 @@ export default function Licenses() {
         ].map(([label, value]) => (
           <div key={String(label)} className="card py-3 px-4">
             <p className="text-xs text-gray-500">{label}</p>
-            <p className="text-xl font-bold">{value ?? '—'}</p>
+            <p className="text-xl font-bold">{value ?? '-'}</p>
           </div>
         ))}
       </div>
@@ -261,7 +261,7 @@ export default function Licenses() {
             {expiring.slice(0, 8).map((row: any) => (
               <li key={row.license?.id || row.license?.licenseKey} className="flex justify-between gap-3">
                 <span>
-                  {row.license?.merchant?.name || '—'} ·{' '}
+                  {row.license?.merchant?.name || '-'} ·{' '}
                   <span className="font-mono text-xs">{row.license?.licenseKey}</span>
                 </span>
                 <span className="text-amber-700 font-semibold">{row.daysRemaining}d</span>
@@ -323,9 +323,9 @@ export default function Licenses() {
             <tbody>
               {licenses.map((lic) => (
                 <tr key={lic.id} className="border-b hover:bg-gray-50">
-                  <td className="px-4 py-3 text-sm">{lic.merchant?.name || '—'}</td>
+                  <td className="px-4 py-3 text-sm">{lic.merchant?.name || '-'}</td>
                   <td className="px-4 py-3 text-sm">
-                    {lic.device?.deviceName || '—'}
+                    {lic.device?.deviceName || '-'}
                     <div className="text-xs text-gray-400 font-mono truncate max-w-[160px]">
                       {lic.device?.deviceId}
                     </div>
@@ -349,7 +349,7 @@ export default function Licenses() {
                     </span>
                   </td>
                   <td className="px-4 py-3 text-sm">
-                    {lic.expiresAt ? new Date(lic.expiresAt).toLocaleDateString() : '—'}
+                    {lic.expiresAt ? new Date(lic.expiresAt).toLocaleDateString() : '-'}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex gap-1">
@@ -442,7 +442,7 @@ export default function Licenses() {
                 </select>
                 <p className="text-xs text-gray-500 mt-1">
                   Copy the Device ID from the Android POS license screen, then generate a code for that
-                  device — same as the old Chaslay admin.
+                  device - same as the old Chaslay admin.
                 </p>
               </label>
 

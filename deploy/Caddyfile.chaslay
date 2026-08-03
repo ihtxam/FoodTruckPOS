@@ -7,6 +7,11 @@
 
 # Chaslay production — ManuPOS stack + Android /v1 API
 api.chaslay.com {
+	# Binary installers must not be gzip/zstd-transformed
+	handle /downloads/* {
+		reverse_proxy api:3000
+	}
+
 	encode gzip zstd
 
 	handle /health {
@@ -35,6 +40,11 @@ api.chaslay.com {
 }
 
 app.chaslay.com {
+	# Dashboard download link is same-origin /downloads/... — proxy to API (not SPA index.html)
+	handle /downloads/* {
+		reverse_proxy api:3000
+	}
+
 	encode gzip zstd
 
 	handle /api/* {

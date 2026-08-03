@@ -223,7 +223,7 @@ export default function StaffPage() {
                   <tr key={s.id} className="border-t border-[var(--border)]">
                     <td className="px-3 py-2 font-medium">{s.name}</td>
                     <td className="px-3 py-2">{s.roleName}</td>
-                    <td className="px-3 py-2">{s.pinSet ? t('staffPinSet') : '—'}</td>
+                    <td className="px-3 py-2">{s.pinSet ? t('staffPinSet') : '-'}</td>
                     <td className="px-3 py-2">
                       {s.canAccessPanel ? s.email || t('yes') : t('no')}
                     </td>
@@ -246,7 +246,7 @@ export default function StaffPage() {
                 <p className="font-medium">{role.name}</p>
                 <p className="text-xs text-[var(--text-muted)]">
                   {t('staffPermissionsCount').replace('{count}', String(role.permissions.length))}
-                  {role.isSystem ? ` — ${t('staffSystemProfile')}` : ''}
+                  {role.isSystem ? ` - ${t('staffSystemProfile')}` : ''}
                 </p>
               </div>
               <button type="button" className="btn-secondary text-sm" onClick={() => openRoleEdit(role)}>

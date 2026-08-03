@@ -248,7 +248,7 @@ export default function Settings() {
                   <td className="py-3 pr-3">
                     {plan.priceYearly != null
                       ? `${Number(plan.priceYearly).toFixed(2)} ${plan.currency}`
-                      : '—'}
+                      : '-'}
                   </td>
                   <td className="py-3 pr-3">{plan.maxDevices}</td>
                   <td className="py-3 pr-3">
@@ -298,7 +298,7 @@ export default function Settings() {
       <div className="card">
         <h2 className="text-xl font-bold">Platform Adyen (subscription payments)</h2>
         <p className="text-gray-600 mt-1 mb-4">
-          When merchants buy a plan, payments settle to <strong>your</strong> Adyen account — not the
+          When merchants buy a plan, payments settle to <strong>your</strong> Adyen account - not the
           merchant&apos;s shop Adyen credentials.
         </p>
 

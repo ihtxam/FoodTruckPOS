@@ -557,7 +557,7 @@ export default function Reservations() {
                       setSettings({ ...settings, slotDiscounts: next });
                     }}
                   />
-                  <span>–</span>
+                  <span>-</span>
                   <input
                     type="time"
                     className="input !w-auto"
@@ -632,7 +632,7 @@ export default function Reservations() {
                           setDineInHours(next);
                         }}
                       />
-                      <span>–</span>
+                      <span>-</span>
                       <input
                         type="time"
                         className="input !w-auto"
@@ -905,7 +905,7 @@ export default function Reservations() {
                       <option value="">{t('reservationsNoTable')}</option>
                       {tables.map((tb) => (
                         <option key={tb.id} value={tb.id}>
-                          {tb.label} ({tb.capacity}) — {tb.status}
+                          {tb.label} ({tb.capacity}) - {tb.status}
                           {r.discountPercent && r.tableId === tb.id
                             ? ` · ${r.discountLabel || `${r.discountPercent}% off`}`
                             : ''}

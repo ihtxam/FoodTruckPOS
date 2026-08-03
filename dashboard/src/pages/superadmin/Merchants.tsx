@@ -108,7 +108,7 @@ export default function Merchants() {
       await api.post(`/superadmin/merchants/${showDetail.id}/reset-password`, {
         password: resetPassword,
       });
-      toast.success('Password reset — merchant can log in to panel and POS with the new password');
+      toast.success('Password reset - merchant can log in to panel and POS with the new password');
       setResetPassword('');
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Failed to reset password');
@@ -180,7 +180,7 @@ export default function Merchants() {
       setShowCreate(false);
       fetchMerchants();
       if (issued.length) {
-        toast.success(`${issued.length} device license(s) issued — copy keys below`);
+        toast.success(`${issued.length} device license(s) issued - copy keys below`);
       }
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Failed to create merchant');
@@ -359,7 +359,7 @@ export default function Merchants() {
                   <td className="px-6 py-4 text-gray-600">{merchant.email}</td>
                   <td className="px-6 py-4 text-sm text-gray-600">
                     {merchant.shopEnabled ? (
-                      <span className="text-emerald-700">/{merchant.slug || '—'}</span>
+                      <span className="text-emerald-700">/{merchant.slug || '-'}</span>
                     ) : (
                       <span className="text-gray-400">off</span>
                     )}
@@ -629,7 +629,7 @@ export default function Merchants() {
               </p>
               <p>
                 <span className="text-gray-500">Shop:</span>{' '}
-                {showDetail.shopEnabled ? `/${showDetail.slug || '—'}` : 'disabled'}
+                {showDetail.shopEnabled ? `/${showDetail.slug || '-'}` : 'disabled'}
               </p>
               <p>
                 <span className="text-gray-500">Devices / licenses:</span> {showDetail.devices} /{' '}

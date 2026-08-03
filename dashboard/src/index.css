@@ -126,6 +126,11 @@ button {
   .panel-main {
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-y: contain;
+    /*
+     * Prefer overflow-x: clip over hidden so we do not create a nested vertical
+     * scroll container (CSS overflow pairing), which blocks wheel/touchpad scroll.
+     */
+    overflow-x: clip;
   }
 
   .panel-header {
@@ -198,6 +203,7 @@ button {
   }
 
   .webpos-cat-scroll {
+    /* Wrapping row(s); keep scrollbar hidden if content still overflows */
     scrollbar-width: none;
     -ms-overflow-style: none;
   }
@@ -209,9 +215,49 @@ button {
     @apply flex min-h-[4.5rem] items-center justify-center rounded-xl px-3 py-4 text-center text-sm font-bold leading-snug text-stone-800 shadow-sm transition active:scale-[0.98];
   }
 
-  /* Compact chips when products are shown — one scrollable row */
+  /*
+   * Category chips — fixed sizes by viewport:
+   *   small  (< md / 768px):  115×48
+   *   medium (≥ md / 768px):  174×64
+   *   large  (≥ xl / 1280px): 198×64
+   */
   .webpos-category-chip {
-    @apply inline-flex h-9 shrink-0 items-center justify-center rounded-lg px-3 text-xs font-bold leading-none text-stone-800 shadow-sm transition active:scale-[0.98] whitespace-nowrap;
+    box-sizing: border-box;
+    display: inline-flex;
+    width: 115px;
+    height: 48px;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border-radius: 0.5rem;
+    padding: 0 0.5rem;
+    text-align: center;
+    font-size: 0.75rem;
+    font-weight: 700;
+    line-height: 1.15;
+    color: #292524; /* stone-800 */
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    transition: transform 0.1s ease;
+  }
+  .webpos-category-chip:active {
+    transform: scale(0.98);
+  }
+  @media (min-width: 768px) {
+    .webpos-category-chip {
+      width: 174px;
+      height: 64px;
+      font-size: 0.8125rem;
+    }
+  }
+  @media (min-width: 1280px) {
+    .webpos-category-chip {
+      width: 198px;
+      height: 64px;
+      font-size: 0.875rem;
+    }
   }
 
   .webpos-product-card {
@@ -222,12 +268,39 @@ button {
     @apply rounded-lg bg-white py-3 text-lg font-semibold text-stone-800 ring-1 ring-stone-200 hover:bg-stone-50 disabled:opacity-40;
   }
 
+  .webpos-keypad-key--compact {
+    @apply rounded-md py-1.5 text-sm;
+  }
+
   .webpos-mini-btn {
     @apply inline-flex flex-col items-center justify-center gap-0.5 rounded-lg border border-stone-200 bg-white px-1 py-1.5 text-[10px] font-semibold leading-tight text-stone-600 hover:bg-stone-50 disabled:opacity-40;
   }
 
   .webpos-action-chip {
     @apply rounded-lg border border-stone-200 bg-white px-2 py-2 text-[10px] font-bold uppercase tracking-wide text-stone-700 hover:bg-stone-50;
+  }
+
+  @keyframes webpos-pin-shake {
+    0%,
+    100% {
+      transform: translateX(0);
+    }
+    20% {
+      transform: translateX(-6px);
+    }
+    40% {
+      transform: translateX(6px);
+    }
+    60% {
+      transform: translateX(-4px);
+    }
+    80% {
+      transform: translateX(4px);
+    }
+  }
+
+  .webpos-pin-shake {
+    animation: webpos-pin-shake 0.4s ease-in-out;
   }
 
   /* Online shop: allow normal page scroll (panel-shell sets overflow:hidden globally). */

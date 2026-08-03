@@ -14,6 +14,15 @@ import {
 } from '@/lib/webpos-receipt';
 import { isPrintAgentAvailable, printViaAgent } from '@/lib/print-agent';
 
+type EodShiftCash = {
+  openingFloat: number;
+  cashSales: number;
+  expectedCash: number;
+  closingCashCounted?: number | null;
+  variance?: number | null;
+  staffName?: string | null;
+};
+
 type EodReport = {
   range: { label: string; from: string; to: string; preset: string };
   salesCount: number;
@@ -37,6 +46,7 @@ type EodReport = {
   orderTypeRows?: Array<{ label: string; count: number; total: number; percent?: number }>;
   productsSold: Array<{ name: string; quantity: number; total: number }>;
   userPerformance?: Array<{ name: string; salesCount: number; total: number }>;
+  shiftCash?: EodShiftCash[];
 };
 
 type Preset = 'today' | 'yesterday' | 'last_week' | 'last_month' | 'last_3_months' | 'custom';
@@ -114,6 +124,7 @@ export default function ReportsPage() {
         paymentRows: report.paymentRows,
         orderTypeRows: report.orderTypeRows,
         channelRows: report.channelRows,
+        shiftCash: report.shiftCash?.length ? report.shiftCash : undefined,
         businessName,
         language: lang,
         paperWidthMm,
@@ -126,7 +137,7 @@ export default function ReportsPage() {
       const logo = logoUrl
         ? await logoUrlToEscPos(logoUrl, paperWidthMm === 58 ? 240 : 384)
         : null;
-      // Plain ESC/POS body (no bold) ó kitchen tickets use bold separately.
+      // Plain ESC/POS body (no bold) ù kitchen tickets use bold separately.
       const escpos = textToEscPos(text, undefined, logo);
       const dataBase64 = uint8ToBase64(escpos);
       const names =
@@ -266,6 +277,63 @@ export default function ReportsPage() {
                 <p className="text-xs text-[var(--text-muted)]">{t('tipsNotTaxable')}</p>
               )}
 
+              {!!report.shiftCash?.length && (
+                <section className="rounded-xl border border-[var(--border)] overflow-hidden">
+                  <h2 className="px-3 py-2 text-sm font-semibold bg-[var(--bg-muted)]">
+                    {t('reportsOpeningFloat')}
+                  </h2>
+                  <div className="divide-y divide-[var(--border)]">
+                    {report.shiftCash.map((s, idx) => (
+                      <div key={idx} className="p-3 grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+                        <div>
+                          <p className="text-[11px] uppercase tracking-wide muted">
+                            {t('reportsOpeningFloat')}
+                          </p>
+                          <p className="font-semibold tabular-nums mt-0.5">
+                            {money(s.openingFloat)}
+                          </p>
+                          <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                            {t('reportsFloatCarriesForward')}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[11px] uppercase tracking-wide muted">
+                            {t('webPosShiftCashSales')}
+                          </p>
+                          <p className="font-semibold tabular-nums mt-0.5">{money(s.cashSales)}</p>
+                        </div>
+                        <div>
+                          <p className="text-[11px] uppercase tracking-wide muted">
+                            {t('webPosShiftExpectedDrawer')}
+                          </p>
+                          <p className="font-semibold tabular-nums mt-0.5">
+                            {money(s.expectedCash)}
+                          </p>
+                        </div>
+                        {s.closingCashCounted != null && (
+                          <div>
+                            <p className="text-[11px] uppercase tracking-wide muted">
+                              {t('webPosShiftCountCash')}
+                            </p>
+                            <p className="font-semibold tabular-nums mt-0.5">
+                              {money(s.closingCashCounted)}
+                            </p>
+                          </div>
+                        )}
+                        {s.variance != null && (
+                          <div>
+                            <p className="text-[11px] uppercase tracking-wide muted">
+                              {t('reportsCashVariance')}
+                            </p>
+                            <p className="font-semibold tabular-nums mt-0.5">{money(s.variance)}</p>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+
               {!!report.vatRows?.length && (
                 <section className="rounded-xl border border-[var(--border)] overflow-hidden">
                   <h2 className="px-3 py-2 text-sm font-semibold bg-[var(--bg-muted)]">
@@ -308,7 +376,7 @@ export default function ReportsPage() {
                       report.channelRows.map((r) => (
                         <li key={r.channel} className="flex justify-between px-3 py-2">
                           <span>
-                            {r.channel} ∑ {r.count}
+                            {r.channel} ù {r.count}
                           </span>
                           <span className="tabular-nums">{money(r.total)}</span>
                         </li>
@@ -327,7 +395,7 @@ export default function ReportsPage() {
                       report.paymentRows.map((r) => (
                         <li key={r.method} className="flex justify-between px-3 py-2">
                           <span>
-                            {r.method} ∑ {r.count}
+                            {r.method} ù {r.count}
                           </span>
                           <span className="tabular-nums">{money(r.total)}</span>
                         </li>

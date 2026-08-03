@@ -139,7 +139,7 @@ export default function Orders() {
     if (channel === 'dine_in') return t('dineIn');
     if (channel === 'delivery') return t('delivery');
     if (channel === 'takeaway') return t('takeaway');
-    return channel || '—';
+    return channel || '-';
   };
 
   const online = useMemo(
@@ -345,7 +345,7 @@ export default function Orders() {
                     : 'ASAP'}
                 </span>
                 <span className="rounded bg-[var(--bg-muted)] px-1.5 py-0.5">
-                  {order.paymentMethod || '—'} / {order.paymentStatus || '—'}
+                  {order.paymentMethod || '-'} / {order.paymentStatus || '-'}
                 </span>
                 <span className="rounded bg-[var(--bg-muted)] px-1.5 py-0.5">
                   CHF {Number(order.total || 0).toFixed(2)}
@@ -411,7 +411,7 @@ export default function Orders() {
             <div className="mt-3 space-y-1.5 text-sm">
               <p>
                 <span className="muted">Customer:</span>{' '}
-                {selected.customerName || '—'} {selected.customerPhone || ''}
+                {selected.customerName || '-'} {selected.customerPhone || ''}
               </p>
               {selected.shippingAddress && (
                 <p>

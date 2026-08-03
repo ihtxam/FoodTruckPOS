@@ -113,7 +113,7 @@ export async function openCashDrawerViaAgent(opts?: { printerName?: string }): P
 
 export function browserPrintText(text: string, qrImageSrc?: string) {
   const w = window.open('', '_blank', 'width=400,height=700');
-  if (!w) throw new Error('Popup blocked — allow popups to print');
+  if (!w) throw new Error('Popup blocked - allow popups to print');
   const safe = text.replace(/&/g, '&amp;').replace(/</g, '&lt;');
   const qrHtml = qrImageSrc
     ? `<div style="text-align:center;margin-top:8px"><img src="${qrImageSrc}" width="160" height="160" alt="QR receipt"/><div style="font:11px monospace;margin-top:4px">Scan for digital receipt</div></div>`

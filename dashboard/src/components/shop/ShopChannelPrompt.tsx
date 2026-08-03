@@ -137,7 +137,7 @@ export default function ShopChannelPrompt({
                   {opt.label}
                 </span>
                 <span className={`block text-[11px] mt-0.5 ${on ? 'text-white/80' : 'text-stone-500'}`}>
-                  {opt.etaMinutes}–{opt.etaMinutes + 10} {t('shopMins')}
+                  {opt.etaMinutes}-{opt.etaMinutes + 10} {t('shopMins')}
                 </span>
               </button>
             );
