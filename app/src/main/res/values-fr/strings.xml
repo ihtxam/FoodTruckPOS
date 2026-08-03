@@ -28,6 +28,12 @@
     <string name="settings_section_appearance">Apparence</string>
     <string name="settings_section_diagnostics">Diagnostics</string>
     <string name="settings_section_license">Licence</string>
+    <string name="online_settings_title">Paramètres en ligne</string>
+    <string name="online_settings_open">Ouvrir les paramètres en ligne</string>
+    <string name="online_settings_hint">En ligne, ouvrez le même panneau marchand que WebPOS. Hors ligne, utilisez les écrans locaux ci-dessous.</string>
+    <string name="online_settings_offline">Pas d’internet — utilisez les paramètres locaux.</string>
+    <string name="online_settings_need_login">Connectez-vous d’abord avec l’e-mail du panneau.</string>
+    <string name="online_settings_opening">Ouverture des paramètres en ligne…</string>
     <string name="license_settings_title">Licence et activation</string>
     <string name="license_status_trial">Essai actif — %1$d jour(s) restant(s)</string>
     <string name="license_status_active">Licence valide jusqu\'au %1$s</string>

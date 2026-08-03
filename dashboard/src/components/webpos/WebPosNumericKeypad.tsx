@@ -11,6 +11,7 @@ type Props = {
   disabled?: boolean;
   showModeButtons?: boolean;
   showQuickAdd?: boolean;
+  applyLabel?: string;
 };
 
 export default function WebPosNumericKeypad({
@@ -22,6 +23,7 @@ export default function WebPosNumericKeypad({
   disabled,
   showModeButtons = true,
   showQuickAdd = false,
+  applyLabel,
 }: Props) {
   const { t } = useI18n();
 
@@ -63,7 +65,7 @@ export default function WebPosNumericKeypad({
               onClick={() => onModeChange(id)}
               className={`rounded-lg py-2 text-xs font-bold uppercase tracking-wide transition ${
                 mode === id
-                  ? 'bg-teal-100 text-teal-900 ring-1 ring-teal-400'
+                  ? 'bg-[var(--webpos-accent-soft)] text-[var(--webpos-accent-text)] ring-1 ring-[var(--webpos-accent-ring)]'
                   : 'bg-white text-stone-600 ring-1 ring-stone-200 hover:bg-stone-50'
               }`}
             >
@@ -145,9 +147,9 @@ export default function WebPosNumericKeypad({
         type="button"
         disabled={disabled}
         onClick={onApply}
-        className="w-full rounded-lg bg-teal-600 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-40"
+        className="webpos-accent-btn w-full rounded-lg py-2 text-sm font-semibold disabled:opacity-40"
       >
-        {t('webPosKeypadApply')}
+        {applyLabel || t('webPosKeypadApply')}
       </button>
     </div>
   );

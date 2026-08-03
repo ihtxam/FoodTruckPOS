@@ -24,6 +24,7 @@ android {
         }
 
         buildConfigField("String", "LICENSE_API_BASE_URL", "\"https://api.chaslay.com/\"")
+        buildConfigField("String", "MERCHANT_DASHBOARD_URL", "\"https://app.chaslay.com\"")
         buildConfigField("String", "TENANT_SLUG", "\"\"")
         buildConfigField("String", "SYNC_API_KEY", "\"ihtsham_76875hgf755rjgkjh7zrzrhvjhv\"")
         buildConfigField("int", "TRIAL_DAYS", "15")

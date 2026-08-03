@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
-import { Printer, RefreshCw, Search, X } from 'lucide-react';
+import {
+  ChevronLeft,
+  ChevronRight,
+  Info,
+  Printer,
+  RefreshCw,
+  Search,
+  Trash2,
+  X,
+} from 'lucide-react';
 import api from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
 import type { PosOrderForReceipt } from '@/lib/webpos-receipt';
@@ -16,7 +25,7 @@ export type PosOrder = PosOrderForReceipt & {
   masterOrderId?: string | null;
 };
 
-type HeldRow = {
+export type HeldRow = {
   id: string;
   label?: string | null;
   status: string;
@@ -26,8 +35,8 @@ type HeldRow = {
   updatedAt: string;
 };
 
-type TabId = 'completed' | 'held' | 'all';
-type DateRange = 'today' | 'week' | 'all';
+type StatusFilter = 'active' | 'completed' | 'all';
+type ChannelFilter = 'all' | 'dine_in' | 'takeaway' | 'delivery' | 'platform';
 
 type Props = {
   open: boolean;
@@ -44,12 +53,6 @@ type Props = {
 
 function todayIso(): string {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Zurich' });
-}
-
-function weekAgoIso(): string {
-  const d = new Date();
-  d.setDate(d.getDate() - 6);
-  return d.toLocaleDateString('en-CA', { timeZone: 'Europe/Zurich' });
 }
 
 function canCancelOrder(o: PosOrder): boolean {
@@ -70,9 +73,37 @@ function canRefundOrder(o: PosOrder): boolean {
   );
 }
 
-function splitBillLabel(t: (k: string) => string, n: number) {
-  return t('webPosSplitBillN').replace('{n}', String(n));
+function channelBadgeClass(ch?: string | null) {
+  switch (ch) {
+    case 'dine_in':
+      return 'bg-sky-100 text-sky-800';
+    case 'takeaway':
+      return 'bg-amber-100 text-amber-900';
+    case 'delivery':
+      return 'bg-orange-100 text-orange-900';
+    default:
+      return 'bg-violet-100 text-violet-800';
+  }
 }
+
+function isPlatformChannel(ch?: string | null) {
+  if (!ch) return false;
+  const c = ch.toLowerCase();
+  return (
+    c.includes('uber') ||
+    c.includes('doordash') ||
+    c.includes('deliveroo') ||
+    c.includes('platform') ||
+    c === 'web_shop' ||
+    c === 'online'
+  );
+}
+
+type ListItem =
+  | { kind: 'held'; held: HeldRow }
+  | { kind: 'order'; order: PosOrder };
+
+const PAGE_SIZE = 10;
 
 export default function WebPosOrdersPanel({
   open,
@@ -86,20 +117,22 @@ export default function WebPosOrdersPanel({
   highlightOrderId = null,
 }: Props) {
   const { t, locale } = useI18n();
-  const [tab, setTab] = useState<TabId>('completed');
-  const [dateRange, setDateRange] = useState<DateRange>('today');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('active');
+  const [channelFilter, setChannelFilter] = useState<ChannelFilter>('all');
   const [search, setSearch] = useState('');
   const [held, setHeld] = useState<HeldRow[]>([]);
   const [orders, setOrders] = useState<PosOrder[]>([]);
   const [reasons, setReasons] = useState<CancelReason[]>([]);
   const [loading, setLoading] = useState(false);
   const [printing, setPrinting] = useState(false);
-  const [selected, setSelected] = useState<PosOrder | null>(null);
+  const [selectedHeld, setSelectedHeld] = useState<HeldRow | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<PosOrder | null>(null);
   const [cancelFor, setCancelFor] = useState<PosOrder | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [refundFor, setRefundFor] = useState<PosOrder | null>(null);
   const [refundPartial, setRefundPartial] = useState(false);
   const [refundAmountText, setRefundAmountText] = useState('');
+  const [page, setPage] = useState(0);
 
   const reasonLabel = (r: CancelReason) =>
     locale === 'fr' ? r.fr : locale === 'de' ? r.de : r.en;
@@ -113,21 +146,25 @@ export default function WebPosOrdersPanel({
       partially_refunded: t('webPosStatusPartialRefund'),
       preparing: t('webPosStatusPreparing'),
       accepted: t('webPosStatusAccepted'),
+      held: t('webPosOngoing'),
+      sent_to_kitchen: t('webPosOngoing'),
     };
     return map[key] || status;
+  };
+
+  const channelLabel = (ch?: string | null) => {
+    if (!ch) return 'ù';
+    if (ch === 'dine_in') return t('dineIn');
+    if (ch === 'takeaway') return t('takeaway');
+    if (ch === 'delivery') return t('delivery');
+    if (isPlatformChannel(ch)) return t('webPosFoodPlatform');
+    return ch;
   };
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ limit: '80' });
-      if (dateRange === 'today') {
-        params.set('from', todayIso());
-        params.set('to', todayIso());
-      } else if (dateRange === 'week') {
-        params.set('from', weekAgoIso());
-        params.set('to', todayIso());
-      }
+      const params = new URLSearchParams({ limit: '80', from: todayIso(), to: todayIso() });
       const [h, o] = await Promise.all([
         api.get('/merchant/pos/held'),
         api.get(`/merchant/pos/orders?${params.toString()}`),
@@ -140,7 +177,7 @@ export default function WebPosOrdersPanel({
     } finally {
       setLoading(false);
     }
-  }, [dateRange, t]);
+  }, [t]);
 
   useEffect(() => {
     if (open) void load();
@@ -150,10 +187,15 @@ export default function WebPosOrdersPanel({
     if (!open || !highlightOrderId || orders.length === 0) return;
     const match = orders.find((o) => o.id === highlightOrderId || o.clientId === highlightOrderId);
     if (match) {
-      setTab('completed');
-      setSelected(match);
+      setStatusFilter('completed');
+      setSelectedOrder(match);
+      setSelectedHeld(null);
     }
   }, [open, highlightOrderId, orders]);
+
+  useEffect(() => {
+    setPage(0);
+  }, [statusFilter, channelFilter, search]);
 
   const splitCounts = useMemo(() => {
     const map = new Map<string, number>();
@@ -165,44 +207,62 @@ export default function WebPosOrdersPanel({
     return map;
   }, [orders]);
 
-  const splitOrders = useMemo(() => {
-    if (!selected?.masterOrderId) return [] as PosOrder[];
-    const siblings = orders.filter((o) => o.masterOrderId === selected.masterOrderId);
-    if (siblings.length <= 1) return [];
-    return siblings.sort(
-      (a, b) =>
-        (a.splitCheckNumber ?? 0) - (b.splitCheckNumber ?? 0) ||
-        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-    );
-  }, [selected, orders]);
-
-  const isSplit = splitOrders.length > 1;
-
-  const filteredOrders = useMemo(() => {
-    let list = orders;
-    if (tab === 'completed') {
-      list = list.filter(
-        (o) =>
-          o.status === 'completed' ||
-          o.status === 'partially_refunded' ||
-          o.status === 'cancelled' ||
-          o.status === 'refunded'
-      );
-    }
+  const listItems = useMemo(() => {
+    const items: ListItem[] = [];
     const q = search.trim().toLowerCase();
-    if (q) {
-      list = list.filter(
-        (o) =>
-          o.orderNumber.toLowerCase().includes(q) ||
-          (o.clientId || '').toLowerCase().includes(q)
-      );
-    }
-    return list;
-  }, [orders, tab, search]);
 
-  if (!open) return null;
+    if (statusFilter === 'active' || statusFilter === 'all') {
+      for (const h of held) {
+        if (channelFilter !== 'all') {
+          if (channelFilter === 'platform') {
+            if (!isPlatformChannel(h.channel)) continue;
+          } else if ((h.channel || 'takeaway') !== channelFilter) {
+            continue;
+          }
+        }
+        if (q) {
+          const label = (h.label || '').toLowerCase();
+          if (!label.includes(q) && !(h.channel || '').toLowerCase().includes(q)) continue;
+        }
+        items.push({ kind: 'held', held: h });
+      }
+    }
+
+    if (statusFilter === 'completed' || statusFilter === 'all') {
+      for (const o of orders) {
+        if (channelFilter !== 'all') {
+          if (channelFilter === 'platform') {
+            if (!isPlatformChannel(o.channel)) continue;
+          } else if ((o.channel || 'takeaway') !== channelFilter) {
+            continue;
+          }
+        }
+        if (q) {
+          const hay = `${o.orderNumber} ${o.clientId || ''} ${o.customerName || ''} ${o.tableLabel || ''}`.toLowerCase();
+          if (!hay.includes(q)) continue;
+        }
+        items.push({ kind: 'order', order: o });
+      }
+    }
+
+    return items;
+  }, [held, orders, statusFilter, channelFilter, search]);
+
+  const pageCount = Math.max(1, Math.ceil(listItems.length / PAGE_SIZE));
+  const pageItems = listItems.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
+  const rangeStart = listItems.length === 0 ? 0 : page * PAGE_SIZE + 1;
+  const rangeEnd = Math.min(listItems.length, (page + 1) * PAGE_SIZE);
 
   const money = (n: number) => `CHF ${Number(n || 0).toFixed(2)}`;
+
+  const heldCartLines = (h: HeldRow) => {
+    const data = h.cartJson as { cart?: Array<{ name: string; quantity: number; lineTotal: number }> } | Array<{ name: string; quantity: number; lineTotal: number }>;
+    if (Array.isArray(data)) return data;
+    return data?.cart || [];
+  };
+
+  const heldTotal = (h: HeldRow) =>
+    heldCartLines(h).reduce((s, l) => s + Number(l.lineTotal || 0), 0);
 
   const doCancel = async () => {
     if (!cancelFor || !cancelReason) return;
@@ -210,7 +270,7 @@ export default function WebPosOrdersPanel({
       await api.post(`/merchant/pos/orders/${cancelFor.id}/cancel`, { reason: cancelReason });
       toast.success(t('webPosOrderCancelled'));
       setCancelFor(null);
-      setSelected(null);
+      setSelectedOrder(null);
       setCancelReason('');
       void load();
     } catch (e: any) {
@@ -235,23 +295,11 @@ export default function WebPosOrdersPanel({
       setRefundFor(null);
       setRefundPartial(false);
       setRefundAmountText('');
-      setSelected(null);
+      setSelectedOrder(null);
       void load();
     } catch (e: any) {
       toast.error(e.response?.data?.error || t('webPosRefundFailed'));
     }
-  };
-
-  const openCancel = (o: PosOrder) => {
-    setCancelFor(o);
-    setCancelReason(reasons[0] ? reasonLabel(reasons[0]) : '');
-  };
-
-  const openRefund = (o: PosOrder) => {
-    const remaining = round2(o.total - o.refundAmount);
-    setRefundFor(o);
-    setRefundPartial(false);
-    setRefundAmountText(remaining.toFixed(2));
   };
 
   const printOne = async (order: PosOrder, splitLabel?: string | null) => {
@@ -264,414 +312,351 @@ export default function WebPosOrdersPanel({
     }
   };
 
-  const printAllSplits = async () => {
-    if (!onPrintOrder || splitOrders.length === 0) return;
-    setPrinting(true);
-    try {
-      for (const split of splitOrders) {
-        const label = split.splitCheckNumber
-          ? splitBillLabel(t, split.splitCheckNumber)
-          : splitBillLabel(t, splitOrders.indexOf(split) + 1);
-        await onPrintOrder(split, label);
-      }
-    } finally {
-      setPrinting(false);
-    }
+  const selectHeld = (h: HeldRow) => {
+    setSelectedHeld(h);
+    setSelectedOrder(null);
   };
 
-  const renderOrderActions = (o: PosOrder, compact = false) => {
-    const showCancel = canCancel && canCancelOrder(o);
-    const showRefund = canRefund && canRefundOrder(o);
-    const showPrint = !!onPrintOrder;
-    if (!showCancel && !showRefund && !showPrint) return null;
-    return (
-      <div className={`flex flex-wrap gap-2 ${compact ? '' : 'pt-1'}`}>
-        {showPrint ? (
-          <button
-            type="button"
-            className="btn-secondary text-xs inline-flex items-center gap-1"
-            disabled={printing}
-            onClick={(e) => {
-              e.stopPropagation();
-              void printOne(o);
-            }}
-          >
-            <Printer size={12} />
-            {t('webPosPrintReceipt')}
-          </button>
-        ) : null}
-        {showCancel ? (
-          <button
-            type="button"
-            className="btn-secondary text-xs"
-            onClick={(e) => {
-              e.stopPropagation();
-              openCancel(o);
-            }}
-          >
-            {t('webPosCancelOrder')}
-          </button>
-        ) : null}
-        {showRefund ? (
-          <button
-            type="button"
-            className="btn-secondary text-xs"
-            onClick={(e) => {
-              e.stopPropagation();
-              openRefund(o);
-            }}
-          >
-            {t('webPosRefund')}
-          </button>
-        ) : null}
-      </div>
-    );
+  const selectOrder = (o: PosOrder) => {
+    setSelectedOrder(o);
+    setSelectedHeld(null);
   };
 
-  const renderSplitDetail = () => {
-    if (!selected || !isSplit) return null;
-    return (
-      <div className="space-y-2">
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-sm font-semibold">
-            {t('webPosSplitOrderTitle').replace('{count}', String(splitOrders.length))}
-          </p>
-          {onPrintOrder ? (
-            <button
-              type="button"
-              className="btn-secondary text-xs inline-flex items-center gap-1"
-              disabled={printing}
-              onClick={() => void printAllSplits()}
-            >
-              <Printer size={12} />
-              {t('webPosPrintAllSplits')}
-            </button>
-          ) : null}
-        </div>
-        {splitOrders.map((split, index) => {
-          const billN = split.splitCheckNumber ?? index + 1;
-          const label = splitBillLabel(t, billN);
-          return (
-            <div
-              key={split.id}
-              className="rounded-lg border border-[var(--border)] bg-[var(--bg-muted)] p-3 space-y-1"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-sm font-semibold">{label}</span>
-                <div className="flex items-center gap-1">
-                  <span className="text-sm font-semibold tabular-nums">{money(split.total)}</span>
-                  {onPrintOrder ? (
-                    <button
-                      type="button"
-                      className="p-1.5 rounded-lg hover:bg-[var(--bg)]"
-                      disabled={printing}
-                      aria-label={t('webPosPrintReceipt')}
-                      onClick={() =>
-                        void printOne(split, label)
-                      }
-                    >
-                      <Printer size={16} />
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-              <ul className="text-xs text-[var(--text-muted)]">
-                {split.items.map((i, idx) => (
-                  <li key={idx}>
-                    {i.quantity}ù {i.name}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          );
-        })}
-        <div className="flex justify-between font-semibold text-sm pt-1">
-          <span>{t('webPosOrderTotal')}</span>
-          <span className="tabular-nums">
-            {money(splitOrders.reduce((sum, s) => sum + Number(s.total || 0), 0))}
-          </span>
-        </div>
-      </div>
-    );
-  };
+  if (!open) return null;
+
+  const channelFilters: Array<{ id: ChannelFilter; label: string }> = [
+    { id: 'dine_in', label: t('dineIn') },
+    { id: 'takeaway', label: t('takeaway') },
+    { id: 'delivery', label: t('delivery') },
+    { id: 'platform', label: t('webPosFoodPlatform') },
+  ];
 
   return (
     <div
       className={
         embedded
-          ? 'flex min-h-0 min-w-0 flex-1 flex-col bg-[var(--bg-elevated)]'
+          ? 'flex min-h-0 min-w-0 flex-1 flex-col bg-white'
           : 'fixed inset-0 z-50 flex justify-end bg-black/40'
       }
     >
       <div
         className={
           embedded
-            ? 'flex min-h-0 flex-1 flex-col bg-[var(--bg-elevated)]'
-            : 'flex h-full w-full max-w-md flex-col bg-[var(--bg-elevated)] shadow-xl'
+            ? 'flex min-h-0 flex-1 flex-col bg-white'
+            : 'flex h-full w-full max-w-5xl flex-col bg-white shadow-xl'
         }
       >
-        <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3">
-          <h2 className="font-semibold">{t('webPosOrders')}</h2>
-          <div className="flex items-center gap-1">
+        {/* Filter bar */}
+        <div className="flex flex-wrap items-center gap-2 border-b border-stone-200 px-3 py-2.5">
+          <div className="relative min-w-[12rem] flex-1">
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400" />
+            <input
+              type="search"
+              className="w-full rounded-lg border border-stone-200 bg-stone-50 py-2 pl-8 pr-3 text-sm"
+              placeholder={t('webPosSearchOrders')}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          <select
+            className="rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm font-semibold"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+          >
+            <option value="active">{t('webPosActive')}</option>
+            <option value="completed">{t('webPosCompletedOrders')}</option>
+            <option value="all">{t('webPosAllOrders')}</option>
+          </select>
+          <div className="flex flex-wrap gap-1">
+            {channelFilters.map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => setChannelFilter(channelFilter === f.id ? 'all' : f.id)}
+                className={`rounded-lg px-2.5 py-1.5 text-xs font-bold ${
+                  channelFilter === f.id
+                    ? 'bg-stone-800 text-white'
+                    : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+          <div className="ml-auto flex items-center gap-1 text-xs text-stone-500">
+            <span className="tabular-nums">
+              {rangeStart}-{rangeEnd} / {listItems.length}
+            </span>
             <button
               type="button"
-              className="p-2"
+              className="rounded p-1.5 hover:bg-stone-100 disabled:opacity-30"
+              disabled={page <= 0}
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <button
+              type="button"
+              className="rounded p-1.5 hover:bg-stone-100 disabled:opacity-30"
+              disabled={page >= pageCount - 1}
+              onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+            >
+              <ChevronRight size={16} />
+            </button>
+            <button
+              type="button"
+              className="rounded p-1.5 hover:bg-stone-100"
               onClick={() => void load()}
               disabled={loading}
               aria-label={t('webPosRefreshOrders')}
             >
               <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
             </button>
-            <button type="button" className="p-2" onClick={onClose} aria-label={t('close')}>
-              <X size={18} />
-            </button>
+            {!embedded ? (
+              <button type="button" className="rounded p-1.5 hover:bg-stone-100" onClick={onClose}>
+                <X size={16} />
+              </button>
+            ) : null}
           </div>
         </div>
 
-        <div className="flex gap-1 border-b border-[var(--border)] px-3 pt-2">
-          {(
-            [
-              ['completed', t('webPosCompletedOrders')],
-              ['held', t('webPosOnHold')],
-              ['all', t('webPosAllOrders')],
-            ] as const
-          ).map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setTab(id)}
-              className={`px-3 py-2 text-sm ${
-                tab === id
-                  ? 'border-b-2 border-[var(--text)] font-semibold'
-                  : 'text-[var(--text-muted)]'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {tab !== 'held' ? (
-          <div className="space-y-2 border-b border-[var(--border)] px-3 py-2">
-            <div className="flex gap-1">
-              {(
-                [
-                  ['today', t('webPosToday')],
-                  ['week', t('webPosLast7Days')],
-                  ['all', t('webPosDateAll')],
-                ] as const
-              ).map(([id, label]) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => setDateRange(id)}
-                  className={`rounded-lg px-2.5 py-1 text-xs ${
-                    dateRange === id
-                      ? 'bg-[var(--text)] text-[var(--bg)] font-medium'
-                      : 'bg-[var(--bg-muted)] text-[var(--text-muted)]'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <div className="relative">
-              <Search
-                size={14}
-                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"
-              />
-              <input
-                type="search"
-                className="input w-full pl-8 text-sm"
-                placeholder={t('webPosSearchOrder')}
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </div>
-          </div>
-        ) : null}
-
-        <div className="min-h-0 flex-1 overflow-y-auto p-3 space-y-2">
-          {loading ? (
-            <p className="text-sm muted">{t('loading')}</p>
-          ) : tab === 'held' ? (
-            held.length === 0 ? (
-              <p className="text-sm muted">{t('webPosNoHeld')}</p>
+        <div className="flex min-h-0 flex-1">
+          {/* List */}
+          <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
+            {loading ? (
+              <p className="p-4 text-sm text-stone-400">{t('loading')}</p>
+            ) : pageItems.length === 0 ? (
+              <p className="p-4 text-sm text-stone-400">{t('webPosNoOrders')}</p>
             ) : (
-              held.map((h) => (
-                <div
-                  key={h.id}
-                  className="rounded-xl border border-[var(--border)] p-3 space-y-2"
-                >
-                  <div className="flex justify-between gap-2">
-                    <div>
-                      <p className="font-medium text-sm">{h.label || t('webPosHeldOrder')}</p>
-                      <p className="text-[11px] muted">
-                        {h.status} ù {h.channel} ù {new Date(h.updatedAt).toLocaleString()}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      className="btn-primary flex-1 text-sm"
-                      onClick={() => {
-                        onResumeHeld(h);
-                        onClose();
-                      }}
-                    >
-                      {t('webPosResume')}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-secondary text-sm"
-                      onClick={async () => {
-                        try {
-                          await api.delete(`/merchant/pos/held/${h.id}`);
-                          void load();
-                        } catch (e: any) {
-                          toast.error(e.response?.data?.error || t('deleteFailed'));
-                        }
-                      }}
-                    >
-                      {t('delete')}
-                    </button>
-                  </div>
-                </div>
-              ))
-            )
-          ) : filteredOrders.length === 0 ? (
-            <p className="text-sm muted">
-              {tab === 'completed' ? t('webPosNoCompletedOrders') : t('webPosNoOrders')}
-            </p>
-          ) : (
-            filteredOrders.map((o) => {
-              const isSplitRow = o.masterOrderId && (splitCounts.get(o.masterOrderId) || 0) > 1;
-              return (
-                <button
-                  key={o.id}
-                  type="button"
-                  className={`w-full rounded-xl border p-3 space-y-2 text-left transition-colors hover:bg-[var(--bg-muted)] ${
-                    selected?.id === o.id ? 'border-[var(--text)]' : 'border-[var(--border)]'
-                  }`}
-                  onClick={() => setSelected(o)}
-                >
-                  <div className="flex justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <p className="font-medium text-sm truncate">{o.orderNumber}</p>
-                        {isSplitRow ? (
-                          <span className="rounded-full bg-orange-100 px-1.5 py-0.5 text-[9px] font-bold uppercase text-orange-800">
-                            {t('webPosSplitBadge')}
+              <ul className="divide-y divide-stone-100">
+                {pageItems.map((item) => {
+                  if (item.kind === 'held') {
+                    const h = item.held;
+                    const selected = selectedHeld?.id === h.id;
+                    const total = heldTotal(h);
+                    return (
+                      <li key={`h-${h.id}`}>
+                        <button
+                          type="button"
+                          onClick={() => selectHeld(h)}
+                          className={`flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-stone-50 ${
+                            selected ? 'bg-teal-50' : ''
+                          }`}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-xs text-stone-500">
+                                {new Date(h.updatedAt).toLocaleString()}
+                              </span>
+                              <span className="truncate text-sm font-semibold">
+                                {h.label || t('webPosHeldOrder')}
+                              </span>
+                              <span
+                                className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${channelBadgeClass(h.channel)}`}
+                              >
+                                {channelLabel(h.channel)}
+                              </span>
+                              <span className="rounded bg-teal-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-teal-800">
+                                {t('webPosOngoing')}
+                              </span>
+                            </div>
+                          </div>
+                          <span className="shrink-0 text-sm font-bold tabular-nums text-teal-700">
+                            {money(total)}
                           </span>
-                        ) : null}
-                      </div>
-                      <p className="text-[11px] muted">
-                        {statusLabel(o.status)} ù {o.paymentMethod || 'ù'} ù {money(o.total)}
-                      </p>
-                      <p className="text-[11px] muted">
-                        {new Date(o.completedAt || o.createdAt).toLocaleString()}
-                        {o.channel ? ` ù ${o.channel}` : ''}
-                      </p>
-                      {o.refundAmount > 0 ? (
-                        <p className="text-[11px] text-amber-700">
-                          {t('webPosRefundedAmount').replace('{amount}', money(o.refundAmount))}
-                        </p>
-                      ) : null}
-                      {o.cancelReason ? (
-                        <p className="text-[11px] text-red-700">{o.cancelReason}</p>
-                      ) : null}
-                    </div>
-                    <StatusBadge status={o.status} label={statusLabel(o.status)} />
-                  </div>
-                  <ul className="text-xs text-[var(--text-muted)]">
-                    {o.items.slice(0, 3).map((i, idx) => (
-                      <li key={idx}>
-                        {i.quantity}ù {i.name}
+                          <Info size={16} className="shrink-0 text-stone-400" />
+                          <span
+                            role="button"
+                            tabIndex={0}
+                            className="shrink-0 rounded p-1 text-stone-400 hover:bg-red-50 hover:text-red-600"
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              try {
+                                await api.delete(`/merchant/pos/held/${h.id}`);
+                                if (selectedHeld?.id === h.id) setSelectedHeld(null);
+                                void load();
+                              } catch (err: any) {
+                                toast.error(err.response?.data?.error || t('deleteFailed'));
+                              }
+                            }}
+                          >
+                            <Trash2 size={16} />
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  }
+
+                  const o = item.order;
+                  const selected = selectedOrder?.id === o.id;
+                  const isSplitRow = o.masterOrderId && (splitCounts.get(o.masterOrderId) || 0) > 1;
+                  return (
+                    <li key={`o-${o.id}`}>
+                      <button
+                        type="button"
+                        onClick={() => selectOrder(o)}
+                        className={`flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-stone-50 ${
+                          selected ? 'bg-teal-50' : ''
+                        }`}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-xs text-stone-500">
+                              {new Date(o.completedAt || o.createdAt).toLocaleString()}
+                            </span>
+                            <span className="truncate text-sm font-semibold">
+                              {o.tableLabel ? `T ${o.tableLabel}` : o.orderNumber}
+                              {o.customerName ? ` ù ${o.customerName}` : ''}
+                            </span>
+                            <span
+                              className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${channelBadgeClass(o.channel)}`}
+                            >
+                              {channelLabel(o.channel)}
+                            </span>
+                            {o.tableLabel ? (
+                              <span className="rounded bg-rose-100 px-1.5 py-0.5 text-[10px] font-bold text-rose-800">
+                                {t('table')} {o.tableLabel}
+                              </span>
+                            ) : null}
+                            {isSplitRow ? (
+                              <span className="rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-orange-800">
+                                {t('webPosSplitBadge')}
+                              </span>
+                            ) : null}
+                            <span
+                              className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${
+                                o.status === 'completed'
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : 'bg-stone-100 text-stone-600'
+                              }`}
+                            >
+                              {statusLabel(o.status)}
+                            </span>
+                          </div>
+                          <p className="mt-0.5 text-[11px] text-stone-400">{o.orderNumber}</p>
+                        </div>
+                        <span className="shrink-0 text-sm font-bold tabular-nums text-teal-700">
+                          {money(o.total)}
+                        </span>
+                        <Info size={16} className="shrink-0 text-stone-400" />
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+
+          {/* Detail panel */}
+          <aside className="flex w-full max-w-sm shrink-0 flex-col border-l border-stone-200 bg-stone-50">
+            {selectedHeld ? (
+              <>
+                <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                  <p className="text-sm font-semibold">{selectedHeld.label || t('webPosHeldOrder')}</p>
+                  <p className="mt-1 text-xs text-stone-500">
+                    {channelLabel(selectedHeld.channel)} ù {statusLabel(selectedHeld.status)}
+                  </p>
+                  <ul className="mt-4 space-y-2 text-sm">
+                    {heldCartLines(selectedHeld).map((l, idx) => (
+                      <li key={idx} className="flex justify-between gap-2">
+                        <span>
+                          {l.quantity}ù {l.name}
+                        </span>
+                        <span className="tabular-nums">{money(l.lineTotal)}</span>
                       </li>
                     ))}
-                    {o.items.length > 3 ? (
-                      <li className="italic">+{o.items.length - 3} ù</li>
-                    ) : null}
                   </ul>
-                  {renderOrderActions(o, true)}
-                </button>
-              );
-            })
-          )}
-        </div>
-
-        {selected && !cancelFor && !refundFor ? (
-          <div className="border-t border-[var(--border)] p-4 space-y-3 bg-[var(--bg)] max-h-[45vh] overflow-y-auto">
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <p className="font-semibold">{selected.orderNumber}</p>
-                <p className="text-xs muted">{statusLabel(selected.status)}</p>
-              </div>
-              <div className="flex items-center gap-1">
-                {onPrintOrder ? (
+                  <div className="mt-4 flex justify-between border-t border-stone-200 pt-3 text-base font-bold">
+                    <span>{t('webPosTotal')}</span>
+                    <span className="tabular-nums">{money(heldTotal(selectedHeld))}</span>
+                  </div>
+                </div>
+                <div className="border-t border-stone-200 p-3">
                   <button
                     type="button"
-                    className="p-1.5 rounded-lg hover:bg-[var(--bg-muted)]"
-                    disabled={printing}
-                    aria-label={t('webPosPrintReceipt')}
-                    onClick={() => void printOne(selected)}
+                    className="w-full rounded-xl bg-violet-800 py-3.5 text-sm font-bold text-white hover:bg-violet-900"
+                    onClick={() => {
+                      onResumeHeld(selectedHeld);
+                      onClose();
+                    }}
                   >
-                    <Printer size={18} />
+                    {t('webPosLoadOrder')}
                   </button>
-                ) : null}
-                <button type="button" className="p-1 muted" onClick={() => setSelected(null)}>
-                  <X size={16} />
-                </button>
-              </div>
-            </div>
-
-            {isSplit ? (
-              renderSplitDetail()
-            ) : (
+                </div>
+              </>
+            ) : selectedOrder ? (
               <>
-                <ul className="text-sm space-y-1">
-                  {selected.items.map((i, idx) => (
-                    <li key={idx} className="flex justify-between gap-2">
-                      <span>
-                        {i.quantity}ù {i.name}
-                      </span>
-                      <span className="tabular-nums">{money(i.totalPrice)}</span>
-                    </li>
-                  ))}
-                </ul>
-                <div className="text-sm space-y-0.5 border-t border-[var(--border)] pt-2">
-                  {selected.subtotal != null ? (
-                    <div className="flex justify-between">
-                      <span className="muted">{t('webPosSubtotal')}</span>
-                      <span>{money(selected.subtotal)}</span>
+                <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-semibold">{selectedOrder.orderNumber}</p>
+                      <p className="text-xs text-stone-500">{statusLabel(selectedOrder.status)}</p>
                     </div>
-                  ) : null}
-                  {selected.taxAmount != null && selected.taxAmount > 0 ? (
-                    <div className="flex justify-between">
-                      <span className="muted">{t('reportsTax')}</span>
-                      <span>{money(selected.taxAmount)}</span>
-                    </div>
-                  ) : null}
-                  <div className="flex justify-between font-semibold">
+                    {onPrintOrder ? (
+                      <button
+                        type="button"
+                        className="rounded-lg p-2 hover:bg-white"
+                        disabled={printing}
+                        onClick={() => void printOne(selectedOrder)}
+                      >
+                        <Printer size={18} />
+                      </button>
+                    ) : null}
+                  </div>
+                  <ul className="mt-4 space-y-2 text-sm">
+                    {selectedOrder.items.map((i, idx) => (
+                      <li key={idx} className="flex justify-between gap-2">
+                        <span>
+                          {i.quantity}ù {i.name}
+                        </span>
+                        <span className="tabular-nums">{money(i.totalPrice)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="mt-4 flex justify-between border-t border-stone-200 pt-3 text-base font-bold">
                     <span>{t('webPosTotal')}</span>
-                    <span>{money(selected.total)}</span>
+                    <span className="tabular-nums">{money(selectedOrder.total)}</span>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {canCancel && canCancelOrder(selectedOrder) ? (
+                      <button
+                        type="button"
+                        className="btn-secondary text-xs"
+                        onClick={() => {
+                          setCancelFor(selectedOrder);
+                          setCancelReason(reasons[0] ? reasonLabel(reasons[0]) : '');
+                        }}
+                      >
+                        {t('webPosCancelOrder')}
+                      </button>
+                    ) : null}
+                    {canRefund && canRefundOrder(selectedOrder) ? (
+                      <button
+                        type="button"
+                        className="btn-secondary text-xs"
+                        onClick={() => {
+                          const remaining = round2(selectedOrder.total - selectedOrder.refundAmount);
+                          setRefundFor(selectedOrder);
+                          setRefundPartial(false);
+                          setRefundAmountText(remaining.toFixed(2));
+                        }}
+                      >
+                        {t('webPosRefund')}
+                      </button>
+                    ) : null}
                   </div>
                 </div>
               </>
+            ) : (
+              <div className="flex flex-1 items-center justify-center p-6 text-sm text-stone-400">
+                {t('webPosSelectOrderHint')}
+              </div>
             )}
-
-            {selected.staffName ? (
-              <p className="text-xs muted">
-                {t('webPosStaff')}: {selected.staffName}
-              </p>
-            ) : null}
-            {renderOrderActions(selected)}
-          </div>
-        ) : null}
+          </aside>
+        </div>
 
         {cancelFor ? (
-          <div className="border-t border-[var(--border)] p-4 space-y-3 bg-[var(--bg)]">
+          <div className="border-t border-stone-200 bg-white p-4 space-y-3">
             <p className="text-sm font-medium">
               {t('webPosCancelReason')} ù {cancelFor.orderNumber}
             </p>
@@ -698,7 +683,7 @@ export default function WebPosOrdersPanel({
         ) : null}
 
         {refundFor ? (
-          <div className="border-t border-[var(--border)] p-4 space-y-3 bg-[var(--bg)]">
+          <div className="border-t border-stone-200 bg-white p-4 space-y-3">
             <p className="text-sm font-medium">
               {t('webPosRefund')} ù {refundFor.orderNumber}
             </p>
@@ -743,22 +728,6 @@ export default function WebPosOrdersPanel({
         ) : null}
       </div>
     </div>
-  );
-}
-
-function StatusBadge({ status, label }: { status: string; label: string }) {
-  const tone =
-    status === 'completed'
-      ? 'bg-emerald-100 text-emerald-800'
-      : status === 'cancelled'
-        ? 'bg-red-100 text-red-800'
-        : status === 'refunded' || status === 'partially_refunded'
-          ? 'bg-amber-100 text-amber-800'
-          : 'bg-[var(--bg-muted)] text-[var(--text-muted)]';
-  return (
-    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${tone}`}>
-      {label}
-    </span>
   );
 }
 

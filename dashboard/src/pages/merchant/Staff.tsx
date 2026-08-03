@@ -1,6 +1,7 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
+import { useI18n } from '@/lib/i18n';
 import { ALL_PERMISSIONS, type Permission } from '@/lib/permissions';
 
 type RoleRow = {
@@ -22,6 +23,7 @@ type StaffRow = {
 };
 
 export default function StaffPage() {
+  const { t } = useI18n();
   const [tab, setTab] = useState<'staff' | 'roles'>('staff');
   const [roles, setRoles] = useState<RoleRow[]>([]);
   const [staff, setStaff] = useState<StaffRow[]>([]);
@@ -51,11 +53,11 @@ export default function StaffPage() {
         setStaffForm((f) => ({ ...f, roleId: rolesRes.data.roles[0].id }));
       }
     } catch (e: any) {
-      toast.error(e.response?.data?.error || 'Failed to load users');
+      toast.error(e.response?.data?.error || t('staffLoadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [staffForm.roleId]);
+  }, [staffForm.roleId, t]);
 
   useEffect(() => {
     void load();
@@ -70,11 +72,11 @@ export default function StaffPage() {
     if (!editingRole) return;
     try {
       await api.put(`/merchant/roles/${editingRole.id}`, { permissions: rolePerms });
-      toast.success('Role updated');
+      toast.success(t('staffRoleUpdated'));
       setEditingRole(null);
       void load();
     } catch (e: any) {
-      toast.error(e.response?.data?.error || 'Failed to save role');
+      toast.error(e.response?.data?.error || t('staffRoleSaveFailed'));
     }
   };
 
@@ -82,49 +84,47 @@ export default function StaffPage() {
     e.preventDefault();
     try {
       await api.post('/merchant/staff', staffForm);
-      toast.success('User created');
+      toast.success(t('staffUserCreated'));
       setStaffForm({ name: '', roleId: roles[0]?.id || '', pin: '', email: '', password: '', canAccessPanel: false });
       void load();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to create user');
+      toast.error(err.response?.data?.error || t('staffUserCreateFailed'));
     }
   };
 
   const removeStaff = async (id: string) => {
-    if (!confirm('Remove this user?')) return;
+    if (!confirm(t('staffRemoveConfirm'))) return;
     try {
       await api.delete(`/merchant/staff/${id}`);
-      toast.success('User removed');
+      toast.success(t('staffUserRemoved'));
       void load();
     } catch (e: any) {
-      toast.error(e.response?.data?.error || 'Failed to remove user');
+      toast.error(e.response?.data?.error || t('staffUserRemoveFailed'));
     }
   };
 
   if (loading) {
-    return <div className="p-4 text-sm text-[var(--text-muted)]">Loading users & roles…</div>;
+    return <div className="p-4 text-sm text-[var(--text-muted)]">{t('staffLoading')}</div>;
   }
 
   return (
     <div className="space-y-6 max-w-4xl">
       <div>
-        <h1 className="text-xl font-semibold">Users & roles</h1>
-        <p className="text-sm text-[var(--text-muted)] mt-1">
-          Manage staff PINs for WebPOS and Android POS. Control who can access the backend panel and which features they can use.
-        </p>
+        <h1 className="text-xl font-semibold">{t('staffPageTitle')}</h1>
+        <p className="text-sm text-[var(--text-muted)] mt-1">{t('staffPageHint')}</p>
       </div>
 
       <div className="flex gap-2 border-b border-[var(--border)]">
-        {(['staff', 'roles'] as const).map((t) => (
+        {(['staff', 'roles'] as const).map((tabId) => (
           <button
-            key={t}
+            key={tabId}
             type="button"
-            onClick={() => setTab(t)}
+            onClick={() => setTab(tabId)}
             className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px ${
-              tab === t ? 'border-stone-900 text-stone-900' : 'border-transparent text-[var(--text-muted)]'
+              tab === tabId ? 'border-stone-900 text-stone-900' : 'border-transparent text-[var(--text-muted)]'
             }`}
           >
-            {t === 'staff' ? 'Users' : 'Role profiles'}
+            {tabId === 'staff' ? t('staffTabUsers') : t('staffTabRoles')}
           </button>
         ))}
       </div>
@@ -132,10 +132,10 @@ export default function StaffPage() {
       {tab === 'staff' ? (
         <div className="space-y-6">
           <form onSubmit={addStaff} className="card p-4 space-y-3">
-            <h2 className="font-medium">Add user</h2>
+            <h2 className="font-medium">{t('staffAddUser')}</h2>
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block text-sm">
-                Name
+                {t('name')}
                 <input
                   className="input mt-1"
                   required
@@ -144,7 +144,7 @@ export default function StaffPage() {
                 />
               </label>
               <label className="block text-sm">
-                Role
+                {t('staffRole')}
                 <select
                   className="input mt-1"
                   value={staffForm.roleId}
@@ -158,12 +158,12 @@ export default function StaffPage() {
                 </select>
               </label>
               <label className="block text-sm">
-                PIN (WebPOS / app)
+                {t('staffPinLabel')}
                 <input
                   className="input mt-1"
                   inputMode="numeric"
                   pattern="[0-9]{4,8}"
-                  placeholder="4–8 digits"
+                  placeholder={t('staffPinPlaceholder')}
                   value={staffForm.pin}
                   onChange={(e) => setStaffForm({ ...staffForm, pin: e.target.value.replace(/\D/g, '') })}
                 />
@@ -174,12 +174,12 @@ export default function StaffPage() {
                   checked={staffForm.canAccessPanel}
                   onChange={(e) => setStaffForm({ ...staffForm, canAccessPanel: e.target.checked })}
                 />
-                Can access backend panel
+                {t('staffCanAccessPanel')}
               </label>
               {staffForm.canAccessPanel ? (
                 <>
                   <label className="block text-sm">
-                    Email (panel login)
+                    {t('staffEmailPanel')}
                     <input
                       className="input mt-1"
                       type="email"
@@ -189,7 +189,7 @@ export default function StaffPage() {
                     />
                   </label>
                   <label className="block text-sm">
-                    Password
+                    {t('password')}
                     <input
                       className="input mt-1"
                       type="password"
@@ -203,7 +203,7 @@ export default function StaffPage() {
               ) : null}
             </div>
             <button type="submit" className="btn-primary">
-              Add user
+              {t('staffAddUser')}
             </button>
           </form>
 
@@ -211,10 +211,10 @@ export default function StaffPage() {
             <table className="w-full text-sm">
               <thead className="bg-[var(--bg-muted)] text-left">
                 <tr>
-                  <th className="px-3 py-2">Name</th>
-                  <th className="px-3 py-2">Role</th>
-                  <th className="px-3 py-2">PIN</th>
-                  <th className="px-3 py-2">Panel</th>
+                  <th className="px-3 py-2">{t('name')}</th>
+                  <th className="px-3 py-2">{t('staffRole')}</th>
+                  <th className="px-3 py-2">{t('staffPinCol')}</th>
+                  <th className="px-3 py-2">{t('staffPanelCol')}</th>
                   <th className="px-3 py-2" />
                 </tr>
               </thead>
@@ -223,11 +223,13 @@ export default function StaffPage() {
                   <tr key={s.id} className="border-t border-[var(--border)]">
                     <td className="px-3 py-2 font-medium">{s.name}</td>
                     <td className="px-3 py-2">{s.roleName}</td>
-                    <td className="px-3 py-2">{s.pinSet ? 'Set' : '—'}</td>
-                    <td className="px-3 py-2">{s.canAccessPanel ? s.email || 'Yes' : 'No'}</td>
+                    <td className="px-3 py-2">{s.pinSet ? t('staffPinSet') : '—'}</td>
+                    <td className="px-3 py-2">
+                      {s.canAccessPanel ? s.email || t('yes') : t('no')}
+                    </td>
                     <td className="px-3 py-2 text-right">
                       <button type="button" className="text-red-600 text-xs" onClick={() => void removeStaff(s.id)}>
-                        Remove
+                        {t('remove')}
                       </button>
                     </td>
                   </tr>
@@ -243,12 +245,12 @@ export default function StaffPage() {
               <div>
                 <p className="font-medium">{role.name}</p>
                 <p className="text-xs text-[var(--text-muted)]">
-                  {role.permissions.length} permissions
-                  {role.isSystem ? ' — system profile' : ''}
+                  {t('staffPermissionsCount').replace('{count}', String(role.permissions.length))}
+                  {role.isSystem ? ` — ${t('staffSystemProfile')}` : ''}
                 </p>
               </div>
               <button type="button" className="btn-secondary text-sm" onClick={() => openRoleEdit(role)}>
-                Edit permissions
+                {t('staffEditPermissions')}
               </button>
             </div>
           ))}
@@ -258,7 +260,9 @@ export default function StaffPage() {
       {editingRole ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-lg max-h-[85vh] overflow-auto rounded-xl bg-white dark:bg-stone-900 p-4 shadow-xl">
-            <h3 className="font-semibold mb-3">Edit {editingRole.name}</h3>
+            <h3 className="font-semibold mb-3">
+              {t('staffEditRole').replace('{name}', editingRole.name)}
+            </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
               {ALL_PERMISSIONS.map((p) => (
                 <label key={p} className="flex items-center gap-2 text-xs">
@@ -271,16 +275,16 @@ export default function StaffPage() {
                       )
                     }
                   />
-                  {p.replace(/_/g, ' ')}
+                  {t(`perm_${p}`)}
                 </label>
               ))}
             </div>
             <div className="flex justify-end gap-2">
               <button type="button" className="btn-secondary" onClick={() => setEditingRole(null)}>
-                Cancel
+                {t('cancel')}
               </button>
               <button type="button" className="btn-primary" onClick={() => void saveRole()}>
-                Save
+                {t('save')}
               </button>
             </div>
           </div>

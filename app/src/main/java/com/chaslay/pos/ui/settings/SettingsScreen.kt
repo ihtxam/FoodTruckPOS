@@ -212,6 +212,33 @@ fun SettingsScreen(
             color = colors.textPrimary
         )
 
+        Card(
+            colors = CardDefaults.cardColors(containerColor = colors.panelLight),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    stringResource(R.string.online_settings_title),
+                    fontWeight = FontWeight.SemiBold,
+                    color = colors.textPrimary
+                )
+                Text(
+                    stringResource(R.string.online_settings_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.textSecondary
+                )
+                Button(
+                    onClick = viewModel::openOnlineSettings,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(stringResource(R.string.online_settings_open))
+                }
+            }
+        }
+
         OutlinedTextField(
             value = state.businessName,
             onValueChange = viewModel::updateBusinessName,

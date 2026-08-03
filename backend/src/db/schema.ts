@@ -150,6 +150,13 @@ export const merchants = pgTable(
      * send-to-kitchen / kitchen message without multi-course workflow.
      */
     coursesEnabled: boolean("courses_enabled").default(false).notNull(),
+    /**
+     * When true, WebPOS requires an open cash shift before selling.
+     * Staff declare opening float and reconcile cash on close.
+     */
+    shiftsEnabled: boolean("shifts_enabled").default(false).notNull(),
+    /** WebPOS / counter accent theme: teal | green | blue | violet */
+    posColorTheme: varchar("pos_color_theme", { length: 20 }).default("teal").notNull(),
     /** Online / phone restaurant table reservations */
     reservationsEnabled: boolean("reservations_enabled").default(false).notNull(),
     /**
@@ -1707,6 +1714,39 @@ export const marketingEmailLog = pgTable(
     merchantIdx: index("marketing_email_log_merchant_idx").on(table.merchantId),
     emailIdx: index("marketing_email_log_email_idx").on(table.merchantId, table.email),
     typeIdx: index("marketing_email_log_type_idx").on(table.merchantId, table.type),
+  })
+);
+
+/** Cash drawer shifts for WebPOS / counter */
+export const posShifts = pgTable(
+  "pos_shifts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    merchantId: uuid("merchant_id")
+      .notNull()
+      .references(() => merchants.id, { onDelete: "cascade" }),
+    staffId: uuid("staff_id").references(() => merchantStaff.id, { onDelete: "set null" }),
+    staffName: varchar("staff_name", { length: 255 }),
+    status: varchar("status", { length: 20 }).default("open").notNull(), // open | closed
+    openedAt: timestamp("opened_at").defaultNow().notNull(),
+    closedAt: timestamp("closed_at"),
+    openingCash: decimal("opening_cash", { precision: 12, scale: 2 }).default("0").notNull(),
+    closingCashCounted: decimal("closing_cash_counted", { precision: 12, scale: 2 }),
+    expectedCash: decimal("expected_cash", { precision: 12, scale: 2 }),
+    cashSales: decimal("cash_sales", { precision: 12, scale: 2 }).default("0"),
+    cardSales: decimal("card_sales", { precision: 12, scale: 2 }).default("0"),
+    terminalSales: decimal("terminal_sales", { precision: 12, scale: 2 }).default("0"),
+    otherSales: decimal("other_sales", { precision: 12, scale: 2 }).default("0"),
+    orderCount: integer("order_count").default(0),
+    variance: decimal("variance", { precision: 12, scale: 2 }),
+    notes: text("notes"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    merchantIdx: index("pos_shifts_merchant_idx").on(table.merchantId),
+    statusIdx: index("pos_shifts_status_idx").on(table.merchantId, table.status),
+    openedIdx: index("pos_shifts_opened_idx").on(table.merchantId, table.openedAt),
   })
 );
 

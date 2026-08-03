@@ -96,7 +96,9 @@ export default function WebPosTablesView({ onSelectTable, selectedTableId }: Pro
               type="button"
               onClick={() => setActivePlanId(p.id)}
               className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${
-                p.id === activePlanId ? 'bg-teal-600 text-white' : 'bg-stone-100 text-stone-600'
+                p.id === activePlanId
+                  ? 'bg-[var(--webpos-accent)] text-white'
+                  : 'bg-stone-100 text-stone-600'
               }`}
             >
               {p.name}
@@ -123,7 +125,7 @@ export default function WebPosTablesView({ onSelectTable, selectedTableId }: Pro
                 onClick={() => onSelectTable?.({ id: table.id, label: table.label })}
                 className={`absolute flex flex-col items-center justify-center border-2 text-xs font-bold transition hover:brightness-95 ${
                   table.shape === 'round' ? 'rounded-full' : 'rounded-lg'
-                } ${selected ? 'ring-4 ring-teal-400 ring-offset-2' : ''}`}
+                } ${selected ? 'ring-4 ring-[var(--webpos-accent-ring)] ring-offset-2' : ''}`}
                 style={{
                   left: table.posX,
                   top: table.posY,

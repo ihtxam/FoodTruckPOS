@@ -4,6 +4,8 @@ export type PosCheckoutDiscountPreset = {
   percent: number;
 };
 
+export type CourseSendMode = 'fire_per_course' | 'send_all_once';
+
 export type PosCheckoutSettings = {
   tipsEnabled: boolean;
   tipPresetsPercent: number[];
@@ -16,6 +18,8 @@ export type PosCheckoutSettings = {
   splitBillsEnabled: boolean;
   maxSplitParts: number;
   vatIncludedInPrice: boolean;
+  /** Kitchen course firing mode for WebPOS / POS */
+  courseSendMode: CourseSendMode;
 };
 
 export const DEFAULT_POS_CHECKOUT: PosCheckoutSettings = {
@@ -34,6 +38,7 @@ export const DEFAULT_POS_CHECKOUT: PosCheckoutSettings = {
   splitBillsEnabled: true,
   maxSplitParts: 8,
   vatIncludedInPrice: false,
+  courseSendMode: 'fire_per_course',
 };
 
 export function normalizePosCheckoutSettings(raw: unknown): PosCheckoutSettings {
@@ -68,5 +73,6 @@ export function normalizePosCheckoutSettings(raw: unknown): PosCheckoutSettings 
     splitBillsEnabled: src.splitBillsEnabled !== false,
     maxSplitParts: Math.max(2, Math.min(20, Number(src.maxSplitParts) || 8)),
     vatIncludedInPrice: src.vatIncludedInPrice === true,
+    courseSendMode: src.courseSendMode === 'send_all_once' ? 'send_all_once' : 'fire_per_course',
   };
 }

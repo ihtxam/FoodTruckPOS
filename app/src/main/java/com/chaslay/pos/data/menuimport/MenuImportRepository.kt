@@ -7,6 +7,7 @@ import com.chaslay.pos.data.local.entity.ProductEntity
 import com.chaslay.pos.data.local.entity.ProductVariantEntity
 import com.chaslay.pos.data.repository.MenuRepository
 import com.chaslay.pos.data.repository.ProductRepository
+import com.chaslay.pos.ui.catalog.CategoryColorPresets
 import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -50,14 +51,18 @@ class MenuImportRepository @Inject constructor(
             mutableMapOf()
         }
 
-        parsed.categories.forEach { row ->
+        var colorIndex = existingCategories.size
+        parsed.categories.forEachIndexed { index, row ->
             val key = row.name.normalizedKey()
             val existing = existingCategories[key]
+            val autoColor = CategoryColorPresets[colorIndex % CategoryColorPresets.size].first
+            val resolvedColor = row.colorHex.trim().takeIf { it.isNotBlank() && it.startsWith("#") }
+                ?: autoColor
             if (existing != null && mode == MenuImportMode.MERGE) {
                 categoryDao.update(
                     existing.copy(
                         sortOrder = row.sortOrder,
-                        colorHex = row.colorHex,
+                        colorHex = if (row.colorHex.isNotBlank()) resolvedColor else existing.colorHex,
                         printTarget = row.printTarget,
                         onlineVisible = row.onlineVisible,
                         updatedAt = System.currentTimeMillis()
@@ -70,13 +75,14 @@ class MenuImportRepository @Inject constructor(
                     CategoryEntity(
                         name = row.name.trim(),
                         sortOrder = row.sortOrder,
-                        colorHex = row.colorHex,
+                        colorHex = resolvedColor,
                         printTarget = row.printTarget,
                         onlineVisible = row.onlineVisible
                     )
                 )
                 categoryIdByName[key] = id
                 categoriesAdded++
+                colorIndex++
             }
         }
 

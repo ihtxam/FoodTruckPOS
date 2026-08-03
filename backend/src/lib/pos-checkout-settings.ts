@@ -6,6 +6,8 @@ export type PosCheckoutDiscountPreset = {
   percent: number;
 };
 
+export type CourseSendMode = "fire_per_course" | "send_all_once";
+
 export type PosCheckoutSettings = {
   tipsEnabled: boolean;
   tipPresetsPercent: number[];
@@ -19,6 +21,12 @@ export type PosCheckoutSettings = {
   maxSplitParts: number;
   /** Menu prices include VAT (gross); synced to POS devices. */
   vatIncludedInPrice: boolean;
+  /**
+   * Kitchen course firing:
+   * - fire_per_course: SEND all courses, then FIRE Course N individually
+   * - send_all_once: SEND all once; individual fire disabled afterwards
+   */
+  courseSendMode: CourseSendMode;
 };
 
 export const DEFAULT_POS_CHECKOUT: PosCheckoutSettings = {
@@ -37,6 +45,7 @@ export const DEFAULT_POS_CHECKOUT: PosCheckoutSettings = {
   splitBillsEnabled: true,
   maxSplitParts: 8,
   vatIncludedInPrice: false,
+  courseSendMode: "fire_per_course",
 };
 
 function asNumberArray(v: unknown, fallback: number[]): number[] {
@@ -78,6 +87,9 @@ export function normalizePosCheckoutSettings(raw: unknown): PosCheckoutSettings 
     Math.min(20, Number(src.maxSplitParts) || DEFAULT_POS_CHECKOUT.maxSplitParts)
   );
 
+  const courseSendMode: CourseSendMode =
+    src.courseSendMode === "send_all_once" ? "send_all_once" : "fire_per_course";
+
   return {
     tipsEnabled: src.tipsEnabled !== false,
     tipPresetsPercent: tipPresets.length ? tipPresets : DEFAULT_POS_CHECKOUT.tipPresetsPercent,
@@ -90,5 +102,6 @@ export function normalizePosCheckoutSettings(raw: unknown): PosCheckoutSettings 
     splitBillsEnabled: src.splitBillsEnabled !== false,
     maxSplitParts,
     vatIncludedInPrice: src.vatIncludedInPrice === true,
+    courseSendMode,
   };
 }

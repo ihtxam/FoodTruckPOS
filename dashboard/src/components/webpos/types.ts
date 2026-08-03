@@ -25,7 +25,7 @@ export type CartLine = {
   sentToKitchen?: boolean;
 };
 
-export type Category = { id: string; name: string };
+export type Category = { id: string; name: string; color?: string | null };
 
 export type Product = {
   id: string;

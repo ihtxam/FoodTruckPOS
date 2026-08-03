@@ -21,3 +21,7 @@ backend-chaslay-legacy/
 
 node_modules/
 **/node_modules/
+
+# Print agent packaged binaries (rebuild via print-agent/build-installer.ps1)
+print-agent/dist/
+backend/public/downloads/*.exe

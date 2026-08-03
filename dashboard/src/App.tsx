@@ -17,6 +17,7 @@ import AccountPage from '@/pages/shop/AccountPage';
 import ReservationsPage from '@/pages/shop/ReservationsPage';
 import ReceiptPage from '@/pages/ReceiptPage';
 import ProtectedRoute from '@/components/ProtectedRoute';
+import PosEmbedPage from '@/pages/PosEmbedPage';
 
 const ShopEntry = lazy(() => import('@/pages/shop/ShopEntry'));
 
@@ -80,6 +81,7 @@ function App() {
         <Routes>
           {!shopMode && <Route path="/login" element={<LoginPage />} />}
           {!shopMode && <Route path="/set-password" element={<SetPasswordPage />} />}
+          {!shopMode && <Route path="/pos-embed" element={<PosEmbedPage />} />}
           <Route path="/receipt/:saleId" element={<ReceiptPage />} />
           <Route
             path="/shop/:merchantSlug"

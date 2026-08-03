@@ -171,6 +171,23 @@ class AuthRepository @Inject constructor(
             body.merchantId?.trim()?.takeIf { it.isNotEmpty() }?.let { id ->
                 syncPreferences.setMerchantId(id)
             }
+            body.dashboardToken?.trim()?.takeIf { it.isNotEmpty() }?.let { token ->
+                syncPreferences.setDashboardToken(token)
+            }
+            body.dashboardUser?.let { du ->
+                val json = org.json.JSONObject()
+                    .put("id", du.id)
+                    .put("email", du.email)
+                    .put("name", du.name)
+                    .put("role", du.role)
+                    .put("merchantId", du.merchantId ?: du.id)
+                    .put("isOwner", du.isOwner != false)
+                    .toString()
+                syncPreferences.setDashboardUserJson(json)
+            }
+            body.dashboardUrl?.trim()?.takeIf { it.isNotEmpty() }?.let { url ->
+                syncPreferences.setDashboardUrl(url)
+            }
             syncPreferences.resetMenuSyncCursor()
             val permissions = PosPermission.all()
             val role = com.chaslay.pos.data.local.entity.RoleEntity(

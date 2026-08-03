@@ -28,6 +28,12 @@
     <string name="settings_section_appearance">Aspetto</string>
     <string name="settings_section_diagnostics">Diagnostica</string>
     <string name="settings_section_license">Licenza</string>
+    <string name="online_settings_title">Impostazioni online</string>
+    <string name="online_settings_open">Apri impostazioni online</string>
+    <string name="online_settings_hint">Online apre lo stesso pannello merchant di WebPOS. Offline usa le schermate locali sotto.</string>
+    <string name="online_settings_offline">Nessuna connessione — usa le impostazioni locali.</string>
+    <string name="online_settings_need_login">Accedi prima con l’email del pannello.</string>
+    <string name="online_settings_opening">Apertura impostazioni online…</string>
     <string name="license_settings_title">Licenza e attivazione</string>
     <string name="license_status_trial">Prova attiva — %1$d giorno(i) rimanente(i)</string>
     <string name="license_status_active">Licenza valida fino al %1$s</string>

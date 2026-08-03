@@ -333,9 +333,13 @@ export function generateWebPosReceiptText(tx: WebPosReceipt, panelLang?: string)
   return r;
 }
 
+export type KitchenTicketItem = WebPosReceiptItem & {
+  courseNumber?: number | null;
+};
+
 export type KitchenTicketOpts = {
   channel?: string;
-  items: WebPosReceiptItem[];
+  items: KitchenTicketItem[];
   language?: string;
   paperWidthMm?: 58 | 80;
   /** Short shout number printed under KITCHEN, e.g. #47 */
@@ -351,6 +355,9 @@ export type KitchenTicketOpts = {
   itemTextScale?: 1 | 2 | 3;
   headerTextScale?: 1 | 2 | 3;
   boldText?: boolean;
+  /** Print COURSE N headers when items have courseNumber */
+  groupByCourse?: boolean;
+  tableLabel?: string | null;
 };
 
 /** e.g. "TAKEAWAY : ASAP" or "TAKEAWAY : 17:00" */
@@ -399,11 +406,37 @@ function buildKitchenTicketLines(opts: KitchenTicketOpts): {
     { kind: 'normal', text: `${thin}\n` },
   ];
 
-  for (const item of opts.items) {
+  if (opts.tableLabel) {
     lines.push({
-      kind: 'item',
-      text: `${item.quantity}x ${item.name}`.slice(0, width) + '\n',
+      kind: 'header',
+      text: `TABLE ${opts.tableLabel}\n`,
     });
+  }
+
+  const items = opts.items;
+  const hasCourses =
+    opts.groupByCourse !== false && items.some((i) => i.courseNumber != null && i.courseNumber > 0);
+
+  if (hasCourses) {
+    const courses = Array.from(
+      new Set(items.map((i) => i.courseNumber || 1).filter((n) => n > 0))
+    ).sort((a, b) => a - b);
+    for (const course of courses) {
+      lines.push({ kind: 'header', text: `COURSE ${course}\n` });
+      for (const item of items.filter((i) => (i.courseNumber || 1) === course)) {
+        lines.push({
+          kind: 'item',
+          text: `${item.quantity}x ${item.name}`.slice(0, width) + '\n',
+        });
+      }
+    }
+  } else {
+    for (const item of items) {
+      lines.push({
+        kind: 'item',
+        text: `${item.quantity}x ${item.name}`.slice(0, width) + '\n',
+      });
+    }
   }
 
   lines.push({ kind: 'normal', text: `${thin}\n` });
@@ -786,9 +819,9 @@ export function printersForRole(
 }
 
 export function filterKitchenItems(
-  items: WebPosReceiptItem[],
+  items: KitchenTicketItem[],
   printer: NonNullable<PosPrintSettingsClient['printers']>[number]
-): WebPosReceiptItem[] {
+): KitchenTicketItem[] {
   if (printer.printAllProducts !== false) return items;
   const cats = new Set(printer.linkedCategoryIds || []);
   const prods = new Set(printer.linkedProductIds || []);

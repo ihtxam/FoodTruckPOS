@@ -41,6 +41,8 @@ interface SettingsData {
   floorPlanEnabled?: boolean;
   paxOrderingEnabled?: boolean;
   coursesEnabled?: boolean;
+  shiftsEnabled?: boolean;
+  posColorTheme?: string;
   posCheckoutSettings?: {
     tipsEnabled?: boolean;
     tipPresetsPercent?: number[];
@@ -52,6 +54,7 @@ interface SettingsData {
     quickCashDenominations?: number[];
     splitBillsEnabled?: boolean;
     maxSplitParts?: number;
+    courseSendMode?: 'fire_per_course' | 'send_all_once';
   } | null;
   shopPathUrl?: string | null;
   shopSubdomainUrl?: string | null;
@@ -345,6 +348,8 @@ export default function Settings() {
         floorPlanEnabled: !!settings.floorPlanEnabled,
         paxOrderingEnabled: !!settings.paxOrderingEnabled,
         coursesEnabled: !!settings.coursesEnabled,
+        shiftsEnabled: !!settings.shiftsEnabled,
+        posColorTheme: settings.posColorTheme || 'teal',
         posCheckoutSettings: settings.posCheckoutSettings || undefined,
         panelLanguage: settings.panelLanguage || locale,
         emailSmtpSettings: {
@@ -1073,19 +1078,19 @@ export default function Settings() {
                       <tbody>
                         <tr className="border-b border-[var(--border)]">
                           <th className="bg-[var(--bg-muted)] px-2 py-1.5 text-left font-medium w-24">
-                            Type
+                            {t('cmsDnsType')}
                           </th>
                           <td className="px-2 py-1.5 font-mono">CNAME</td>
                         </tr>
                         <tr className="border-b border-[var(--border)]">
                           <th className="bg-[var(--bg-muted)] px-2 py-1.5 text-left font-medium">
-                            Host
+                            {t('cmsDnsHost')}
                           </th>
                           <td className="px-2 py-1.5 font-mono">www</td>
                         </tr>
                         <tr>
                           <th className="bg-[var(--bg-muted)] px-2 py-1.5 text-left font-medium">
-                            Points to
+                            {t('cmsDnsPointsTo')}
                           </th>
                           <td className="px-2 py-1.5 font-mono">shop.chaslay.com</td>
                         </tr>
@@ -1158,6 +1163,26 @@ export default function Settings() {
                       <span className="text-xs muted">{t('coursesEnabledHint')}</span>
                     </span>
                   </label>
+                  {settings.coursesEnabled ? (
+                    <Field label={t('courseSendMode')} hint={t('courseSendModeHint')}>
+                      <select
+                        className="input"
+                        value={settings.posCheckoutSettings?.courseSendMode || 'fire_per_course'}
+                        onChange={(e) =>
+                          setSettings({
+                            ...settings,
+                            posCheckoutSettings: {
+                              ...(settings.posCheckoutSettings || {}),
+                              courseSendMode: e.target.value as 'fire_per_course' | 'send_all_once',
+                            },
+                          })
+                        }
+                      >
+                        <option value="fire_per_course">{t('courseSendModeFirePerCourse')}</option>
+                        <option value="send_all_once">{t('courseSendModeSendAllOnce')}</option>
+                      </select>
+                    </Field>
+                  ) : null}
                 </Section>
                 <div className="flex justify-end border-t border-[var(--border)] pt-4">
                   <button type="submit" className="btn-primary" disabled={saving}>
@@ -1232,6 +1257,57 @@ export default function Settings() {
                   <a href="/merchant/pos" className="btn-secondary inline-flex">
                     {t('openWebPos')}
                   </a>
+                  <label className="mt-3 flex items-start gap-2.5 rounded-md border border-[var(--border)] px-3 py-2.5 text-sm">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={!!settings.shiftsEnabled}
+                      onChange={(e) =>
+                        setSettings({ ...settings, shiftsEnabled: e.target.checked })
+                      }
+                    />
+                    <span>
+                      <span className="font-medium block">{t('shiftsEnabled')}</span>
+                      <span className="text-xs muted">{t('shiftsEnabledHint')}</span>
+                    </span>
+                  </label>
+                  <Field label={t('posColorTheme')} hint={t('posColorThemeHint')}>
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                      {(
+                        [
+                          ['teal', t('posThemeTeal')],
+                          ['green', t('posThemeGreen')],
+                          ['blue', t('posThemeBlue')],
+                          ['violet', t('posThemeViolet')],
+                        ] as const
+                      ).map(([id, label]) => {
+                        const active = (settings.posColorTheme || 'teal') === id;
+                        const swatch =
+                          id === 'teal'
+                            ? 'bg-teal-600'
+                            : id === 'green'
+                              ? 'bg-green-600'
+                              : id === 'blue'
+                                ? 'bg-blue-600'
+                                : 'bg-violet-600';
+                        return (
+                          <button
+                            key={id}
+                            type="button"
+                            onClick={() => setSettings({ ...settings, posColorTheme: id })}
+                            className={`flex items-center gap-2 rounded-lg border px-3 py-2.5 text-left text-sm ${
+                              active
+                                ? 'border-stone-900 ring-2 ring-stone-900/20'
+                                : 'border-[var(--border)] hover:bg-[var(--bg-muted)]'
+                            }`}
+                          >
+                            <span className={`h-4 w-4 shrink-0 rounded-full ${swatch}`} />
+                            <span className="font-medium">{label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </Field>
                 </Section>
               </div>
 
@@ -1989,6 +2065,26 @@ export default function Settings() {
                       {label}
                     </label>
                   ))}
+                </div>
+              </Section>
+
+              <Section title={t('printAgentDownload')} description={t('printAgentDownloadHint')}>
+                <div className="flex flex-wrap items-center gap-3">
+                  <a
+                    className="btn-primary inline-flex"
+                    href={
+                      (import.meta.env.VITE_API_URL || 'http://localhost:3000/api').replace(
+                        /\/api\/?$/,
+                        ''
+                      ) + '/downloads/chaslay-print-agent-setup.exe'
+                    }
+                    download
+                  >
+                    {t('downloadPrintAgent')}
+                  </a>
+                  <p className="text-sm text-[var(--muted)] max-w-xl m-0">
+                    {t('printAgentInstallSteps')}
+                  </p>
                 </div>
               </Section>
 

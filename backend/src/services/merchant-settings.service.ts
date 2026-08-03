@@ -103,6 +103,8 @@ export class MerchantSettingsService {
       floorPlanEnabled: merchant.floorPlanEnabled,
       paxOrderingEnabled: merchant.paxOrderingEnabled,
       coursesEnabled: !!merchant.coursesEnabled,
+      shiftsEnabled: !!merchant.shiftsEnabled,
+      posColorTheme: (merchant.posColorTheme as string) || "teal",
       storeHours: merchant.storeHours || {},
       shopLogoUrl: merchant.shopLogoUrl,
       shopBannerUrl: merchant.shopBannerUrl,
@@ -171,6 +173,8 @@ export class MerchantSettingsService {
       floorPlanEnabled?: boolean;
       paxOrderingEnabled?: boolean;
       coursesEnabled?: boolean;
+      shiftsEnabled?: boolean;
+      posColorTheme?: string;
       storeHours?: Record<string, unknown>;
       shopLogoUrl?: string | null;
       shopBannerUrl?: string | null;
@@ -243,6 +247,11 @@ export class MerchantSettingsService {
     if (updates.floorPlanEnabled !== undefined) patch.floorPlanEnabled = !!updates.floorPlanEnabled;
     if (updates.paxOrderingEnabled !== undefined) patch.paxOrderingEnabled = !!updates.paxOrderingEnabled;
     if (updates.coursesEnabled !== undefined) patch.coursesEnabled = !!updates.coursesEnabled;
+    if (updates.shiftsEnabled !== undefined) patch.shiftsEnabled = !!updates.shiftsEnabled;
+    if (updates.posColorTheme !== undefined) {
+      const theme = String(updates.posColorTheme || "teal").toLowerCase();
+      patch.posColorTheme = ["teal", "green", "blue", "violet"].includes(theme) ? theme : "teal";
+    }
     if (updates.storeHours !== undefined) patch.storeHours = updates.storeHours;
     if (updates.shopLogoUrl !== undefined) patch.shopLogoUrl = updates.shopLogoUrl;
     if (updates.shopBannerUrl !== undefined) patch.shopBannerUrl = updates.shopBannerUrl;

@@ -291,6 +291,37 @@ class SettingsViewModel @Inject constructor(
         _uiState.update { it.copy(selectedSection = section) }
     }
 
+    /**
+     * Opens merchant dashboard Settings in a WebView when online.
+     * Local Room settings remain the offline source of truth; [SyncService] pulls on reconnect.
+     */
+    fun openOnlineSettings() {
+        viewModelScope.launch {
+            if (!OnlineSettingsActivity.isOnline(appContext)) {
+                _uiState.update { it.copy(message = appContext.getString(R.string.online_settings_offline)) }
+                return@launch
+            }
+            val token = syncPreferences.getDashboardToken()
+            val userJson = syncPreferences.getDashboardUserJson()
+            if (token.isNullOrBlank() || userJson.isNullOrBlank()) {
+                _uiState.update { it.copy(message = appContext.getString(R.string.online_settings_need_login)) }
+                return@launch
+            }
+            _uiState.update { it.copy(message = appContext.getString(R.string.online_settings_opening)) }
+            // Refresh menu/terminals/settings cache before editing in the panel.
+            runCatching { syncService.syncAll(force = true) }
+            val dashboardUrl = syncPreferences.getDashboardUrl()
+            val intent = OnlineSettingsActivity.createIntent(
+                context = appContext,
+                token = token,
+                userJson = userJson,
+                dashboardUrl = dashboardUrl
+            )
+            intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            appContext.startActivity(intent)
+        }
+    }
+
     fun updatePosThemeMode(mode: PosThemeMode) {
         _uiState.update { it.copy(posThemeMode = mode) }
         viewModelScope.launch { sessionManager.setPosThemeMode(mode) }

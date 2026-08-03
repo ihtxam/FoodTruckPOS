@@ -36,6 +36,12 @@
     <string name="settings_section_appearance">Appearance</string>
     <string name="settings_section_diagnostics">Diagnostics</string>
     <string name="settings_section_license">License</string>
+    <string name="online_settings_title">Online settings</string>
+    <string name="online_settings_open">Open online settings</string>
+    <string name="online_settings_hint">When online, open the same merchant panel settings used by WebPOS. Offline, use the local screens below.</string>
+    <string name="online_settings_offline">No internet — use local settings. Cloud settings open when you are online.</string>
+    <string name="online_settings_need_login">Sign in with your panel email first to open online settings.</string>
+    <string name="online_settings_opening">Opening online settings…</string>
     <string name="enable_courses">Enable courses</string>
     <string name="enable_courses_help">Group dine-in items into Course 1, Course 2… and fire them to the kitchen one at a time.</string>
     <string name="license_settings_title">License &amp; activation</string>

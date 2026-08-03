@@ -1,6 +1,7 @@
 import express, { Express, Request, Response, NextFunction } from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import path from "path";
 import authRoutes from "@/routes/auth.routes";
 import licensingRoutes from "@/routes/licensing.routes";
 import superadminRoutes from "@/routes/superadmin.routes";
@@ -87,6 +88,23 @@ app.use(
     maxAge: "7d",
     setHeaders(res) {
       res.setHeader("Cache-Control", "public, max-age=604800");
+    },
+  })
+);
+
+// Public installers / static downloads (print agent EXE, etc.)
+const downloadsRoot = path.join(__dirname, "..", "public", "downloads");
+app.use(
+  "/downloads",
+  express.static(downloadsRoot, {
+    fallthrough: true,
+    maxAge: "1h",
+    setHeaders(res, filePath) {
+      if (filePath.endsWith(".exe")) {
+        res.setHeader("Content-Type", "application/octet-stream");
+        res.setHeader("Content-Disposition", `attachment; filename="${path.basename(filePath)}"`);
+      }
+      res.setHeader("Cache-Control", "public, max-age=3600");
     },
   })
 );

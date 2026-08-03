@@ -144,8 +144,9 @@ class MenuImportService @Inject constructor() {
         return ParsedCategoryRow(
             name = name,
             sortOrder = cellInt(row, header, "sort_order", "sort") ?: 0,
+            // Color assigned later in repository by import index when blank
             colorHex = cellString(row, header, "color_hex", "color")?.trim()?.takeIf { it.isNotBlank() }
-                ?: "#5B9BD5",
+                ?: "",
             printTarget = parsePrintTarget(cellString(row, header, "print_target")),
             onlineVisible = cellBoolean(row, header, "online_visible") ?: true
         )

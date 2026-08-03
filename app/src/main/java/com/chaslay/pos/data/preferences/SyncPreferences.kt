@@ -26,6 +26,9 @@ class SyncPreferences @Inject constructor(
     private val merchantIdKey = stringPreferencesKey("merchant_id")
     private val syncBusinessInfoKey = booleanPreferencesKey("sync_business_info")
     private val menuCloudSyncedKey = booleanPreferencesKey("menu_cloud_synced")
+    private val dashboardTokenKey = stringPreferencesKey("dashboard_token")
+    private val dashboardUserJsonKey = stringPreferencesKey("dashboard_user_json")
+    private val dashboardUrlKey = stringPreferencesKey("dashboard_url")
 
     /** Sync read for Room [DatabaseCallback] (runs before DataStore is ready). */
     fun isMenuCloudSyncedBlocking(): Boolean =
@@ -108,6 +111,36 @@ class SyncPreferences @Inject constructor(
         context.syncDataStore.edit { prefs ->
             if (id.isNullOrBlank()) prefs.remove(merchantIdKey)
             else prefs[merchantIdKey] = id
+        }
+    }
+
+    suspend fun getDashboardToken(): String? =
+        context.syncDataStore.data.map { it[dashboardTokenKey] }.first()?.takeIf { it.isNotBlank() }
+
+    suspend fun setDashboardToken(token: String?) {
+        context.syncDataStore.edit { prefs ->
+            if (token.isNullOrBlank()) prefs.remove(dashboardTokenKey)
+            else prefs[dashboardTokenKey] = token
+        }
+    }
+
+    suspend fun getDashboardUserJson(): String? =
+        context.syncDataStore.data.map { it[dashboardUserJsonKey] }.first()?.takeIf { it.isNotBlank() }
+
+    suspend fun setDashboardUserJson(json: String?) {
+        context.syncDataStore.edit { prefs ->
+            if (json.isNullOrBlank()) prefs.remove(dashboardUserJsonKey)
+            else prefs[dashboardUserJsonKey] = json
+        }
+    }
+
+    suspend fun getDashboardUrl(): String? =
+        context.syncDataStore.data.map { it[dashboardUrlKey] }.first()?.takeIf { it.isNotBlank() }
+
+    suspend fun setDashboardUrl(url: String?) {
+        context.syncDataStore.edit { prefs ->
+            if (url.isNullOrBlank()) prefs.remove(dashboardUrlKey)
+            else prefs[dashboardUrlKey] = url.trim().trimEnd('/')
         }
     }
 }

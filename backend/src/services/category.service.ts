@@ -1,5 +1,10 @@
 import { getDb, schema } from "@/db";
-import { eq, and, asc, desc, max, sql } from "drizzle-orm";
+import {
+  isValidHexColor,
+  normalizeHexColor,
+  paletteColorAt,
+} from "@/lib/category-colors";
+import { eq, and, asc, desc, max, sql, count } from "drizzle-orm";
 
 export class CategoryService {
   /**
@@ -21,13 +26,22 @@ export class CategoryService {
         .from(schema.categories)
         .where(eq(schema.categories.merchantId, merchantId));
 
+      const [{ catCount }] = await db
+        .select({ catCount: count() })
+        .from(schema.categories)
+        .where(eq(schema.categories.merchantId, merchantId));
+
+      const resolvedColor = isValidHexColor(color)
+        ? normalizeHexColor(color!)
+        : paletteColorAt(Number(catCount) || 0);
+
       const category = await db
         .insert(schema.categories)
         .values({
           merchantId,
           name,
           description,
-          color,
+          color: resolvedColor,
           sortOrder: Number(nextSort) || 0,
         })
         .returning();

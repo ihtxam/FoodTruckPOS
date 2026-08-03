@@ -1095,11 +1095,72 @@ router.get("/webpos-config", async (req: Request, res: Response) => {
         taxIncludedInPrice: merchant.taxIncludedInPrice === true,
         shopLogoUrl: merchant.shopLogoUrl || null,
         panelLanguage: merchant.panelLanguage || "en",
+        shiftsEnabled: merchant.shiftsEnabled === true,
+        posColorTheme: merchant.posColorTheme || "teal",
+        coursesEnabled: merchant.coursesEnabled === true,
       },
     });
   } catch (error) {
     console.error("Error getting webpos config:", error);
     res.status(500).json({ error: error instanceof Error ? error.message : "Failed to get WebPOS config" });
+  }
+});
+
+/**
+ * GET /api/merchant/pos/shifts/current
+ * Open shift + live cash totals (WebPOS)
+ */
+router.get("/pos/shifts/current", async (req: Request, res: Response) => {
+  try {
+    const merchantId = req.merchantId;
+    if (!merchantId) return res.status(400).json({ error: "Merchant ID is required" });
+    const { PosShiftService } = await import("@/services/pos-shift.service");
+    const data = await PosShiftService.getCurrent(merchantId);
+    res.json({ success: true, ...data });
+  } catch (error) {
+    console.error("Error getting current shift:", error);
+    res.status(500).json({ error: error instanceof Error ? error.message : "Failed to get shift" });
+  }
+});
+
+/**
+ * POST /api/merchant/pos/shifts/start
+ * Body: { openingCash, staffId?, staffName? }
+ */
+router.post("/pos/shifts/start", async (req: Request, res: Response) => {
+  try {
+    const merchantId = req.merchantId;
+    if (!merchantId) return res.status(400).json({ error: "Merchant ID is required" });
+    const { PosShiftService } = await import("@/services/pos-shift.service");
+    const shift = await PosShiftService.startShift(merchantId, {
+      openingCash: Number(req.body?.openingCash ?? 0),
+      staffId: req.body?.staffId || null,
+      staffName: req.body?.staffName || null,
+    });
+    res.json({ success: true, shift });
+  } catch (error) {
+    console.error("Error starting shift:", error);
+    res.status(400).json({ error: error instanceof Error ? error.message : "Failed to start shift" });
+  }
+});
+
+/**
+ * POST /api/merchant/pos/shifts/close
+ * Body: { closingCashCounted, notes? }
+ */
+router.post("/pos/shifts/close", async (req: Request, res: Response) => {
+  try {
+    const merchantId = req.merchantId;
+    if (!merchantId) return res.status(400).json({ error: "Merchant ID is required" });
+    const { PosShiftService } = await import("@/services/pos-shift.service");
+    const result = await PosShiftService.closeShift(merchantId, {
+      closingCashCounted: Number(req.body?.closingCashCounted ?? 0),
+      notes: req.body?.notes || null,
+    });
+    res.json({ success: true, ...result });
+  } catch (error) {
+    console.error("Error closing shift:", error);
+    res.status(400).json({ error: error instanceof Error ? error.message : "Failed to close shift" });
   }
 });
 

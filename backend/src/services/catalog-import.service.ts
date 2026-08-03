@@ -1,5 +1,10 @@
 import * as XLSX from "xlsx";
 import { getDb, schema } from "@/db";
+import {
+  isValidHexColor,
+  normalizeHexColor,
+  paletteColorAt,
+} from "@/lib/category-colors";
 import { repairCatalogText } from "@/lib/text-encoding";
 import { eq, and } from "drizzle-orm";
 
@@ -27,6 +32,7 @@ export class CatalogImportService {
 
     const db = getDb();
     const categoryNameToId = new Map<string, string>();
+    let nextColorIndex = 0;
 
     // Prefill existing categories
     const existingCategories = await db.query.categories.findMany({
@@ -34,6 +40,7 @@ export class CatalogImportService {
     });
     for (const cat of existingCategories) {
       categoryNameToId.set(cat.name.trim().toLowerCase(), cat.id);
+      if (cat.color) nextColorIndex++;
     }
 
     const categoriesSheet =
@@ -56,13 +63,17 @@ export class CatalogImportService {
         if (categoryNameToId.has(key)) continue;
 
         try {
+          const rawColor = String(row.color || row.Color || "").trim();
+          const color = isValidHexColor(rawColor)
+            ? normalizeHexColor(rawColor)
+            : paletteColorAt(nextColorIndex++);
           const [created] = await db
             .insert(schema.categories)
             .values({
               merchantId,
               name,
               description: String(row.description || row.Description || "") || null,
-              color: String(row.color || row.Color || "") || null,
+              color,
               sortOrder: Number(row.sortOrder || row.SortOrder || i) || 0,
             })
             .returning();
@@ -119,7 +130,12 @@ export class CatalogImportService {
         if (!categoryId) {
           const [created] = await db
             .insert(schema.categories)
-            .values({ merchantId, name: categoryName, sortOrder: 0 })
+            .values({
+              merchantId,
+              name: repairCatalogText(categoryName),
+              sortOrder: 0,
+              color: paletteColorAt(nextColorIndex++),
+            })
             .returning();
           categoryId = created.id;
           categoryNameToId.set(key, categoryId);

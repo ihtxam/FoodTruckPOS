@@ -1,0 +1,8 @@
+﻿{
+  "name": "chaslay-print-agent",
+  "version": "1.2.0",
+  "setupFile": "chaslay-print-agent-setup.exe",
+  "builtAt": "2026-08-03T02:04:24.5883383+02:00",
+  "platform": "win32-x64",
+  "signed": false
+}

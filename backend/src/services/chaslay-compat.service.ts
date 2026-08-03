@@ -207,6 +207,23 @@ export class ChaslayCompatService {
         .where(eq(schema.merchants.id, merchant.id));
     }
 
+    // Same JWT the merchant dashboard uses, so Android can open Settings in a WebView.
+    const dashboardToken = AuthService.generateToken({
+      id: merchant.id,
+      email: merchant.email,
+      role: "merchant",
+      merchantId: merchant.id,
+      name: merchant.name,
+    });
+    const dashboardUser = {
+      id: merchant.id,
+      email: merchant.email,
+      name: merchant.name,
+      role: "merchant" as const,
+      merchantId: merchant.id,
+      isOwner: true,
+    };
+
     return {
       user: {
         id: merchant.id,
@@ -217,6 +234,12 @@ export class ChaslayCompatService {
       },
       merchantId: merchant.id,
       syncApiKey,
+      dashboardToken,
+      dashboardUser,
+      dashboardUrl:
+        process.env.MERCHANT_DASHBOARD_URL ||
+        process.env.PUBLIC_APP_URL ||
+        "https://app.chaslay.com",
     };
   }
 

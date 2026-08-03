@@ -34,6 +34,10 @@ type Props = {
   onOpenDrawer: () => void;
   onShowPanel: () => void;
   tableBadge?: string | null;
+  shiftsEnabled?: boolean;
+  shiftOpen?: boolean;
+  onCloseShift?: () => void;
+  onStartShift?: () => void;
 };
 
 export default function WebPosTopBar({
@@ -58,6 +62,10 @@ export default function WebPosTopBar({
   onOpenDrawer,
   onShowPanel,
   tableBadge,
+  shiftsEnabled,
+  shiftOpen,
+  onCloseShift,
+  onStartShift,
 }: Props) {
   const { t } = useI18n();
   const inCheckout = posView === 'checkout' || posView === 'success';
@@ -83,7 +91,7 @@ export default function WebPosTopBar({
                 disabled={inCheckout}
                 className={`shrink-0 px-3 pb-2 pt-1 text-sm font-semibold transition ${
                   active
-                    ? 'border-b-2 border-teal-600 text-teal-800'
+                    ? 'border-b-2 border-[var(--webpos-accent)] text-[var(--webpos-accent-text)]'
                     : 'border-b-2 border-transparent text-stone-500 hover:text-stone-800 disabled:opacity-50'
                 }`}
               >
@@ -92,7 +100,7 @@ export default function WebPosTopBar({
             );
           })}
           {!inCheckout && activeTab === 'register' ? (
-            <span className="mb-1 ml-1 shrink-0 rounded-full bg-teal-50 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-teal-800 ring-1 ring-teal-200">
+            <span className="webpos-accent-chip mb-1 ml-1 shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide">
               {t('webPosDirectSale')}
             </span>
           ) : null}
@@ -118,6 +126,26 @@ export default function WebPosTopBar({
                 autoComplete="off"
               />
             </label>
+          ) : null}
+
+          {shiftsEnabled ? (
+            <button
+              type="button"
+              className={`hidden h-9 items-center gap-1.5 rounded-lg px-2.5 text-xs font-bold sm:inline-flex ${
+                shiftOpen
+                  ? 'bg-[var(--webpos-accent)] text-white hover:opacity-90'
+                  : 'border border-stone-200 text-stone-700 hover:bg-stone-50'
+              }`}
+              onClick={() => (shiftOpen ? onCloseShift?.() : onStartShift?.())}
+              title={shiftOpen ? t('webPosShiftClose') : t('webPosShiftStart')}
+            >
+              <span
+                className={`inline-block h-2 w-2 rounded-full ${
+                  shiftOpen ? 'bg-white' : 'bg-amber-400'
+                }`}
+              />
+              {shiftOpen ? t('webPosShiftClose') : t('webPosShiftStart')}
+            </button>
           ) : null}
 
           <button
@@ -182,7 +210,8 @@ export default function WebPosTopBar({
       {merchantName ? (
         <p className="hidden px-4 pb-1 text-[10px] text-stone-400 sm:block">
           {merchantName}
-          {!agentOk ? ` ù ${t('webPosStartPrintAgent')}` : ''}
+          {!agentOk ? ` ∑ ${t('webPosStartPrintAgent')}` : ''}
+          {shiftsEnabled && shiftOpen ? ` ∑ ${t('webPosShiftOpenBadge')}` : ''}
         </p>
       ) : null}
     </header>
@@ -200,6 +229,10 @@ export function WebPosSettingsDropdown({
   onPostSuccessChange,
   onRefreshPrinters,
   onReloadCatalog,
+  shiftsEnabled,
+  shiftOpen,
+  onCloseShift,
+  onStartShift,
 }: {
   printerName: string;
   printers: Array<{ name: string; isDefault?: boolean }>;
@@ -211,10 +244,41 @@ export function WebPosSettingsDropdown({
   onPostSuccessChange: (v: 'register' | 'tables') => void;
   onRefreshPrinters: () => void;
   onReloadCatalog: () => void;
+  shiftsEnabled?: boolean;
+  shiftOpen?: boolean;
+  onCloseShift?: () => void;
+  onStartShift?: () => void;
 }) {
   const { t } = useI18n();
   return (
     <div className="absolute right-0 top-[calc(100%+6px)] z-50 w-[min(20rem,calc(100vw-1.5rem))] space-y-3 rounded-xl border border-stone-200 bg-white p-3 shadow-xl">
+      {shiftsEnabled ? (
+        <div className="space-y-2 border-b border-stone-100 pb-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+            {t('webPosShiftMenu')}
+          </p>
+          {shiftOpen ? (
+            <button
+              type="button"
+              className="flex w-full items-center justify-center rounded-xl bg-[var(--webpos-accent)] py-2.5 text-sm font-bold text-white hover:opacity-90"
+              onClick={onCloseShift}
+            >
+              {t('webPosShiftClose')}
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="flex w-full items-center justify-center rounded-xl bg-[var(--webpos-accent)] py-2.5 text-sm font-bold text-white hover:opacity-90"
+              onClick={onStartShift}
+            >
+              {t('webPosShiftStart')}
+            </button>
+          )}
+          <p className="text-[11px] text-stone-500">
+            {shiftOpen ? t('webPosShiftOpenHint') : t('webPosShiftClosedHint')}
+          </p>
+        </div>
+      ) : null}
       <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-stone-500">
         <MoreHorizontal size={14} />
         {t('webPosPrinting')}

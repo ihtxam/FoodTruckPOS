@@ -35,12 +35,16 @@ function MerchantShell() {
   const isOwner = user?.role === 'merchant' && user?.isOwner !== false;
   const location = useLocation();
   const isPosRoute = /^\/merchant\/pos\/?$/.test(location.pathname);
+  const isPosEmbed =
+    typeof window !== 'undefined' &&
+    (new URLSearchParams(location.search).get('embed') === '1' ||
+      sessionStorage.getItem('manupos_pos_embed') === '1');
   const [sidebarOpen, setSidebarOpen] = useState(
     typeof window !== 'undefined' ? window.innerWidth >= 1024 : true
   );
   /** When true on /merchant/pos, hide sidebar + header so WebPOS feels like its own app. */
   const [posAppMode, setPosAppMode] = useState(true);
-  const hideChrome = isPosRoute && posAppMode;
+  const hideChrome = (isPosRoute && posAppMode) || isPosEmbed;
 
   useEffect(() => {
     if (isPosRoute) setPosAppMode(true);
@@ -113,7 +117,7 @@ function MerchantShell() {
 
         <main
           className={
-            hideChrome
+            isPosRoute && posAppMode
               ? 'flex-1 overflow-hidden p-0 min-h-0'
               : 'panel-main flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 min-h-0'
           }
