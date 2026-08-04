@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -12,7 +14,8 @@ android {
 
     defaultConfig {
         applicationId = "com.chaslay.pos"
-        minSdk = 25
+        // Adyen Tap to Pay (In-Person Payments SDK) requires Android 8.0 (API 26).
+        minSdk = 26
         targetSdk = 35
         versionCode = 23
         versionName = "1.0.22"
@@ -142,6 +145,31 @@ dependencies {
     implementation("com.fasterxml:aalto-xml:1.3.2")
     implementation("com.github.mik3y:usb-serial-for-android:3.9.0")
     implementation("org.nanohttpd:nanohttpd:2.3.1")
+
+    // --- Adyen Tap to Pay (In-Person Payments SDK) ---
+    // Artifacts are served from the credentialed Maven repos declared in
+    // settings.gradle.kts. adyenEnv=test → -debug (Adyen TEST env);
+    // adyenEnv=live → -release (Adyen LIVE env). See:
+    // https://docs.adyen.com/point-of-sale/mobile-android/build/tap-to-pay
+    run {
+        val adyenProps = Properties().apply {
+            val f = rootProject.file("local.properties")
+            if (f.exists()) f.inputStream().use { load(it) }
+        }
+        val adyenPosVersion = "2.16.0"
+        val adyenEnv = (adyenProps.getProperty("adyenEnv") ?: "test").lowercase()
+        val hasTestKey = adyenProps.getProperty("adyenSdkApiKey").orEmpty().isNotBlank()
+        val hasLiveKey = adyenProps.getProperty("adyenSdkApiKeyLive").orEmpty().isNotBlank()
+        if (adyenEnv == "live" && hasLiveKey) {
+            implementation("com.adyen.ipp:pos-mobile-release:$adyenPosVersion")
+            implementation("com.adyen.ipp:payment-tap-to-pay-release:$adyenPosVersion")
+            implementation("androidx.startup:startup-runtime:1.1.1")
+        } else if (hasTestKey) {
+            implementation("com.adyen.ipp:pos-mobile-debug:$adyenPosVersion")
+            implementation("com.adyen.ipp:payment-tap-to-pay-debug:$adyenPosVersion")
+            implementation("androidx.startup:startup-runtime:1.1.1")
+        }
+    }
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")

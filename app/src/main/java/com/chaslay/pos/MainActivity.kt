@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -17,8 +18,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
+import com.adyen.ipp.api.InPersonPayments
+import com.adyen.ipp.api.payment.PaymentCallback
 import com.chaslay.pos.data.preferences.SessionManager
 import com.chaslay.pos.data.repository.LicenseRepository
+import com.chaslay.pos.payment.taptopay.TapToPayCallbackRouter
 import com.chaslay.pos.domain.model.LicenseGateState
 import com.chaslay.pos.domain.model.PosThemeMode
 import com.chaslay.pos.sync.FloorSyncCoordinator
@@ -47,6 +51,25 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         requestNotificationPermissionIfNeeded()
+
+        // Register the Adyen Tap to Pay result listener before this activity reaches
+        // RESUMED. The returned launcher is handed to InPersonPayments.performTransaction
+        // for each sale. Wrapped in try/catch: SDK init lives in ChaslayPosApp, and if
+        // that failed we must not crash the activity on launch (Tap to Pay just stays off).
+        try {
+            TapToPayCallbackRouter.launcher = InPersonPayments.registerForPaymentResult(
+                this,
+                PaymentCallback { result ->
+                    @Suppress("UNCHECKED_CAST")
+                    (result as Result<com.adyen.ipp.api.payment.PaymentResult>).fold(
+                        onSuccess = { paymentResult -> TapToPayCallbackRouter.onSuccess(paymentResult) },
+                        onFailure = { error -> TapToPayCallbackRouter.onFailure(error) },
+                    )
+                },
+            )
+        } catch (t: Throwable) {
+            Log.e("MainActivity", "Tap to Pay launcher registration failed", t)
+        }
 
         lifecycleScope.launch {
             runCatching { licenseRepository.ensureInitialized() }

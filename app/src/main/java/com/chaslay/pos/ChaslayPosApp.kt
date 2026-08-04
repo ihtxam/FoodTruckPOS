@@ -1,11 +1,14 @@
 package com.chaslay.pos
 
 import android.app.Application
+import android.util.Log
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.LocaleListCompat
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.startup.AppInitializer
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
+import com.adyen.ipp.api.InPersonPaymentsInitializer
 import com.chaslay.pos.data.preferences.sessionDataStore
 import com.chaslay.pos.debug.CrashLogger
 import com.chaslay.pos.domain.model.AppLanguage
@@ -35,6 +38,16 @@ class ChaslayPosApp : Application(), Configuration.Provider {
         printerConnectionManager.warmupOnStartup()
         usbPrinterManager.startMonitoring()
         backgroundSyncScheduler.schedule(this)
+
+        // Force the Adyen Tap to Pay SDK's androidx.startup initializer to run now so
+        // its applicationContext is ready before any Activity invokes the SDK. The
+        // MerchantAuthenticationService is auto-detected from the manifest <service>.
+        try {
+            AppInitializer.getInstance(this)
+                .initializeComponent(InPersonPaymentsInitializer::class.java)
+        } catch (t: Throwable) {
+            Log.e("ChaslayPosApp", "Adyen Tap to Pay init failed", t)
+        }
     }
 
     private fun applySavedLocale() {

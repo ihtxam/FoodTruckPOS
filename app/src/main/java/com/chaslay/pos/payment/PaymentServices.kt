@@ -3,7 +3,7 @@ package com.chaslay.pos.payment
 import android.app.Activity
 import com.chaslay.pos.data.local.entity.BusinessSettingsEntity
 import com.chaslay.pos.domain.model.PaymentMethod
-import kotlinx.coroutines.delay
+import com.chaslay.pos.payment.taptopay.AdyenTapToPayService
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -51,19 +51,19 @@ class PaymentOrchestrator @Inject constructor(
 }
 
 @Singleton
-class TapToPayService @Inject constructor() {
+class TapToPayService @Inject constructor(
+    private val adyenTapToPayService: AdyenTapToPayService
+) {
+    /** True when the device has NFC. Real attestation is enforced by the SDK at run time. */
+    fun isSupported(): Boolean = adyenTapToPayService.isSupported()
+
     /**
-     * Integrates with Android Tap-to-Pay (SoftPOS) SDK.
-     * Replace simulation with Stripe Terminal, Adyen Tap-to-Pay, or SumUp SDK.
+     * Runs an Adyen Tap to Pay on Android (SoftPOS) sale — the phone's NFC reader
+     * acts as the card terminal. Requires a Play-Integrity-compliant device and
+     * Adyen SoftPOS enablement; returns [PaymentResult.Failure] otherwise.
      */
-    suspend fun processPayment(activity: Activity, amount: Double, currencyCode: String): PaymentResult {
-        // Production: launch NFC SoftPOS intent / SDK flow here
-        delay(1500)
-        return PaymentResult.Success(
-            reference = "TTP-${System.currentTimeMillis()}",
-            method = PaymentMethod.TAP_TO_PAY
-        )
-    }
+    suspend fun processPayment(activity: Activity, amount: Double, currencyCode: String): PaymentResult =
+        adyenTapToPayService.processPayment(activity, amount, currencyCode)
 }
 
 @Singleton
