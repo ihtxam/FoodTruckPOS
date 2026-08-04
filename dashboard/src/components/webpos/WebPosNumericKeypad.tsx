@@ -16,6 +16,10 @@ type Props = {
   /** Tighter keys for cart panel */
   compact?: boolean;
   hideApply?: boolean;
+  /** Cart line adjust: +/- step selected line (qty / % / price) */
+  onAdjust?: (delta: number) => void;
+  /** Custom backspace (cart: buffer edit → price 0 → delete) */
+  onBackspace?: () => void;
 };
 
 export default function WebPosNumericKeypad({
@@ -31,6 +35,8 @@ export default function WebPosNumericKeypad({
   applyDisabled,
   compact = false,
   hideApply = false,
+  onAdjust,
+  onBackspace,
 }: Props) {
   const { t } = useI18n();
 
@@ -46,7 +52,13 @@ export default function WebPosNumericKeypad({
     );
   };
 
-  const backspace = () => onBufferChange(buffer.slice(0, -1));
+  const backspace = () => {
+    if (onBackspace) {
+      onBackspace();
+      return;
+    }
+    onBufferChange(buffer.slice(0, -1));
+  };
   const toggleSign = () => {
     if (!buffer || buffer === '0') return;
     onBufferChange(buffer.startsWith('-') ? buffer.slice(1) : `-${buffer}`);
@@ -100,14 +112,37 @@ export default function WebPosNumericKeypad({
               {k}
             </button>
           ))}
-          <button
-            type="button"
-            disabled={disabled}
-            onClick={toggleSign}
-            className={`${keyClass} bg-amber-50 text-amber-900 ring-amber-200`}
-          >
-            +/-
-          </button>
+          {onAdjust ? (
+            <div className={`grid grid-cols-2 ${compact ? 'gap-0.5' : 'gap-1'}`}>
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() => onAdjust(-1)}
+                className={`${keyClass} bg-amber-50 text-amber-900 ring-amber-200`}
+                aria-label="-"
+              >
+                −
+              </button>
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() => onAdjust(1)}
+                className={`${keyClass} bg-amber-50 text-amber-900 ring-amber-200`}
+                aria-label="+"
+              >
+                +
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={toggleSign}
+              className={`${keyClass} bg-amber-50 text-amber-900 ring-amber-200`}
+            >
+              +/-
+            </button>
+          )}
           <button
             type="button"
             disabled={disabled}

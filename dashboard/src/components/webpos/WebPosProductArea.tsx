@@ -1,4 +1,4 @@
-import { Banknote, CreditCard, MonitorSmartphone } from 'lucide-react';
+import { Banknote, CreditCard, Gift, MonitorSmartphone } from 'lucide-react';
 import { useMemo } from 'react';
 import { useI18n } from '@/lib/i18n';
 import { categoryColor, categoryColorMap } from './categoryColors';
@@ -17,6 +17,8 @@ type Props = {
   expressMethods?: { cash: boolean; card: boolean; terminal: boolean };
   onExpressPay?: (method: PosPaymentMethod) => void;
   expressDisabled?: boolean;
+  giftCardsEnabled?: boolean;
+  onGiftCards?: () => void;
 };
 
 export default function WebPosProductArea({
@@ -32,6 +34,8 @@ export default function WebPosProductArea({
   expressMethods,
   onExpressPay,
   expressDisabled,
+  giftCardsEnabled = false,
+  onGiftCards,
 }: Props) {
   const { t } = useI18n();
   const colorByCat = useMemo(() => categoryColorMap(categories), [categories]);
@@ -42,9 +46,20 @@ export default function WebPosProductArea({
 
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-stone-100">
-      {/* Category chips ù fixed sizes, wrap to a second row when needed */}
+      {/* Category chips ó fixed sizes, wrap to a second row when needed */}
       <div className="shrink-0 border-b border-stone-200/80 bg-stone-100/90 px-3 py-2">
         <div className="webpos-cat-scroll flex flex-wrap gap-1.5">
+          {giftCardsEnabled && onGiftCards ? (
+            <button
+              type="button"
+              onClick={onGiftCards}
+              className="webpos-category-chip inline-flex items-center justify-center gap-1 bg-teal-600 text-white"
+              title={t('giftCard')}
+            >
+              <Gift size={14} />
+              <span className="min-w-0 truncate">{t('giftCard')}</span>
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => onCategoryChange('all')}

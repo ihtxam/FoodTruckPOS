@@ -38,6 +38,13 @@ type Props = {
   shiftOpen?: boolean;
   onCloseShift?: () => void;
   onStartShift?: () => void;
+  /** When shifts are off: show EOD for managers with END_OF_DAY / VIEW_REPORTS */
+  showEodButton?: boolean;
+  onEodReport?: () => void;
+  /** Hide Tables tab (retail mode). */
+  hideTablesTab?: boolean;
+  /** Hide Bookings tab (optional for retail). */
+  hideBookingsTab?: boolean;
 };
 
 export default function WebPosTopBar({
@@ -66,15 +73,19 @@ export default function WebPosTopBar({
   shiftOpen,
   onCloseShift,
   onStartShift,
+  showEodButton,
+  onEodReport,
+  hideTablesTab = false,
+  hideBookingsTab = false,
 }: Props) {
   const { t } = useI18n();
   const inCheckout = posView === 'checkout' || posView === 'success';
 
   const tabs: Array<{ id: PosTab; label: string }> = [
-    { id: 'tables', label: t('webPosTabTables') },
+    ...(!hideTablesTab ? [{ id: 'tables' as const, label: t('webPosTabTables') }] : []),
     { id: 'register', label: t('webPosTabRegister') },
     { id: 'orders', label: t('webPosTabOrders') },
-    { id: 'bookings', label: t('webPosTabBookings') },
+    ...(!hideBookingsTab ? [{ id: 'bookings' as const, label: t('webPosTabBookings') }] : []),
   ];
 
   return (
@@ -149,6 +160,16 @@ export default function WebPosTopBar({
               </span>
               <span className="sm:hidden">{shiftOpen ? t('webPosShiftOpenBadge') : t('webPosShiftMenu')}</span>
             </button>
+          ) : showEodButton ? (
+            <button
+              type="button"
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-stone-300 bg-white px-2.5 text-xs font-bold text-stone-800 hover:bg-stone-50"
+              onClick={() => onEodReport?.()}
+              title={t('webPosEodReport')}
+            >
+              <span className="hidden sm:inline">{t('webPosEodReport')}</span>
+              <span className="sm:hidden">{t('webPosEodShort')}</span>
+            </button>
           ) : null}
 
           <button
@@ -213,8 +234,8 @@ export default function WebPosTopBar({
       {merchantName ? (
         <p className="hidden px-4 pb-1 text-[10px] text-stone-400 sm:block">
           {merchantName}
-          {!agentOk ? ` ∑ ${t('webPosStartPrintAgent')}` : ''}
-          {shiftsEnabled && shiftOpen ? ` ∑ ${t('webPosShiftOpenBadge')}` : ''}
+          {!agentOk ? ` ù ${t('webPosStartPrintAgent')}` : ''}
+          {shiftsEnabled && shiftOpen ? ` ù ${t('webPosShiftOpenBadge')}` : ''}
         </p>
       ) : null}
     </header>
@@ -236,6 +257,8 @@ export function WebPosSettingsDropdown({
   shiftOpen,
   onCloseShift,
   onStartShift,
+  showEodButton,
+  onEodReport,
 }: {
   printerName: string;
   printers: Array<{ name: string; isDefault?: boolean }>;
@@ -251,6 +274,8 @@ export function WebPosSettingsDropdown({
   shiftOpen?: boolean;
   onCloseShift?: () => void;
   onStartShift?: () => void;
+  showEodButton?: boolean;
+  onEodReport?: () => void;
 }) {
   const { t } = useI18n();
   return (
@@ -280,6 +305,20 @@ export function WebPosSettingsDropdown({
           <p className="text-[11px] text-stone-500">
             {shiftOpen ? t('webPosShiftOpenHint') : t('webPosShiftClosedHint')}
           </p>
+        </div>
+      ) : showEodButton ? (
+        <div className="space-y-2 border-b border-stone-100 pb-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+            {t('webPosEodReport')}
+          </p>
+          <button
+            type="button"
+            className="flex w-full items-center justify-center rounded-xl bg-[var(--webpos-accent)] py-2.5 text-sm font-bold text-white hover:opacity-90"
+            onClick={onEodReport}
+          >
+            {t('webPosEodPrint')}
+          </button>
+          <p className="text-[11px] text-stone-500">{t('webPosEodWhenShiftsOff')}</p>
         </div>
       ) : null}
       <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-stone-500">

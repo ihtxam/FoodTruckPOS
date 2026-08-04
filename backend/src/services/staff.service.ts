@@ -15,11 +15,8 @@ export class StaffService {
     const existing = await db.query.merchantRoles.findMany({
       where: eq(schema.merchantRoles.merchantId, merchantId),
     });
-    if (existing.length > 0) return existing;
-
-    const rows = await db
-      .insert(schema.merchantRoles)
-      .values(
+    if (existing.length === 0) {
+      await db.insert(schema.merchantRoles).values(
         DEFAULT_ROLE_TEMPLATES.map((t) => ({
           merchantId,
           name: t.name,
@@ -27,9 +24,31 @@ export class StaffService {
           isSystem: t.isSystem,
           sortOrder: t.sortOrder,
         }))
-      )
-      .returning();
-    return rows;
+      );
+    }
+    // Waiters must never see company-wide sales / EOD aggregates.
+    await this.enforceWaiterReportRestrictions(merchantId);
+    return db.query.merchantRoles.findMany({
+      where: eq(schema.merchantRoles.merchantId, merchantId),
+    });
+  }
+
+  /** Strip VIEW_REPORTS / END_OF_DAY from system Waiter role (keep other custom perms). */
+  static async enforceWaiterReportRestrictions(merchantId: string) {
+    const db = getDb();
+    const roles = await db.query.merchantRoles.findMany({
+      where: and(eq(schema.merchantRoles.merchantId, merchantId), eq(schema.merchantRoles.isSystem, true)),
+    });
+    for (const role of roles) {
+      if (!role.name.trim().toLowerCase().startsWith("waiter")) continue;
+      const perms = parsePermissions(role.permissions);
+      const next = perms.filter((p) => p !== "VIEW_REPORTS" && p !== "END_OF_DAY");
+      if (next.length === perms.length) continue;
+      await db
+        .update(schema.merchantRoles)
+        .set({ permissions: encodePermissions(next), updatedAt: new Date() })
+        .where(eq(schema.merchantRoles.id, role.id));
+    }
   }
 
   static async listRoles(merchantId: string) {

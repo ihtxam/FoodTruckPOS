@@ -58,6 +58,9 @@ interface SettingsData {
     courseSendMode?: 'fire_per_course' | 'send_all_once';
     cartSide?: 'left' | 'right';
     postSuccessTarget?: 'register' | 'tables';
+    posMode?: 'restaurant' | 'retail';
+    retailTakeawayEnabled?: boolean;
+    retailDeliveryEnabled?: boolean;
   } | null;
   shopPathUrl?: string | null;
   shopSubdomainUrl?: string | null;
@@ -70,6 +73,7 @@ interface SettingsData {
   webposExpressEnabled?: boolean;
   webposCashEnabled?: boolean;
   webposCardEnabled?: boolean;
+  webposGiftCardEnabled?: boolean;
   webposTerminalEnabled?: boolean;
   adyenLiveEnvironment?: boolean;
   adyenUseLegacyEndpoint?: boolean;
@@ -318,6 +322,23 @@ export default function Settings() {
 
   const searchIndex = useMemo<SettingsSearchEntry[]>(
     () => [
+      {
+        id: 'pos-mode',
+        tab: 'pos',
+        keywords: [
+          'pos mode',
+          'retail',
+          'restaurant',
+          'barcode',
+          'mode',
+          'magasin',
+          'einzelhandel',
+          'gastronomie',
+          t('posMode'),
+          t('posModeRetail'),
+          t('posModeRestaurant'),
+        ],
+      },
       {
         id: 'pos-layout',
         tab: 'pos',
@@ -579,6 +600,7 @@ export default function Settings() {
         webposCashEnabled: settings.webposCashEnabled !== false,
         webposCardEnabled: settings.webposCardEnabled !== false,
         webposTerminalEnabled: settings.webposTerminalEnabled !== false,
+        webposGiftCardEnabled: settings.webposGiftCardEnabled === true,
         panelLanguage: settings.panelLanguage || locale,
         emailSmtpSettings: {
           enabled: !!settings.emailSmtpSettings?.enabled,
@@ -606,7 +628,18 @@ export default function Settings() {
       });
       const next = response.data.merchant || response.data.settings || settings;
       setSettings((prev) => (prev ? { ...prev, ...next } : prev));
-      if (next.panelLanguage) setLocale(next.panelLanguage as Locale);
+      // Re-fetch so shiftsEnabled and other flags reflect DB truth after save.
+      try {
+        const refreshed = await api.get('/merchant/settings');
+        if (refreshed.data?.settings) {
+          setSettings(refreshed.data.settings);
+          if (refreshed.data.settings.panelLanguage) {
+            setLocale(refreshed.data.settings.panelLanguage as Locale);
+          }
+        }
+      } catch {
+        if (next.panelLanguage) setLocale(next.panelLanguage as Locale);
+      }
       toast.success(t('settingsSaved'));
     } catch (error: any) {
       toast.error(error.response?.data?.error || 'Failed to save settings');
@@ -664,6 +697,7 @@ export default function Settings() {
         webposCashEnabled: settings.webposCashEnabled !== false,
         webposCardEnabled: settings.webposCardEnabled !== false,
         webposTerminalEnabled: settings.webposTerminalEnabled !== false,
+        webposGiftCardEnabled: settings.webposGiftCardEnabled === true,
         adyenLiveEnvironment: !!settings.adyenLiveEnvironment,
         adyenUseLegacyEndpoint: !!settings.adyenUseLegacyEndpoint,
       });
@@ -1437,6 +1471,89 @@ export default function Settings() {
           {tab === 'pos' && (
             <form onSubmit={onSave} className="space-y-8">
               <Section
+                id="pos-mode"
+                title={t('posMode')}
+                description={t('posModeHint')}
+                highlight={isSectionHighlight('pos-mode')}
+                dimmed={normalizedQuery ? !isSectionVisible('pos-mode') : false}
+              >
+                <Field label={t('posMode')} hint={t('posModeHint')}>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {(
+                      [
+                        ['restaurant', t('posModeRestaurant'), t('posModeRestaurantHint')],
+                        ['retail', t('posModeRetail'), t('posModeRetailHint')],
+                      ] as const
+                    ).map(([mode, label, hint]) => {
+                      const active =
+                        (settings.posCheckoutSettings?.posMode || 'restaurant') === mode;
+                      return (
+                        <label
+                          key={mode}
+                          className={`flex cursor-pointer items-start gap-2.5 rounded-md border px-3 py-2.5 text-sm ${
+                            active
+                              ? 'border-[var(--text)] bg-[var(--bg-muted)]'
+                              : 'border-[var(--border)]'
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="posMode"
+                            className="mt-0.5"
+                            checked={active}
+                            onChange={() =>
+                              setSettings({
+                                ...settings,
+                                posCheckoutSettings: {
+                                  ...(settings.posCheckoutSettings || {}),
+                                  posMode: mode,
+                                },
+                              })
+                            }
+                          />
+                          <span>
+                            <span className="font-medium block">{label}</span>
+                            <span className="text-xs muted">{hint}</span>
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </Field>
+                {(settings.posCheckoutSettings?.posMode || 'restaurant') === 'retail' ? (
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {(
+                      [
+                        ['retailTakeawayEnabled', t('posRetailTakeaway')] as const,
+                        ['retailDeliveryEnabled', t('posRetailDelivery')] as const,
+                      ] as const
+                    ).map(([key, label]) => (
+                      <label
+                        key={key}
+                        className="flex items-start gap-2.5 rounded-md border border-[var(--border)] px-3 py-2.5 text-sm"
+                      >
+                        <input
+                          type="checkbox"
+                          className="mt-0.5"
+                          checked={settings.posCheckoutSettings?.[key] === true}
+                          onChange={(e) =>
+                            setSettings({
+                              ...settings,
+                              posCheckoutSettings: {
+                                ...(settings.posCheckoutSettings || {}),
+                                [key]: e.target.checked,
+                              },
+                            })
+                          }
+                        />
+                        <span className="font-medium">{label}</span>
+                      </label>
+                    ))}
+                  </div>
+                ) : null}
+              </Section>
+
+              <Section
                 id="pos-layout"
                 title={t('posLayoutSettings')}
                 description={t('posLayoutSettingsHint')}
@@ -1550,23 +1667,45 @@ export default function Settings() {
                 highlight={isSectionHighlight('pos-shifts')}
                 dimmed={normalizedQuery ? !isSectionVisible('pos-shifts') : false}
               >
-                <label className="flex items-start gap-2.5 rounded-md border-2 border-[var(--border)] bg-[var(--bg-muted)] px-3 py-3 text-sm">
-                  <input
-                    type="checkbox"
-                    className="mt-0.5"
-                    checked={!!settings.shiftsEnabled}
-                    onChange={(e) => setSettings({ ...settings, shiftsEnabled: e.target.checked })}
-                  />
-                  <span>
-                    <span className="font-medium block">{t('shiftsEnabled')}</span>
-                    <span className="text-xs muted">{t('shiftsEnabledHint')}</span>
-                    {settings.shiftsEnabled ? (
-                      <span className="mt-1.5 block text-xs font-medium text-teal-700">
-                        {t('webPosShiftOpenHint')}
-                      </span>
-                    ) : null}
-                  </span>
-                </label>
+                <div
+                  className={`rounded-lg border-2 px-4 py-4 ${
+                    settings.shiftsEnabled
+                      ? 'border-teal-600 bg-teal-50'
+                      : 'border-[var(--border)] bg-[var(--bg-muted)]'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-[var(--text)]">{t('shiftsEnabled')}</p>
+                      <p className="mt-1 text-xs muted">{t('shiftsEnabledHint')}</p>
+                      <p className="mt-2 text-xs muted">{t('shiftsLateNightHint')}</p>
+                      <p className="mt-2 text-[11px] text-stone-500">{t('shiftsMigrateHint')}</p>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={!!settings.shiftsEnabled}
+                      aria-label={t('shiftsEnabled')}
+                      onClick={() =>
+                        setSettings({ ...settings, shiftsEnabled: !settings.shiftsEnabled })
+                      }
+                      className={`relative mt-0.5 h-7 w-12 shrink-0 rounded-full transition-colors ${
+                        settings.shiftsEnabled ? 'bg-teal-600' : 'bg-stone-300'
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-0.5 left-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ${
+                          settings.shiftsEnabled ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                  {settings.shiftsEnabled ? (
+                    <p className="mt-3 text-xs font-medium text-teal-800">{t('webPosShiftOpenHint')}</p>
+                  ) : (
+                    <p className="mt-3 text-xs font-medium text-stone-700">{t('shiftsDisabledEodHint')}</p>
+                  )}
+                </div>
                 <a href="/merchant/pos" className="btn-secondary mt-3 inline-flex">
                   {t('openWebPos')}
                 </a>
@@ -1691,12 +1830,13 @@ export default function Settings() {
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {(
                     [
-                      ['webposExpressEnabled', t('webposExpress')] as const,
-                      ['webposCashEnabled', t('webposCash')] as const,
-                      ['webposCardEnabled', t('webposCard')] as const,
-                      ['webposTerminalEnabled', t('webposTerminal')] as const,
+                      ['webposExpressEnabled', t('webposExpress'), false] as const,
+                      ['webposCashEnabled', t('webposCash'), false] as const,
+                      ['webposCardEnabled', t('webposCard'), false] as const,
+                      ['webposTerminalEnabled', t('webposTerminal'), false] as const,
+                      ['webposGiftCardEnabled', t('webposGiftCard'), true] as const,
                     ] as const
-                  ).map(([key, label]) => (
+                  ).map(([key, label, optIn]) => (
                     <label
                       key={key}
                       className="flex items-center gap-2 rounded-lg border border-[var(--border)] px-3 py-2.5 text-sm"
@@ -1704,7 +1844,9 @@ export default function Settings() {
                       <input
                         type="checkbox"
                         className="rounded"
-                        checked={settings?.[key] !== false}
+                        checked={
+                          optIn ? settings?.[key] === true : settings?.[key] !== false
+                        }
                         onChange={(e) =>
                           setSettings((prev) =>
                             prev ? { ...prev, [key]: e.target.checked } : prev

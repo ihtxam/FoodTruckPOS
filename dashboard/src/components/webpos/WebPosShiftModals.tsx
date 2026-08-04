@@ -13,7 +13,7 @@ function CashKeypad({ value, onChange }: KeypadProps) {
       onChange('');
       return;
     }
-    if (ch === '?') {
+    if (ch === '⌫') {
       onChange(value.slice(0, -1));
       return;
     }
@@ -27,7 +27,7 @@ function CashKeypad({ value, onChange }: KeypadProps) {
     if (dec && dec.length > 2) return;
     onChange(next);
   };
-  const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', '?'];
+  const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', '⌫'];
   return (
     <div className="grid grid-cols-3 gap-2">
       {keys.map((k) => (
@@ -71,6 +71,11 @@ export function WebPosStartShiftModal({
 
   if (!open) return null;
 
+  const startWithAmount = (raw: string) => {
+    const n = raw.trim() === '' ? 0 : Number(raw);
+    onConfirm(Number.isFinite(n) ? Math.max(0, n) : 0);
+  };
+
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/45 p-4">
       <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
@@ -91,11 +96,20 @@ export function WebPosStartShiftModal({
                 {t('yes')}
               </button>
             </div>
+            <button
+              type="button"
+              className="mt-3 w-full py-2 text-sm font-medium text-stone-600 hover:underline disabled:opacity-50"
+              disabled={busy}
+              onClick={() => startWithAmount('')}
+            >
+              {t('webPosShiftStartWithZero')}
+            </button>
           </>
         ) : (
           <>
             <h2 className="text-lg font-bold text-stone-900">{t('webPosShiftOpeningCash')}</h2>
             <p className="mt-1 text-sm text-stone-600">{t('webPosShiftOpeningCashHint')}</p>
+            <p className="mt-1 text-xs font-medium text-teal-700">{t('webPosShiftOpeningCashOptional')}</p>
             <div className="my-4 rounded-xl bg-stone-50 py-3 text-center text-3xl font-bold tabular-nums text-stone-900">
               {cash || '0'} <span className="text-base font-semibold text-stone-500">CHF</span>
             </div>
@@ -108,11 +122,19 @@ export function WebPosStartShiftModal({
                 type="button"
                 className="rounded-xl bg-[var(--webpos-accent)] py-3 text-sm font-bold text-white hover:opacity-90 disabled:opacity-50"
                 disabled={busy}
-                onClick={() => onConfirm(Number(cash || 0))}
+                onClick={() => startWithAmount(cash)}
               >
                 {t('webPosShiftStartConfirm')}
               </button>
             </div>
+            <button
+              type="button"
+              className="mt-2 w-full py-2 text-sm font-medium text-stone-600 hover:underline disabled:opacity-50"
+              disabled={busy}
+              onClick={() => startWithAmount('')}
+            >
+              {t('webPosShiftSkipFloat')}
+            </button>
           </>
         )}
       </div>

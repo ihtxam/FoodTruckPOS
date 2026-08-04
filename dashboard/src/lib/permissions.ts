@@ -118,3 +118,7 @@ export function saveWebPosStaffSession(session: WebPosStaffSession | null) {
   }
   sessionStorage.setItem(WEBPOS_STAFF_KEY, JSON.stringify(session));
 }
+
+export function clearWebPosStaffSession() {
+  sessionStorage.removeItem(WEBPOS_STAFF_KEY);
+}

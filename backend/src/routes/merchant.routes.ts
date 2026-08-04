@@ -1,7 +1,12 @@
 import { Router, Request, Response, NextFunction } from "express";
 import multer from "multer";
 import { and, asc, eq, inArray } from "drizzle-orm";
-import { verifyToken, requireMerchant, setMerchantContext } from "@/middleware/auth.middleware";
+import {
+  verifyToken,
+  requireMerchant,
+  setMerchantContext,
+  requirePermission,
+} from "@/middleware/auth.middleware";
 import { ProductService } from "@/services/product.service";
 import { CategoryService } from "@/services/category.service";
 import { OrderService } from "@/services/order.service";
@@ -1072,8 +1077,10 @@ router.get("/webpos-config", async (req: Request, res: Response) => {
 
     const { normalizePosPrintSettings } = await import("@/lib/pos-print-settings");
     const { normalizePosCheckoutSettings } = await import("@/lib/pos-checkout-settings");
+    const { normalizeGiftCardSettings } = await import("@/lib/gift-card-settings");
     const posPrintSettings = normalizePosPrintSettings(merchant.posPrintSettings);
     const posCheckoutSettings = normalizePosCheckoutSettings(merchant.posCheckoutSettings);
+    const giftCardSettings = normalizeGiftCardSettings(merchant.giftCardSettings);
 
     res.json({
       success: true,
@@ -1083,13 +1090,9 @@ router.get("/webpos-config", async (req: Request, res: Response) => {
           cash: merchant.webposCashEnabled !== false,
           card: merchant.webposCardEnabled !== false,
           terminal: merchant.webposTerminalEnabled !== false && terminalReady,
-          giftCard:
-            merchant.webposGiftCardEnabled === true &&
-            !!(merchant.giftCardSettings as { enabled?: boolean } | null)?.enabled,
+          giftCard: merchant.webposGiftCardEnabled === true && giftCardSettings.enabled,
         },
-        giftCardSettings: (await import("@/lib/gift-card-settings")).normalizeGiftCardSettings(
-          merchant.giftCardSettings
-        ),
+        giftCardSettings,
         terminalReady,
         adyenConfigured: !!merchant.adyenApiKey && !!merchant.adyenMerchantAccount,
         adyenLiveEnvironment: !!merchant.adyenLiveEnvironment,
@@ -1109,14 +1112,31 @@ router.get("/webpos-config", async (req: Request, res: Response) => {
         taxIncludedInPrice: merchant.taxIncludedInPrice === true,
         shopLogoUrl: merchant.shopLogoUrl || null,
         panelLanguage: merchant.panelLanguage || "en",
-        shiftsEnabled: merchant.shiftsEnabled === true,
+        // Coerce so WebPOS never hides shifts due to unexpected truthy shapes.
+        shiftsEnabled: !!(merchant as { shiftsEnabled?: boolean | null }).shiftsEnabled,
         posColorTheme: merchant.posColorTheme || "teal",
         coursesEnabled: merchant.coursesEnabled === true,
       },
     });
   } catch (error) {
     console.error("Error getting webpos config:", error);
-    res.status(500).json({ error: error instanceof Error ? error.message : "Failed to get WebPOS config" });
+    const raw = error instanceof Error ? error.message : "Failed to get WebPOS config";
+    const needsShiftMigrate =
+      /shifts_enabled|pos_color_theme|pos_shifts/i.test(raw) &&
+      /does not exist|column|relation/i.test(raw);
+    // Keep WebPOS usable; client falls back to /merchant/settings for shiftsEnabled.
+    if (needsShiftMigrate) {
+      return res.json({
+        success: true,
+        config: {
+          methods: { express: true, cash: true, card: true, terminal: false, giftCard: false },
+          shiftsEnabled: false,
+          shiftsSchemaMissing: true,
+          posColorTheme: "teal",
+        },
+      });
+    }
+    res.status(500).json({ error: raw });
   }
 });
 
@@ -1152,8 +1172,11 @@ router.post("/pos/shifts/start", async (req: Request, res: Response) => {
     const merchantId = req.merchantId;
     if (!merchantId) return res.status(400).json({ error: "Merchant ID is required" });
     const { PosShiftService } = await import("@/services/pos-shift.service");
+    const rawOpen = req.body?.openingCash;
+    const openingCash =
+      rawOpen === "" || rawOpen === null || rawOpen === undefined ? 0 : Number(rawOpen);
     const shift = await PosShiftService.startShift(merchantId, {
-      openingCash: Number(req.body?.openingCash ?? 0),
+      openingCash: Number.isFinite(openingCash) ? openingCash : 0,
       staffId: req.body?.staffId || null,
       staffName: req.body?.staffName || null,
     });
@@ -1222,31 +1245,36 @@ router.put("/settings", async (req: Request, res: Response) => {
  * GET /api/merchant/reports/eod
  * End-of-day / sales report (POS + synced sales in orders table)
  * Query: preset=today|yesterday|last_week|last_month|last_3_months|custom&from=&to=
+ * Requires VIEW_REPORTS or END_OF_DAY (waiters must not see company totals).
  */
-router.get("/reports/eod", async (req: Request, res: Response) => {
-  try {
-    const merchantId = req.merchantId;
-    if (!merchantId) return res.status(400).json({ error: "Merchant ID is required" });
-    const { PosReportsService } = await import("@/services/pos-reports.service");
-    const preset = String(req.query.preset || "today") as
-      | "today"
-      | "yesterday"
-      | "last_week"
-      | "last_month"
-      | "last_3_months"
-      | "custom";
-    const report = await PosReportsService.getEndOfDayReport(merchantId, {
-      preset,
-      from: req.query.from ? String(req.query.from) : undefined,
-      to: req.query.to ? String(req.query.to) : undefined,
-      channel: req.query.channel ? String(req.query.channel) : undefined,
-    });
-    res.json({ success: true, report });
-  } catch (error) {
-    console.error("EOD report failed:", error);
-    res.status(500).json({ error: error instanceof Error ? error.message : "Failed to load report" });
+router.get(
+  "/reports/eod",
+  requirePermission("VIEW_REPORTS", "END_OF_DAY"),
+  async (req: Request, res: Response) => {
+    try {
+      const merchantId = req.merchantId;
+      if (!merchantId) return res.status(400).json({ error: "Merchant ID is required" });
+      const { PosReportsService } = await import("@/services/pos-reports.service");
+      const preset = String(req.query.preset || "today") as
+        | "today"
+        | "yesterday"
+        | "last_week"
+        | "last_month"
+        | "last_3_months"
+        | "custom";
+      const report = await PosReportsService.getEndOfDayReport(merchantId, {
+        preset,
+        from: req.query.from ? String(req.query.from) : undefined,
+        to: req.query.to ? String(req.query.to) : undefined,
+        channel: req.query.channel ? String(req.query.channel) : undefined,
+      });
+      res.json({ success: true, report });
+    } catch (error) {
+      console.error("EOD report failed:", error);
+      res.status(500).json({ error: error instanceof Error ? error.message : "Failed to load report" });
+    }
   }
-});
+);
 
 /** GET /api/merchant/pos/orders — POS order history */
 router.get("/pos/orders", async (req: Request, res: Response) => {

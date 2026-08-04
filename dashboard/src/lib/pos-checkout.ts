@@ -7,6 +7,7 @@ export type PosCheckoutDiscountPreset = {
 export type CourseSendMode = 'fire_per_course' | 'send_all_once';
 export type CartSide = 'left' | 'right';
 export type PostSuccessTarget = 'register' | 'tables';
+export type PosMode = 'restaurant' | 'retail';
 
 export type PosCheckoutSettings = {
   tipsEnabled: boolean;
@@ -26,6 +27,12 @@ export type PosCheckoutSettings = {
   cartSide: CartSide;
   /** After a successful payment, navigate to this WebPOS tab. */
   postSuccessTarget: PostSuccessTarget;
+  /** Restaurant (tables/kitchen) vs retail (register / barcode). */
+  posMode: PosMode;
+  /** Retail only: show Takeaway channel (off by default). */
+  retailTakeawayEnabled: boolean;
+  /** Retail only: show Delivery channel (off by default). */
+  retailDeliveryEnabled: boolean;
 };
 
 export const DEFAULT_POS_CHECKOUT: PosCheckoutSettings = {
@@ -47,6 +54,9 @@ export const DEFAULT_POS_CHECKOUT: PosCheckoutSettings = {
   courseSendMode: 'fire_per_course',
   cartSide: 'right',
   postSuccessTarget: 'register',
+  posMode: 'restaurant',
+  retailTakeawayEnabled: false,
+  retailDeliveryEnabled: false,
 };
 
 export function normalizePosCheckoutSettings(raw: unknown): PosCheckoutSettings {
@@ -84,5 +94,8 @@ export function normalizePosCheckoutSettings(raw: unknown): PosCheckoutSettings 
     courseSendMode: src.courseSendMode === 'send_all_once' ? 'send_all_once' : 'fire_per_course',
     cartSide: src.cartSide === 'left' ? 'left' : 'right',
     postSuccessTarget: src.postSuccessTarget === 'tables' ? 'tables' : 'register',
+    posMode: src.posMode === 'retail' ? 'retail' : 'restaurant',
+    retailTakeawayEnabled: src.retailTakeawayEnabled === true,
+    retailDeliveryEnabled: src.retailDeliveryEnabled === true,
   };
 }

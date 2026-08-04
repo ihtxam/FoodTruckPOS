@@ -46,6 +46,8 @@ export type Product = {
   isOpenPrice?: boolean;
   stock?: number;
   productType?: string;
+  sku?: string | null;
+  barcode?: string | null;
   allowExtras?: boolean;
   extras?: Array<{ id: string; name: string; price: number; isDefault?: boolean }>;
   modifierGroups?: import('@/components/shop/ShopProductModifiersModal').ShopModifierGroup[];

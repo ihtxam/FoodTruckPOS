@@ -200,6 +200,15 @@ app.listen(PORT, () => {
     } catch (error) {
       console.error("[reservations] daily summary job failed", error);
     }
+    try {
+      const { PosShiftService } = await import("@/services/pos-shift.service");
+      const closed = await PosShiftService.autoCloseStaleShifts();
+      if (closed > 0) {
+        console.log(`[pos-shifts] auto-closed stale shifts: ${closed}`);
+      }
+    } catch (error) {
+      console.error("[pos-shifts] auto-close job failed", error);
+    }
   };
   setTimeout(() => void tick(), 45_000);
   setInterval(() => void tick(), 60 * 60 * 1000);

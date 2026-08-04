@@ -1,4 +1,4 @@
-import { CheckCircle2, ChevronLeft, Printer, Send } from 'lucide-react';
+import { CheckCircle2, ChevronLeft, Printer, Send, Vault } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 
 type Props = {
@@ -7,6 +7,7 @@ type Props = {
   onContinue: () => void;
   onPrint?: () => void;
   onSendReceipt?: () => void;
+  onOpenDrawer?: () => void;
   onBack?: () => void;
   compact?: boolean;
 };
@@ -17,6 +18,7 @@ export default function WebPosSuccessView({
   onContinue,
   onPrint,
   onSendReceipt,
+  onOpenDrawer,
   onBack,
   compact = false,
 }: Props) {
@@ -64,6 +66,16 @@ export default function WebPosSuccessView({
           >
             <Printer size={18} />
             {t('webPosPrint')}
+          </button>
+        ) : null}
+        {onOpenDrawer ? (
+          <button
+            type="button"
+            onClick={onOpenDrawer}
+            className="inline-flex min-w-[5.5rem] flex-1 items-center justify-center gap-1.5 rounded-xl bg-stone-100 px-4 py-3.5 text-sm font-semibold text-stone-700 hover:bg-stone-200"
+          >
+            <Vault size={18} />
+            {t('webPosOpenDrawer')}
           </button>
         ) : null}
         {onSendReceipt ? (

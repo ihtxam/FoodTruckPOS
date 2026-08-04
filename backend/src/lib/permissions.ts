@@ -90,6 +90,7 @@ export const DEFAULT_ROLE_TEMPLATES: DefaultRoleTemplate[] = [
     ],
   },
   {
+    // No VIEW_REPORTS / END_OF_DAY — waiters must not see company or other staff sales.
     name: "Waiter",
     isSystem: true,
     sortOrder: 20,

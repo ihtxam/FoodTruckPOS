@@ -88,7 +88,14 @@ import WebPosSetTabModal from '@/components/webpos/WebPosSetTabModal';
 import WebPosCancelModal, {
   type CancelScope,
 } from '@/components/webpos/WebPosCancelModal';
+import WebPosGiftCardModal, {
+  type GiftCardCartMeta,
+  type GiftCardPayResult,
+  type GiftCardSettingsClient,
+} from '@/components/webpos/WebPosGiftCardModal';
+import type { AppliedPayment } from '@/components/webpos/WebPosCheckoutView';
 import type {
+  GiftCardLineMeta,
   KeypadMode,
   OpenCartDraft,
   PosChannel,
@@ -121,6 +128,8 @@ type Product = {
   isOpenPrice?: boolean;
   stock?: number;
   productType?: string;
+  sku?: string | null;
+  barcode?: string | null;
   allowExtras?: boolean;
   extras?: Array<{ id: string; name: string; price: number; isDefault?: boolean }>;
   modifierGroups?: ShopModifierGroup[];
@@ -144,6 +153,7 @@ type CartLine = {
   courseNumber?: number;
   lineDiscountPercent?: number;
   sentToKitchen?: boolean;
+  giftCard?: GiftCardLineMeta;
 };
 
 function lineExtrasLabel(l: CartLine) {
@@ -176,7 +186,7 @@ type SaleRecord = {
   synced: boolean;
 };
 
-type PosPaymentMethod = 'cash' | 'card' | 'terminal' | 'pay_later';
+type PosPaymentMethod = 'cash' | 'card' | 'terminal' | 'pay_later' | 'gift_card';
 
 type WebPosTerminal = {
   id: string;
@@ -191,6 +201,7 @@ type WebPosPaymentConfig = {
     cash: boolean;
     card: boolean;
     terminal: boolean;
+    giftCard?: boolean;
   };
   terminalReady: boolean;
   adyenConfigured: boolean;
@@ -198,6 +209,7 @@ type WebPosPaymentConfig = {
   terminals: WebPosTerminal[];
   posPrintSettings?: PosPrintSettingsClient | null;
   posCheckoutSettings?: PosCheckoutSettings | null;
+  giftCardSettings?: GiftCardSettingsClient | null;
   shopLogoUrl?: string | null;
   panelLanguage?: string | null;
   shiftsEnabled?: boolean;
@@ -316,6 +328,10 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
     PosPaymentMethod | 'express'
   >('cash');
   const [checkoutExtras, setCheckoutExtras] = useState<CheckoutExtras | null>(null);
+  const [giftCardOpsOpen, setGiftCardOpsOpen] = useState(false);
+  const [giftCardPayOpen, setGiftCardPayOpen] = useState(false);
+  const [giftCardPayDue, setGiftCardPayDue] = useState(0);
+  const [giftPayInject, setGiftPayInject] = useState<AppliedPayment | null>(null);
   const [splitOpen, setSplitOpen] = useState(false);
   const [splitQueue, setSplitQueue] = useState<SplitPart[]>([]);
   const [splitIndex, setSplitIndex] = useState(0);
@@ -329,8 +345,11 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
   const [mobileCartOpen, setMobileCartOpen] = useState(false);
   const [recentOpen, setRecentOpen] = useState(false);
   const [pinModalOpen, setPinModalOpen] = useState(false);
+  const [pinModalMode, setPinModalMode] = useState<'gate' | 'switch'>('gate');
   const [webposStaff, setWebposStaff] = useState<WebPosStaffSession | null>(() => loadWebPosStaffSession());
   const [staffConfigured, setStaffConfigured] = useState(false);
+  const scanBufferRef = useRef('');
+  const scanTimerRef = useRef<number | null>(null);
   const settingsRef = useRef<HTMLDivElement>(null);
   /** Session-only open carts keyed by table / tab / channel */
   const openCartDraftsRef = useRef<Map<string, OpenCartDraft>>(new Map());
@@ -354,18 +373,8 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
     return map;
   }, [cart]);
 
-  const coursesEnabled = !!merchant?.coursesEnabled;
-  const showSend =
-    channel === 'takeaway' || channel === 'delivery' || !!tableLabel;
   const hideTab = !!tableLabel;
-  const courseNumbers = useMemo(() => {
-    const set = new Set<number>();
-    for (const l of cart) {
-      if (l.courseNumber) set.add(l.courseNumber);
-    }
-    if (coursesEnabled && cart.length > 0) set.add(activeCourse);
-    return Array.from(set).sort((a, b) => a - b);
-  }, [cart, activeCourse, coursesEnabled]);
+  const pinGateRequired = staffConfigured && !webposStaff;
 
   useEffect(() => {
     localStorage.setItem('manupos_webpos_post_success', postSuccessTarget);
@@ -442,15 +451,57 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
     () => normalizePosCheckoutSettings(paymentConfig?.posCheckoutSettings),
     [paymentConfig?.posCheckoutSettings]
   );
+  const posMode = checkoutSettings.posMode === 'retail' ? 'retail' : 'restaurant';
+  const isRetail = posMode === 'retail';
+  const retailTakeawayEnabled = checkoutSettings.retailTakeawayEnabled;
+  const retailDeliveryEnabled = checkoutSettings.retailDeliveryEnabled;
+  const showChannelTabs = isRetail
+    ? retailTakeawayEnabled || retailDeliveryEnabled
+    : true;
+  const channelTabOptions: Array<'takeaway' | 'delivery'> = isRetail
+    ? [
+        ...(retailTakeawayEnabled ? (['takeaway'] as const) : []),
+        ...(retailDeliveryEnabled ? (['delivery'] as const) : []),
+      ]
+    : ['takeaway', 'delivery'];
+  const kitchenEnabled = !isRetail;
+  const coursesEnabled = !!merchant?.coursesEnabled && kitchenEnabled;
+  const showSend =
+    kitchenEnabled &&
+    (channel === 'takeaway' || channel === 'delivery' || !!tableLabel);
   const cartSide = checkoutSettings.cartSide === 'left' ? 'left' : 'right';
   const courseSendMode = checkoutSettings.courseSendMode || 'fire_per_course';
+
+  const courseNumbers = useMemo(() => {
+    const set = new Set<number>();
+    for (const l of cart) {
+      if (l.courseNumber) set.add(l.courseNumber);
+    }
+    if (coursesEnabled && cart.length > 0) set.add(activeCourse);
+    return Array.from(set).sort((a, b) => a - b);
+  }, [cart, activeCourse, coursesEnabled]);
 
   useEffect(() => {
     const fromSettings = checkoutSettings.postSuccessTarget;
     if (fromSettings === 'tables' || fromSettings === 'register') {
-      setPostSuccessTarget(fromSettings);
+      setPostSuccessTarget(isRetail ? 'register' : fromSettings);
     }
-  }, [checkoutSettings.postSuccessTarget]);
+  }, [checkoutSettings.postSuccessTarget, isRetail]);
+
+  // Retail has no tables tab — keep post-success on register.
+  useEffect(() => {
+    if (isRetail && postSuccessTarget === 'tables') {
+      setPostSuccessTarget('register');
+    }
+  }, [isRetail, postSuccessTarget]);
+
+  useEffect(() => {
+    if (isRetail && (posTab === 'tables' || posTab === 'bookings')) {
+      setPosTab('register');
+      setPosView('register');
+    }
+  }, [isRetail, posTab]);
+
   const showFireCourseButton =
     coursesEnabled &&
     courseSendMode === 'fire_per_course' &&
@@ -602,13 +653,21 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
           name: repairCatalogText(c.name),
         }))
       );
-      const cfg = webposRes.data.config as WebPosPaymentConfig | null;
-      const shiftsOn =
-        cfg?.shiftsEnabled === true || merch?.shiftsEnabled === true;
+      const cfg = webposRes.data.config as (WebPosPaymentConfig & {
+        shiftsSchemaMissing?: boolean;
+      }) | null;
+      // Either source can enable; avoids hiding shifts when one payload omits the flag.
+      const shiftsOn = !!(cfg?.shiftsEnabled || merch?.shiftsEnabled);
       const theme =
         (cfg?.posColorTheme || merch?.posColorTheme || 'teal').toLowerCase();
       setShiftsEnabled(shiftsOn);
       shiftsEnabledRef.current = shiftsOn;
+      if (cfg?.shiftsSchemaMissing && !shiftMigrateToastRef.current) {
+        shiftMigrateToastRef.current = true;
+        toast.error(
+          `${t('webPosShiftStartFailed')}: DB migrate required (backend/sql/ensure-shifts.sql)`
+        );
+      }
       setPosColorTheme(
         ['teal', 'green', 'blue', 'violet'].includes(theme) ? theme : 'teal'
       );
@@ -624,8 +683,12 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
         }
       }
       const staffList = staffRes.data.staff || [];
-      setStaffConfigured(staffList.some((s: { pinSet?: boolean; isActive?: boolean }) => s.pinSet && s.isActive));
-      if (!loadWebPosStaffSession() && staffList.some((s: { pinSet?: boolean }) => s.pinSet)) {
+      const hasPins = staffList.some(
+        (s: { pinSet?: boolean; isActive?: boolean }) => s.pinSet && s.isActive !== false
+      );
+      setStaffConfigured(hasPins);
+      if (hasPins && !loadWebPosStaffSession()) {
+        setPinModalMode('gate');
         setPinModalOpen(true);
       }
       const prods = prodRes.data.products || prodRes.data || [];
@@ -634,6 +697,8 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
           ...p,
           name: repairCatalogText(p.name),
           price: Number(p.price),
+          sku: p.sku ?? null,
+          barcode: p.barcode ?? null,
         }))
       );
       await refreshAgent();
@@ -974,13 +1039,21 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
         channelRows?: Array<{ channel: string; count: number; total: number }>;
         range?: { label: string; from: string; to: string };
       } | null = null;
-      try {
-        const repRes = await api.get('/merchant/reports/eod', {
-          params: { preset: 'custom', from: fromYmd, to: toYmd },
-        });
-        report = repRes.data.report;
-      } catch {
-        report = null;
+      // Waiters without VIEW_REPORTS/END_OF_DAY only get their own shift totals (no company EOD).
+      const mayFetchCompanyEod =
+        !staffConfigured ||
+        (!!webposStaff &&
+          (hasPermission(webposStaff.permissions, 'VIEW_REPORTS') ||
+            hasPermission(webposStaff.permissions, 'END_OF_DAY')));
+      if (mayFetchCompanyEod) {
+        try {
+          const repRes = await api.get('/merchant/reports/eod', {
+            params: { preset: 'custom', from: fromYmd, to: toYmd },
+          });
+          report = repRes.data.report;
+        } catch {
+          report = null;
+        }
       }
       const totalSales =
         lastClosedShift.cashSales +
@@ -1043,28 +1116,127 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
     setStartShiftOpen(true);
   };
 
-  const applyKeypadToLine = () => {
+  /** EOD print/download when cash shifts are disabled (late-night venues). */
+  const printTodayEod = async () => {
+    try {
+      const repRes = await api.get('/merchant/reports/eod', { params: { preset: 'today' } });
+      const report = repRes.data.report as {
+        salesCount: number;
+        revenue: number;
+        subtotal?: number;
+        taxTotal: number;
+        netTotal?: number;
+        tipsTotal?: number;
+        grandTotal?: number;
+        refundTotal: number;
+        cancelledCount: number;
+        cancelledTotal: number;
+        cashTotal: number;
+        cardTotal: number;
+        terminalTotal: number;
+        coversServed?: number | null;
+        vatRows?: Array<{ label: string; net: number; tva: number; brut: number }>;
+        productsSold: Array<{ name: string; quantity: number; total: number }>;
+        paymentRows: Array<{ method: string; count: number; total: number; percent?: number }>;
+        orderTypeRows?: Array<{ label: string; count: number; total: number; percent?: number }>;
+        channelRows?: Array<{ channel: string; count: number; total: number }>;
+        range?: { label: string; from: string; to: string };
+        shiftCash?: Array<{
+          openingFloat: number;
+          cashSales: number;
+          expectedCash: number;
+          closingCashCounted?: number | null;
+          variance?: number | null;
+          staffName?: string | null;
+        }>;
+      };
+      const lang = resolveReceiptLanguage(printSettings, locale);
+      const text = generateEodReportText({
+        label: report?.range?.label || t('webPosEodReport'),
+        periodFrom: report?.range?.from,
+        periodTo: report?.range?.to,
+        salesCount: report?.salesCount ?? 0,
+        revenue: report?.revenue ?? 0,
+        subtotal: report?.subtotal ?? report?.revenue ?? 0,
+        taxTotal: report?.taxTotal ?? 0,
+        netTotal: report?.netTotal,
+        tipsTotal: report?.tipsTotal,
+        grandTotal: report?.grandTotal ?? report?.revenue ?? 0,
+        refundTotal: report?.refundTotal ?? 0,
+        cancelledCount: report?.cancelledCount ?? 0,
+        cancelledTotal: report?.cancelledTotal ?? 0,
+        cashTotal: report?.cashTotal ?? 0,
+        cardTotal: report?.cardTotal ?? 0,
+        terminalTotal: report?.terminalTotal ?? 0,
+        coversServed: report?.coversServed,
+        vatRows: report?.vatRows,
+        productsSold: report?.productsSold ?? [],
+        paymentRows: report?.paymentRows ?? [],
+        orderTypeRows: report?.orderTypeRows,
+        channelRows: report?.channelRows,
+        businessName: merchant?.name || APP_NAME,
+        language: lang,
+        paperWidthMm: printSettings?.paperWidthMm || 80,
+        header: printSettings?.receiptHeader,
+        footer: printSettings?.receiptFooter,
+        shiftCash: report?.shiftCash,
+      });
+      await printEscPosToTargets(text, { role: 'eod' });
+      toast.success(t('webPosEodPrinted'));
+    } catch (e: any) {
+      toast.error(e.response?.data?.error || e.message || t('webPosPrintFailed'));
+    }
+  };
+
+  const lineTotalFor = (unitPrice: number, quantity: number, discountPercent = 0) =>
+    roundMoney2(unitPrice * quantity * (1 - discountPercent / 100));
+
+  const removeSelectedLine = (line: CartLine) => {
+    if (line.sentToKitchen) {
+      setCancelModal({ scope: 'item', lineId: line.lineId });
+      return;
+    }
+    setCart((prev) => prev.filter((l) => l.lineId !== line.lineId));
+    setSelectedLineId(null);
+    setKeypadBuffer('');
+  };
+
+  /** Apply a numeric buffer to the selected cart line. Live typing keeps the buffer. */
+  const applyKeypadValue = (
+    raw: string,
+    opts?: { clearBuffer?: boolean; allowQtyDelete?: boolean; silentInvalid?: boolean }
+  ) => {
     if (!selectedLineId) return;
-    const value = Number(keypadBuffer);
+    const clearBuffer = opts?.clearBuffer ?? false;
+    const allowQtyDelete = opts?.allowQtyDelete ?? false;
+    const silentInvalid = opts?.silentInvalid ?? false;
+
+    // Incomplete entry while typing (e.g. ".", "12.")
+    if (raw === '' || raw === '-' || raw === '.' || raw === '-.' || raw.endsWith('.')) {
+      if (!silentInvalid && clearBuffer) toast.error(t('webPosEnterPrice'));
+      return;
+    }
+
+    const value = Number(raw);
     if (!Number.isFinite(value)) {
-      toast.error(t('webPosEnterPrice'));
+      if (!silentInvalid) toast.error(t('webPosEnterPrice'));
       return;
     }
+
     const selected = cart.find((l) => l.lineId === selectedLineId);
+    if (!selected) return;
+
     if (keypadMode === 'qty' && Math.round(value) <= 0) {
-      if (selected?.sentToKitchen) {
-        setCancelModal({ scope: 'item', lineId: selected.lineId });
-        return;
-      }
-      setCart((prev) => prev.filter((l) => l.lineId !== selectedLineId));
-      setSelectedLineId(null);
-      setKeypadBuffer('');
+      if (!allowQtyDelete) return;
+      removeSelectedLine(selected);
       return;
     }
-    if (selected?.sentToKitchen && (keypadMode === 'qty' || keypadMode === 'price')) {
-      toast.error(t('webPosCancelSentToEdit'));
+
+    if (selected.sentToKitchen && (keypadMode === 'qty' || keypadMode === 'price')) {
+      if (!silentInvalid) toast.error(t('webPosCancelSentToEdit'));
       return;
     }
+
     setCart((prev) =>
       prev.map((l) => {
         if (l.lineId !== selectedLineId) return l;
@@ -1073,7 +1245,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
           return {
             ...l,
             quantity,
-            lineTotal: roundMoney2(l.unitPrice * quantity * (1 - (l.lineDiscountPercent || 0) / 100)),
+            lineTotal: lineTotalFor(l.unitPrice, quantity, l.lineDiscountPercent || 0),
           };
         }
         if (keypadMode === 'percent') {
@@ -1081,7 +1253,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
           return {
             ...l,
             lineDiscountPercent: pct,
-            lineTotal: roundMoney2(l.unitPrice * l.quantity * (1 - pct / 100)),
+            lineTotal: lineTotalFor(l.unitPrice, l.quantity, pct),
           };
         }
         const unitPrice = roundMoney2(Math.max(0, value));
@@ -1089,11 +1261,135 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
           ...l,
           unitPrice,
           isOpenPrice: true,
-          lineTotal: roundMoney2(unitPrice * l.quantity * (1 - (l.lineDiscountPercent || 0) / 100)),
+          lineTotal: lineTotalFor(unitPrice, l.quantity, l.lineDiscountPercent || 0),
         };
-      }).filter((l) => l.quantity > 0)
+      })
     );
+    if (clearBuffer) setKeypadBuffer('');
+  };
+
+  const applyKeypadToLine = () => {
+    applyKeypadValue(keypadBuffer, { clearBuffer: true, allowQtyDelete: true });
+  };
+
+  const handleKeypadBufferChange = (buf: string) => {
+    setKeypadBuffer(buf);
+    applyKeypadValue(buf, { clearBuffer: false, allowQtyDelete: false, silentInvalid: true });
+  };
+
+  const handleKeypadModeChange = (mode: KeypadMode) => {
+    setKeypadMode(mode);
     setKeypadBuffer('');
+  };
+
+  const handleSelectLine = (lineId: string | null) => {
+    setSelectedLineId(lineId);
+    setKeypadBuffer('');
+  };
+
+  const handleKeypadAdjust = (delta: number) => {
+    if (!selectedLineId) return;
+    const selected = cart.find((l) => l.lineId === selectedLineId);
+    if (!selected) return;
+
+    if (keypadMode === 'qty' || keypadMode === 'price') {
+      if (selected.sentToKitchen) {
+        toast.error(t('webPosCancelSentToEdit'));
+        return;
+      }
+    }
+
+    setKeypadBuffer('');
+
+    if (keypadMode === 'qty') {
+      const next = selected.quantity + delta;
+      if (next <= 0) {
+        removeSelectedLine(selected);
+        return;
+      }
+      setCart((prev) =>
+        prev.map((l) =>
+          l.lineId !== selectedLineId
+            ? l
+            : {
+                ...l,
+                quantity: next,
+                lineTotal: lineTotalFor(l.unitPrice, next, l.lineDiscountPercent || 0),
+              }
+        )
+      );
+      return;
+    }
+
+    if (keypadMode === 'percent') {
+      const pct = Math.max(0, Math.min(100, (selected.lineDiscountPercent || 0) + delta));
+      setCart((prev) =>
+        prev.map((l) =>
+          l.lineId !== selectedLineId
+            ? l
+            : {
+                ...l,
+                lineDiscountPercent: pct,
+                lineTotal: lineTotalFor(l.unitPrice, l.quantity, pct),
+              }
+        )
+      );
+      return;
+    }
+
+    const unitPrice = roundMoney2(Math.max(0, selected.unitPrice + delta));
+    setCart((prev) =>
+      prev.map((l) =>
+        l.lineId !== selectedLineId
+          ? l
+          : {
+              ...l,
+              unitPrice,
+              isOpenPrice: true,
+              lineTotal: lineTotalFor(unitPrice, l.quantity, l.lineDiscountPercent || 0),
+            }
+      )
+    );
+  };
+
+  const handleKeypadBackspace = () => {
+    if (!selectedLineId) return;
+
+    if (keypadBuffer.length > 0) {
+      const next = keypadBuffer.slice(0, -1);
+      setKeypadBuffer(next);
+      if (next !== '' && next !== '-' && next !== '.' && next !== '-.' && !next.endsWith('.')) {
+        applyKeypadValue(next, { clearBuffer: false, allowQtyDelete: false, silentInvalid: true });
+      }
+      return;
+    }
+
+    const selected = cart.find((l) => l.lineId === selectedLineId);
+    if (!selected) return;
+
+    // 1st ⌫ (buffer empty): zero item price
+    if (selected.unitPrice !== 0) {
+      if (selected.sentToKitchen) {
+        toast.error(t('webPosCancelSentToEdit'));
+        return;
+      }
+      setCart((prev) =>
+        prev.map((l) =>
+          l.lineId !== selectedLineId
+            ? l
+            : {
+                ...l,
+                unitPrice: 0,
+                isOpenPrice: true,
+                lineTotal: 0,
+              }
+        )
+      );
+      return;
+    }
+
+    // 2nd ⌫: remove line
+    removeSelectedLine(selected);
   };
 
   const advanceCourse = () => {
@@ -1122,62 +1418,111 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
     );
   };
 
-  const sendCoursesToKitchen = async () => {
-    if (!cart.length) return;
-    setBusy(true);
-    try {
-      if (showFireCourseButton) {
-        const lines = cart.filter((l) => (l.courseNumber || 1) === activeCourse);
-        if (!lines.length) {
-          toast.error(t('webPosNoItemsInCourse'));
-          return;
-        }
-        await fireCourseLines(lines, activeCourse);
-        toast.success(t('webPosFireCourseDone').replace('{n}', String(activeCourse)));
-        return;
-      }
-
-      const unsent = cart.filter((l) => !l.sentToKitchen);
-      const toSend =
-        unsent.length > 0
-          ? unsent.map((l) =>
-              l.courseNumber ? l : { ...l, courseNumber: coursesEnabled ? activeCourse : undefined }
-            )
-          : cart;
-      if (coursesEnabled) {
-        setCart((prev) =>
-          prev.map((l) =>
-            l.courseNumber || !coursesEnabled ? l : { ...l, courseNumber: activeCourse }
-          )
-        );
-      }
-      await fireCourseLines(toSend);
-      setOrderSent(true);
-      setCoursesBulkSent(true);
-      toast.success(t('webPosHeldSentKitchen'));
-      const sentIds = new Set(toSend.map((l) => l.lineId));
-      const sentCart = cart.map((l) =>
-        sentIds.has(l.lineId) ? { ...l, sentToKitchen: true } : l
-      );
-      const key = openCartDraftKey({ tableId, tabNumber, channel });
+  /** Clear operator editing UI without deleting table/tab kitchen drafts. */
+  const releaseOperatorAfterKitchen = (
+    sentCart: CartLine[],
+    opts?: { draftActiveCourse?: number }
+  ) => {
+    const wasTable = !!tableId;
+    const pendingCourses = sentCart
+      .filter((l) => !l.sentToKitchen)
+      .map((l) => l.courseNumber || 1)
+      .sort((a, b) => a - b);
+    const draftActiveCourse =
+      opts?.draftActiveCourse ?? pendingCourses[0] ?? activeCourse;
+    if (tableId || tabNumber) {
+      const key = openCartDraftKey({ tableId, tabNumber, channel: tableId ? 'dine_in' : channel });
       openCartDraftsRef.current.set(key, {
         cart: sentCart,
-        channel,
+        channel: tableId ? 'dine_in' : channel,
         tableId,
         tableLabel,
         tabNumber,
         orderNote,
-        activeCourse,
+        activeCourse: draftActiveCourse,
         orderSent: true,
         coursesBulkSent: true,
         selectedLineId: null,
         keypadBuffer: '',
       });
       setDraftVersion((n) => n + 1);
-      if (tableId) {
-        setPosTab('tables');
-        setPosView('tables');
+    }
+    setCart([]);
+    setSelectedLineId(null);
+    setKeypadBuffer('');
+    setOrderNote('');
+    setTableId(null);
+    setTableLabel(null);
+    setTabNumber(null);
+    setActiveCourse(1);
+    setOrderSent(false);
+    setCoursesBulkSent(false);
+    setChannel(null);
+    setFulfillmentWhen(null);
+    setSelectedCustomer(null);
+    setProvisionalPrinted(false);
+    if (wasTable) {
+      setPosTab('tables');
+      setPosView('tables');
+    } else {
+      setPosTab('register');
+      setPosView('register');
+    }
+  };
+
+  const sendCoursesToKitchen = async () => {
+    if (!cart.length) return;
+    setBusy(true);
+    try {
+      if (showFireCourseButton) {
+        const lines = cart.filter(
+          (l) => (l.courseNumber || 1) === activeCourse && !l.sentToKitchen
+        );
+        if (!lines.length) {
+          toast.error(t('webPosNoItemsInCourse'));
+          return;
+        }
+        await fireCourseLines(lines, activeCourse);
+        toast.success(t('webPosFireCourseDone').replace('{n}', String(activeCourse)));
+        const sentIds = new Set(lines.map((l) => l.lineId));
+        const sentCart = cart.map((l) =>
+          sentIds.has(l.lineId) ? { ...l, sentToKitchen: true } : l
+        );
+        releaseOperatorAfterKitchen(sentCart);
+        return;
       }
+
+      const stamped = cart.map((l) =>
+        l.courseNumber || !coursesEnabled
+          ? l
+          : { ...l, courseNumber: activeCourse }
+      );
+      const unsent = stamped.filter((l) => !l.sentToKitchen);
+      let toSend: CartLine[];
+      if (coursesEnabled && courseSendMode === 'fire_per_course') {
+        // SEND fires Course 1; later courses wait for FIRE Course N
+        const course1 = unsent.filter((l) => (l.courseNumber || 1) === 1);
+        if (course1.length) {
+          toSend = course1;
+        } else if (unsent.length) {
+          const minCourse = Math.min(...unsent.map((l) => l.courseNumber || 1));
+          toSend = unsent.filter((l) => (l.courseNumber || 1) === minCourse);
+        } else {
+          toSend = stamped;
+        }
+      } else {
+        toSend = unsent.length > 0 ? unsent : stamped;
+      }
+
+      await fireCourseLines(toSend);
+      setOrderSent(true);
+      setCoursesBulkSent(true);
+      toast.success(t('webPosHeldSentKitchen'));
+      const sentIds = new Set(toSend.map((l) => l.lineId));
+      const sentCart = stamped.map((l) =>
+        sentIds.has(l.lineId) ? { ...l, sentToKitchen: true } : l
+      );
+      releaseOperatorAfterKitchen(sentCart);
     } catch (e: any) {
       toast.error(e.message || t('webPosKitchenPrintFailed'));
     } finally {
@@ -1229,6 +1574,67 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
     setKeypadBuffer(draft.keypadBuffer);
   };
 
+  /** Attach current cart lines to a table (Set table) — never wipe the cart. */
+  const assignCartToTable = (table: { id: string; label: string }) => {
+    const fromKey = openCartDraftKey({ tableId, tabNumber, channel });
+    const toKey = openCartDraftKey({ tableId: table.id, channel: 'dine_in' });
+    const existing = fromKey !== toKey ? openCartDraftsRef.current.get(toKey) : undefined;
+
+    const movingCart = cart;
+    let nextCart = movingCart;
+    let nextNote = orderNote;
+    let nextCourse = activeCourse;
+    let nextOrderSent = orderSent;
+    let nextCoursesBulkSent = coursesBulkSent;
+
+    if (existing && (existing.cart.length > 0 || existing.orderSent)) {
+      const existingIds = new Set(existing.cart.map((l) => l.lineId));
+      const incoming = movingCart.filter((l) => !existingIds.has(l.lineId));
+      nextCart = [...existing.cart, ...incoming];
+      nextOrderSent = existing.orderSent || orderSent;
+      nextCoursesBulkSent = existing.coursesBulkSent || coursesBulkSent;
+      nextCourse = Math.max(existing.activeCourse || 1, activeCourse || 1);
+      if (existing.orderNote && orderNote && existing.orderNote !== orderNote) {
+        nextNote = `${existing.orderNote} · ${orderNote}`;
+      } else {
+        nextNote = orderNote || existing.orderNote || '';
+      }
+    }
+
+    if (fromKey !== toKey) {
+      openCartDraftsRef.current.delete(fromKey);
+    }
+
+    setCart(nextCart);
+    setTableId(table.id);
+    setTableLabel(table.label);
+    setChannel('dine_in');
+    setTabNumber(null);
+    setOrderNote(nextNote);
+    setActiveCourse(nextCourse);
+    setOrderSent(nextOrderSent);
+    setCoursesBulkSent(nextCoursesBulkSent);
+    setFulfillmentWhen(null);
+
+    openCartDraftsRef.current.set(toKey, {
+      cart: nextCart,
+      channel: 'dine_in',
+      tableId: table.id,
+      tableLabel: table.label,
+      tabNumber: null,
+      orderNote: nextNote,
+      activeCourse: nextCourse,
+      orderSent: nextOrderSent,
+      coursesBulkSent: nextCoursesBulkSent,
+      selectedLineId,
+      keypadBuffer,
+    });
+    setDraftVersion((n) => n + 1);
+    setPosTab('register');
+    setPosView('register');
+  };
+
+  /** Open a table from the Tables plan (load that table's draft / empty order). */
   const switchToTableOrder = (table: { id: string; label: string }) => {
     saveOpenCartDraft();
     const key = openCartDraftKey({ tableId: table.id, channel: 'dine_in' });
@@ -1355,15 +1761,19 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
     }
   };
 
+  const asapFulfillment = (): FulfillmentWhen => ({
+    mode: 'asap',
+    scheduledFor: null,
+    label: t('webPosAsap'),
+  });
+
   const openRegisterCheckout = () => {
     if (!cart.length || busy) return;
     if (
       (channel === 'delivery' || channel === 'takeaway') &&
       !fulfillmentWhen
     ) {
-      setPendingPayMethod('cash');
-      setScheduleOpen(true);
-      return;
+      setFulfillmentWhen(asapFulfillment());
     }
     if (channel === 'delivery' && !selectedCustomer) {
       setPendingPayMethod('cash');
@@ -1385,12 +1795,27 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
 
   const selectFulfillmentChannel = (ch: 'takeaway' | 'delivery') => {
     leaveTableForChannel();
+    const channelChanged = channel !== ch;
     setChannel(ch);
-    setFulfillmentWhen(null);
-    setScheduleOpen(true);
+    // Default ASAP immediately — no modal. Keep existing when re-tapping same channel.
+    if (channelChanged || !fulfillmentWhen) {
+      setFulfillmentWhen(asapFulfillment());
+    }
   };
 
   const convertChannel = () => {
+    if (isRetail) {
+      const opts = channelTabOptions.length
+        ? channelTabOptions
+        : (['takeaway'] as Array<'takeaway' | 'delivery'>);
+      if (opts.length < 2) return;
+      const idx = Math.max(0, opts.indexOf((channel as 'takeaway' | 'delivery') || opts[0]));
+      const next = opts[(idx + 1) % opts.length];
+      leaveTableForChannel();
+      setChannel(next);
+      setFulfillmentWhen(asapFulfillment());
+      return;
+    }
     const next: Channel =
       channel === 'takeaway'
         ? 'delivery'
@@ -1403,8 +1828,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
       setFulfillmentWhen(null);
       return;
     }
-    setFulfillmentWhen(null);
-    setScheduleOpen(true);
+    setFulfillmentWhen(asapFulfillment());
   };
 
   const confirmCancelCart = async (reason: string) => {
@@ -1444,8 +1868,75 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
     }
   };
 
+  const addGiftCardLine = (meta: GiftCardCartMeta, lineName: string) => {
+    const amount = roundMoney2(meta.amount);
+    const line: CartLine = {
+      lineId: `gc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      productId: `__gift_card_${meta.op}__`,
+      name: lineName,
+      quantity: 1,
+      unitPrice: amount,
+      lineTotal: amount,
+      taxable: false,
+      selectedExtras: [],
+      comboSelections: [],
+      isOpenPrice: true,
+      giftCard: {
+        op: meta.op,
+        cardNumber: meta.cardNumber,
+        cardId: meta.cardId,
+        mediaType: meta.mediaType,
+        amount,
+      },
+    };
+    setCart((prev) => [...prev, line]);
+    setSelectedLineId(line.lineId);
+    setPosTab('register');
+    setPosView('register');
+    toast.success(t('giftCardAddedToCart'));
+  };
+
+  const creditGiftCardLines = async (saleLines: CartLine[], orderId?: string | null) => {
+    for (const line of saleLines) {
+      if (!line.giftCard) continue;
+      try {
+        await api.post('/gift-cards/credit', {
+          type: line.giftCard.op,
+          cardId: line.giftCard.cardId,
+          cardNumber: line.giftCard.cardNumber,
+          cardMediaType: line.giftCard.mediaType,
+          amount: line.giftCard.amount,
+          orderId: orderId || undefined,
+          createIfMissing: line.giftCard.op === 'sell',
+        });
+      } catch (e: any) {
+        toast.error(e.response?.data?.error || t('giftCardCreditFailed'));
+      }
+    }
+  };
+
+  const redeemGiftCardPayments = async (
+    payments: AppliedPayment[],
+    orderId?: string | null
+  ) => {
+    for (const p of payments) {
+      if (p.method !== 'gift_card' || !p.giftCardId) continue;
+      try {
+        await api.post('/gift-cards/redeem', {
+          cardId: p.giftCardId,
+          amount: p.amount,
+          orderId: orderId || undefined,
+          allowPartial: true,
+        });
+      } catch (e: any) {
+        toast.error(e.response?.data?.error || t('giftCardRedeemFailed'));
+        throw e;
+      }
+    }
+  };
+
   const completeMultiTenderCheckout = async (
-    payments: Array<{ id: string; method: PosPaymentMethod; amount: number }>,
+    payments: AppliedPayment[],
     changeDue: number,
     tipAmount = 0
   ) => {
@@ -1454,11 +1945,12 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
     const partTotal = roundMoney2((part?.amount ?? totals.total) + tip);
     const primary = payments.find((p) => p.method === 'terminal')
       || payments.find((p) => p.method === 'card')
+      || payments.find((p) => p.method === 'gift_card')
       || payments[0];
     if (!primary) return;
     const amountTendered = roundMoney2(payments.reduce((s, p) => s + p.amount, 0));
     const extras: CheckoutResult = {
-      method: primary.method,
+      method: (primary.method === 'gift_card' ? 'card' : primary.method) as CheckoutResult['method'],
       discountPercent: 0,
       tipAmount: tip,
       roundingAmount: totals.rounding,
@@ -1473,9 +1965,17 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
     }
     setBusy(true);
     try {
-      const remaining = splitQueue.length > 0 && splitIndex + 1 < splitQueue.length;
-      await finalizeSale(primary.method === 'pay_later' ? 'pay_later' : primary.method, undefined, undefined, extras, true);
-      if (remaining) {
+      // Deduct gift balance before persisting sale (fail closed on empty/suspended cards)
+      await redeemGiftCardPayments(payments);
+      const remainingSplits = splitQueue.length > 0 && splitIndex + 1 < splitQueue.length;
+      const saleMethod: PosPaymentMethod =
+        primary.method === 'pay_later'
+          ? 'pay_later'
+          : primary.method === 'gift_card'
+            ? 'gift_card'
+            : primary.method;
+      await finalizeSale(saleMethod, undefined, undefined, extras, true);
+      if (remainingSplits) {
         setSplitIndex((i) => i + 1);
       }
     } catch (e: any) {
@@ -1487,10 +1987,13 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
 
   const runExpressPay = async (method: PosPaymentMethod) => {
     if (!cart.length || busy) return;
-    if (channel === 'delivery' && !fulfillmentWhen) {
-      setPendingPayMethod(method);
-      setScheduleOpen(true);
-      return;
+    let whenForPay: FulfillmentWhen | undefined;
+    if (
+      (channel === 'delivery' || channel === 'takeaway') &&
+      !fulfillmentWhen
+    ) {
+      whenForPay = asapFulfillment();
+      setFulfillmentWhen(whenForPay);
     }
     if (channel === 'delivery' && !selectedCustomer) {
       setPendingPayMethod(method);
@@ -1515,7 +2018,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
     setBusy(true);
     try {
       // Express: popup only - never auto-print receipt
-      await finalizeSale(method, undefined, undefined, extras, false, {
+      await finalizeSale(method, undefined, whenForPay, extras, false, {
         skipReceiptPrint: true,
       });
       setSuccessInfo({ amount: paidAmount, changeDue: 0 });
@@ -1613,10 +2116,12 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
     const kitchenPrinters = (printSettings?.printers || []).filter(
       (p) => p.enabled !== false && p.printKitchenTickets && p.name
     );
-    const filteredLines =
+    const filteredLines = (
       opts?.courseOnly != null
         ? lines.filter((l) => (l.courseNumber || 1) === opts.courseOnly)
-        : lines;
+        : lines
+    ).filter((l) => !l.giftCard && !String(l.productId || '').startsWith('__gift_card_'));
+    if (!filteredLines.length) return;
     const receiptItems = filteredLines.map((l) => {
       const detail = lineExtrasLabel(l);
       return {
@@ -1860,6 +2365,9 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
       pushRes.data?.results?.[0]?.orderId ||
       null;
 
+    // Credit gift-card sell/reload lines after successful payment persistence
+    await creditGiftCardLines(saleLines, backendOrderId);
+
     const receiptUrl = buildReceiptUrl(clientId);
     const lang = resolveReceiptLanguage(
       printSettings,
@@ -2016,20 +2524,20 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
       method === 'pay_later' && (channel === 'dine_in' || !channel)
         ? 'takeaway'
         : channel;
+    let whenForCheckout: FulfillmentWhen | undefined;
     if (
       (scheduleChannel === 'takeaway' || scheduleChannel === 'delivery') &&
       !fulfillmentWhen
     ) {
-      setPendingPayMethod(method);
-      setScheduleOpen(true);
-      return;
+      whenForCheckout = asapFulfillment();
+      setFulfillmentWhen(whenForCheckout);
     }
     if (scheduleChannel === 'delivery' && !selectedCustomer) {
       setPendingPayMethod(method);
       setCustomerOpen(true);
       return;
     }
-    void runCheckout(method);
+    void runCheckout(method, whenForCheckout);
   };
 
   const runCheckout = async (
@@ -2205,6 +2713,11 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
     !staffConfigured || (!!webposStaff && hasPermission(staffPerms, 'CANCEL_ORDERS'));
   const canRefundOrders =
     !staffConfigured || (!!webposStaff && hasPermission(staffPerms, 'REFUND_ORDERS'));
+  const canViewReports =
+    !staffConfigured ||
+    (!!webposStaff &&
+      (hasPermission(staffPerms, 'VIEW_REPORTS') || hasPermission(staffPerms, 'END_OF_DAY')));
+  const showEodButton = !shiftsEnabled && canViewReports;
 
   const openCashDrawer = async () => {
     if (!canDrawer) {
@@ -2235,16 +2748,145 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
     };
     setWebposStaff(session);
     saveWebPosStaffSession(session);
+    setPinModalOpen(false);
     toast.success(t('webPosSignedInAs').replace('{name}', staff.name));
     void refreshCurrentShift();
   };
+
+  const openSwitchUserPin = () => {
+    setPinModalMode('switch');
+    setPinModalOpen(true);
+  };
+
+  const findProductByScanCode = useCallback(
+    (code: string): Product | null => {
+      const q = code.trim();
+      if (!q) return null;
+      const lower = q.toLowerCase();
+      return (
+        products.find(
+          (p) =>
+            (p.barcode && String(p.barcode).trim() === q) ||
+            (p.sku && String(p.sku).trim().toLowerCase() === lower)
+        ) || null
+      );
+    },
+    [products]
+  );
+
+  const handleBarcodeScan = useCallback(
+    (code: string) => {
+      if (pinGateRequired || pinModalOpen) return;
+      if (posView !== 'register') return;
+      if (
+        pendingProduct ||
+        pendingCombo ||
+        pendingOpenPrice ||
+        checkoutOpen ||
+        paymentModalOpen ||
+        giftCardOpsOpen ||
+        giftCardPayOpen ||
+        splitOpen ||
+        scheduleOpen ||
+        customerOpen ||
+        kitchenMsgOpen ||
+        noteOpen ||
+        setTableOpen ||
+        setTabOpen ||
+        cancelModal ||
+        expressSuccessOpen
+      ) {
+        return;
+      }
+      const product = findProductByScanCode(code);
+      if (!product) {
+        toast.error(t('webPosBarcodeNotFound').replace('{code}', code));
+        return;
+      }
+      onProductClick(product);
+    },
+    // onProductClick is stable enough for scan; listed intentionally
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      pinGateRequired,
+      pinModalOpen,
+      posView,
+      pendingProduct,
+      pendingCombo,
+      pendingOpenPrice,
+      checkoutOpen,
+      paymentModalOpen,
+      giftCardOpsOpen,
+      giftCardPayOpen,
+      splitOpen,
+      scheduleOpen,
+      customerOpen,
+      kitchenMsgOpen,
+      noteOpen,
+      setTableOpen,
+      setTabOpen,
+      cancelModal,
+      expressSuccessOpen,
+      findProductByScanCode,
+      t,
+    ]
+  );
+
+  // Keyboard-wedge barcode scanner: buffer printable keys, Enter submits.
+  useEffect(() => {
+    const clearScanTimer = () => {
+      if (scanTimerRef.current != null) {
+        window.clearTimeout(scanTimerRef.current);
+        scanTimerRef.current = null;
+      }
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (pinGateRequired || pinModalOpen || posView !== 'register') return;
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName?.toLowerCase();
+      if (
+        tag === 'input' ||
+        tag === 'textarea' ||
+        tag === 'select' ||
+        target?.isContentEditable
+      ) {
+        return;
+      }
+      if (e.key === 'Enter') {
+        const code = scanBufferRef.current.trim();
+        scanBufferRef.current = '';
+        clearScanTimer();
+        if (code.length >= 3) {
+          e.preventDefault();
+          handleBarcodeScan(code);
+        }
+        return;
+      }
+      if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        scanBufferRef.current += e.key;
+        clearScanTimer();
+        scanTimerRef.current = window.setTimeout(() => {
+          scanBufferRef.current = '';
+          scanTimerRef.current = null;
+        }, 120);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      clearScanTimer();
+    };
+  }, [handleBarcodeScan, pinGateRequired, pinModalOpen, posView]);
 
   const enabledMethods = {
     express: (paymentConfig?.methods.express ?? true) && canPay,
     cash: (paymentConfig?.methods.cash ?? true) && canPay,
     card: (paymentConfig?.methods.card ?? true) && canPay,
     terminal: (paymentConfig?.methods.terminal ?? false) && canPay,
+    giftCard: (paymentConfig?.methods.giftCard === true) && canPay,
   };
+  const giftCardsFeatureOn =
+    paymentConfig?.giftCardSettings?.enabled === true || enabledMethods.giftCard;
 
   const activeTerminals = useMemo(
     () => (paymentConfig?.terminals || []).filter((t) => t.status === 'active'),
@@ -2255,6 +2897,26 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-[var(--text-muted)]">
         {t('webPosLoading')}
+      </div>
+    );
+  }
+
+  if (pinGateRequired) {
+    return (
+      <div
+        className={`webpos-shell ${
+          appMode ? 'h-dvh' : '-m-3 sm:-m-4 h-[calc(100dvh-4rem)]'
+        } flex flex-col bg-stone-950`}
+        data-theme={posColorTheme || 'teal'}
+      >
+        <WebPosPinModal
+          open
+          mode="gate"
+          onClose={() => {
+            /* gate cannot be dismissed without PIN */
+          }}
+          onSuccess={onStaffPinSuccess}
+        />
       </div>
     );
   }
@@ -2309,7 +2971,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
           setOnlineOrdersOpen(true);
           stopOrderAlertLoop();
         }}
-        onSwitchUser={() => setPinModalOpen(true)}
+        onSwitchUser={openSwitchUserPin}
         onOpenDrawer={() => void openCashDrawer()}
         onShowPanel={showPanelMenus}
         tableBadge={tableBadge}
@@ -2320,6 +2982,13 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
           setSettingsOpen(false);
           setStartShiftOpen(true);
         }}
+        showEodButton={showEodButton}
+        onEodReport={() => {
+          setSettingsOpen(false);
+          void printTodayEod();
+        }}
+        hideTablesTab={isRetail}
+        hideBookingsTab={isRetail}
         settingsPanel={
           <WebPosSettingsDropdown
             printerName={printerName}
@@ -2344,6 +3013,11 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
             onStartShift={() => {
               setSettingsOpen(false);
               setStartShiftOpen(true);
+            }}
+            showEodButton={showEodButton}
+            onEodReport={() => {
+              setSettingsOpen(false);
+              void printTodayEod();
             }}
           />
         }
@@ -2375,6 +3049,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
               cash: enabledMethods.cash,
               card: enabledMethods.card,
               terminal: enabledMethods.terminal,
+              giftCard: enabledMethods.giftCard,
               payLater: (channel === 'takeaway' || channel === 'delivery') && canPay,
             }}
             busy={busy || paymentModalOpen}
@@ -2386,6 +3061,12 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
                   }
                 : undefined
             }
+            onGiftCardRequest={(due) => {
+              setGiftCardPayDue(due);
+              setGiftCardPayOpen(true);
+            }}
+            injectPayment={giftPayInject}
+            onInjectPaymentConsumed={() => setGiftPayInject(null)}
             onComplete={(payments, changeDue, tipAmount) =>
               void completeMultiTenderCheckout(payments, changeDue, tipAmount)
             }
@@ -2403,6 +3084,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
               if (lastReceipt) void printReceipt(lastReceipt, lastReceiptUrl || undefined);
               else toast.error(t('webPosPrintFailed'));
             }}
+            onOpenDrawer={canDrawer ? () => void openCashDrawer() : undefined}
             onSendReceipt={() => {
               if (lastReceiptUrl && navigator.clipboard?.writeText) {
                 void navigator.clipboard.writeText(lastReceiptUrl);
@@ -2413,7 +3095,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
             }}
             onContinue={() => {
               setSuccessInfo(null);
-              const next = postSuccessTarget;
+              const next = isRetail ? 'register' : postSuccessTarget;
               setPosTab(next);
               setPosView(next);
             }}
@@ -2474,12 +3156,14 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
               taxRate={taxRate}
               money={money}
               selectedLineId={selectedLineId}
-              onSelectLine={setSelectedLineId}
+              onSelectLine={handleSelectLine}
               keypadMode={keypadMode}
-              onKeypadModeChange={setKeypadMode}
+              onKeypadModeChange={handleKeypadModeChange}
               keypadBuffer={keypadBuffer}
-              onKeypadBufferChange={setKeypadBuffer}
+              onKeypadBufferChange={handleKeypadBufferChange}
               onKeypadApply={applyKeypadToLine}
+              onKeypadAdjust={handleKeypadAdjust}
+              onKeypadBackspace={handleKeypadBackspace}
               channel={channel}
               onChannelChange={selectFulfillmentChannel}
               activeCourse={activeCourse}
@@ -2491,6 +3175,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
               tabNumber={tabNumber}
               customerLabel={customerLabel}
               fulfillmentLabel={fulfillmentWhen?.label || null}
+              fulfillmentIsLater={fulfillmentWhen?.mode === 'later'}
               busy={busy || paymentModalOpen}
               orderSent={orderSent}
               showNewOrder={showNewOrderButton}
@@ -2537,6 +3222,10 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
               }
               canCancelItem={!!cart.find((l) => l.lineId === selectedLineId)?.sentToKitchen}
               dockSide={cartSide}
+              showChannelTabs={showChannelTabs}
+              channelTabOptions={channelTabOptions}
+              kitchenEnabled={kitchenEnabled}
+              onHoldOrder={() => void holdCurrentOrder(false)}
             />
             <WebPosProductArea
               categories={categories}
@@ -2555,6 +3244,8 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
               }}
               onExpressPay={(m) => void runExpressPay(m)}
               expressDisabled={!cart.length || busy || paymentModalOpen}
+              giftCardsEnabled={giftCardsFeatureOn}
+              onGiftCards={() => setGiftCardOpsOpen(true)}
             />
           </div>
         )}
@@ -2570,6 +3261,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
                   if (lastReceipt) void printReceipt(lastReceipt, lastReceiptUrl || undefined);
                   else toast.error(t('webPosPrintFailed'));
                 }}
+                onOpenDrawer={canDrawer ? () => void openCashDrawer() : undefined}
                 onContinue={() => {
                   setExpressSuccessOpen(false);
                   setSuccessInfo(null);
@@ -2597,7 +3289,7 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
         selectedTableId={tableId}
         onSelect={(table) => {
           setSetTableOpen(false);
-          switchToTableOrder(table);
+          assignCartToTable(table);
         }}
       />
       <WebPosSetTabModal
@@ -2669,7 +3361,8 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
       />
 
       <WebPosPinModal
-        open={pinModalOpen}
+        open={pinModalOpen && !pinGateRequired}
+        mode={pinModalMode}
         onClose={() => setPinModalOpen(false)}
         onSuccess={onStaffPinSuccess}
       />
@@ -2756,16 +3449,14 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
           if (pendingPayMethod) {
             const m = pendingPayMethod;
             setPendingPayMethod(null);
-            // Takeaway/delivery still need a time if not set.
-            if (
+            // Default ASAP when takeaway/delivery has no time yet.
+            const when =
               !fulfillmentWhen &&
               (channel === 'delivery' || channel === 'takeaway')
-            ) {
-              setPendingPayMethod(m);
-              setScheduleOpen(true);
-              return;
-            }
-            void runCheckout(m);
+                ? asapFulfillment()
+                : undefined;
+            if (when) setFulfillmentWhen(when);
+            void runCheckout(m, when);
           }
         }}
       />
@@ -2819,6 +3510,49 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
           setSplitIndex(0);
           setCheckoutSeedMethod('cash');
           setPosView('checkout');
+        }}
+      />
+
+      <WebPosGiftCardModal
+        open={giftCardOpsOpen}
+        mode="ops"
+        settings={paymentConfig?.giftCardSettings || null}
+        onClose={() => setGiftCardOpsOpen(false)}
+        onAddToCart={addGiftCardLine}
+        onAttachCustomer={(c) => {
+          setSelectedCustomer({
+            id: c.id,
+            firstName: c.firstName || '',
+            lastName: c.lastName || '',
+            email: c.email || null,
+            phone: c.phone || null,
+          } as WebPosCustomer);
+        }}
+      />
+      <WebPosGiftCardModal
+        open={giftCardPayOpen}
+        mode="pay"
+        settings={paymentConfig?.giftCardSettings || null}
+        amountDue={giftCardPayDue}
+        onClose={() => setGiftCardPayOpen(false)}
+        onAddToCart={() => undefined}
+        onPayConfirm={(result: GiftCardPayResult) => {
+          setGiftPayInject({
+            id: `gc-pay-${Date.now()}`,
+            method: 'gift_card',
+            amount: result.amount,
+            giftCardId: result.cardId,
+            giftCardNumber: result.cardNumber,
+          });
+        }}
+        onAttachCustomer={(c) => {
+          setSelectedCustomer({
+            id: c.id,
+            firstName: c.firstName || '',
+            lastName: c.lastName || '',
+            email: c.email || null,
+            phone: c.phone || null,
+          } as WebPosCustomer);
         }}
       />
 

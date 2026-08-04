@@ -23,6 +23,8 @@ type Props = {
   keypadBuffer: string;
   onKeypadBufferChange: (buf: string) => void;
   onKeypadApply: () => void;
+  onKeypadAdjust: (delta: number) => void;
+  onKeypadBackspace: () => void;
   channel: PosChannel | null;
   onChannelChange: (ch: 'takeaway' | 'delivery') => void;
   activeCourse: number;
@@ -34,6 +36,7 @@ type Props = {
   tabNumber?: string | null;
   customerLabel?: string | null;
   fulfillmentLabel?: string | null;
+  fulfillmentIsLater?: boolean;
   busy: boolean;
   orderSent: boolean;
   showNewOrder: boolean;
@@ -58,6 +61,14 @@ type Props = {
   canCancelItem: boolean;
   /** Cart docked left or right of product grid */
   dockSide?: 'left' | 'right';
+  /** Show Takeaway / Delivery channel tabs (retail may disable). */
+  showChannelTabs?: boolean;
+  /** Which fulfillment channels appear when tabs are shown. */
+  channelTabOptions?: Array<'takeaway' | 'delivery'>;
+  /** Kitchen message, SEND, set table — restaurant only. */
+  kitchenEnabled?: boolean;
+  /** Hold current cart without kitchen send (retail / direct sale). */
+  onHoldOrder?: () => void;
 };
 
 function lineExtrasLabel(l: CartLine) {
@@ -92,6 +103,16 @@ function nextChannelLabel(
   return t('takeaway');
 }
 
+function currentChannelLabel(
+  channel: PosChannel | null,
+  t: (k: string) => string
+): string {
+  if (channel === 'delivery') return t('delivery');
+  if (channel === 'dine_in') return t('dineIn');
+  if (channel === 'takeaway') return t('takeaway');
+  return t('webPosOrderType');
+}
+
 export default function WebPosCartPanel({
   cart,
   totals,
@@ -104,6 +125,8 @@ export default function WebPosCartPanel({
   keypadBuffer,
   onKeypadBufferChange,
   onKeypadApply,
+  onKeypadAdjust,
+  onKeypadBackspace,
   channel,
   onChannelChange,
   activeCourse,
@@ -115,6 +138,7 @@ export default function WebPosCartPanel({
   tabNumber,
   customerLabel,
   fulfillmentLabel,
+  fulfillmentIsLater,
   busy,
   orderSent,
   showNewOrder,
@@ -138,10 +162,17 @@ export default function WebPosCartPanel({
   canCancelOrder,
   canCancelItem,
   dockSide = 'right',
+  showChannelTabs = true,
+  channelTabOptions = ['takeaway', 'delivery'],
+  kitchenEnabled = true,
+  onHoldOrder,
 }: Props) {
   const { t } = useI18n();
   const hasItems = cart.length > 0;
   const keypadExpanded = hasItems;
+  const effectiveShowSend = kitchenEnabled && showSend;
+  const channelOptions =
+    channelTabOptions.length > 0 ? channelTabOptions : (['takeaway', 'delivery'] as const);
   const [moreOpen, setMoreOpen] = useState(false);
   const sideBorder = dockSide === 'right' ? 'border-l' : 'border-r';
 
@@ -156,10 +187,6 @@ export default function WebPosCartPanel({
         out.push({ kind: 'line', line });
       }
     }
-    const unassigned = cart.filter((l) => !l.courseNumber);
-    for (const line of unassigned) {
-      out.push({ kind: 'line', line });
-    }
     return out;
   }, [cart, courseNumbers, coursesEnabled]);
 
@@ -168,120 +195,190 @@ export default function WebPosCartPanel({
       className={`webpos-cart-panel flex w-full shrink-0 flex-col ${sideBorder} border-stone-200 bg-white lg:w-[min(22rem,34vw)]`}
     >
       {/* Channel: Takeaway / Delivery above cart */}
-      <div className="shrink-0 grid grid-cols-2 gap-1.5 border-b border-stone-100 px-2 py-2">
-        {(
-          [
-            ['takeaway', t('takeaway')],
-            ['delivery', t('delivery')],
-          ] as const
-        ).map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => onChannelChange(id)}
-            className={`rounded-lg px-2 py-2 text-xs font-bold uppercase tracking-wide ${
-              channel === id
-                ? 'bg-[var(--webpos-accent)] text-white'
-                : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      {showChannelTabs ? (
+        <div
+          className={`shrink-0 grid gap-1.5 border-b border-stone-100 px-2 py-2 ${
+            channelOptions.length > 1 ? 'grid-cols-2' : 'grid-cols-1'
+          }`}
+        >
+          {channelOptions.map((id) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => onChannelChange(id)}
+              className={`rounded-lg px-2 py-2 text-xs font-bold uppercase tracking-wide ${
+                channel === id
+                  ? 'bg-[var(--webpos-accent)] text-white'
+                  : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+              }`}
+            >
+              {id === 'delivery' ? t('delivery') : t('takeaway')}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
-      {/* Action / breadcrumb row */}
-      <div className="shrink-0 grid grid-cols-5 gap-1 border-b border-stone-100 px-2 py-1.5">
-        <button type="button" className="webpos-mini-btn" onClick={onCustomer} title={t('webPosCustomer')}>
-          <User size={14} />
-          <span className="truncate max-w-full">{customerLabel || t('webPosAddClient')}</span>
-        </button>
+      {/* Compact breadcrumb / overflow menu (Android CartOrderMenuButton pattern) */}
+      <div className="relative shrink-0 border-b border-stone-100 px-2 py-1.5">
         <button
           type="button"
-          className="webpos-mini-btn"
-          onClick={onProvisionalReceipt}
-          disabled={!hasItems || busy}
-          title={t('webPosProvisionalReceipt')}
+          className="flex w-full items-center gap-2 rounded-lg border border-stone-200 bg-stone-50 px-2 py-1.5 text-left hover:bg-stone-100"
+          onClick={() => setMoreOpen((v) => !v)}
+          title={t('webPosMoreActions')}
+          aria-haspopup="menu"
+          aria-expanded={moreOpen}
         >
-          <Printer size={14} />
-          <span>{t('webPosProvisionalShort')}</span>
+          <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-white text-stone-600 ring-1 ring-stone-200">
+            <MoreHorizontal size={16} aria-hidden />
+          </span>
+          <span className="flex min-w-0 flex-1 items-center gap-1.5 text-[11px] font-semibold text-stone-600">
+            <span className="truncate">{customerLabel || t('webPosAddClient')}</span>
+            <span className="shrink-0 text-stone-300" aria-hidden>
+              /
+            </span>
+            <span className="truncate">{currentChannelLabel(channel, t)}</span>
+            {tableLabel ? (
+              <>
+                <span className="shrink-0 text-stone-300" aria-hidden>
+                  /
+                </span>
+                <span className="truncate">
+                  {t('table')} {tableLabel}
+                </span>
+              </>
+            ) : null}
+          </span>
+          <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-stone-400">
+            {t('webPosMoreShort')}
+          </span>
         </button>
-        <button
-          type="button"
-          className="webpos-mini-btn"
-          onClick={onToggleChannel}
-          title={t('webPosConvertChannel')}
-        >
-          <ArrowLeftRight size={14} />
-          <span className="truncate max-w-full">{nextChannelLabel(channel, t)}</span>
-        </button>
-        <button
-          type="button"
-          className="webpos-mini-btn text-rose-700 disabled:text-stone-400"
-          onClick={onCancelOrder}
-          disabled={!canCancelOrder || busy}
-          title={t('webPosCancelOrder')}
-        >
-          <Ban size={14} />
-          <span>{t('webPosCancelShort')}</span>
-        </button>
-        <div className="relative">
-          <button
-            type="button"
-            className="webpos-mini-btn w-full"
-            onClick={() => setMoreOpen((v) => !v)}
-            title={t('webPosMoreActions')}
-          >
-            <MoreHorizontal size={14} />
-            <span>{t('webPosMoreShort')}</span>
-          </button>
-          {moreOpen ? (
-            <>
+        {moreOpen ? (
+          <>
+            <button
+              type="button"
+              className="fixed inset-0 z-10 cursor-default"
+              aria-label={t('close')}
+              onClick={() => setMoreOpen(false)}
+            />
+            <div
+              role="menu"
+              className="absolute left-2 right-2 top-full z-20 mt-1 rounded-xl border border-stone-200 bg-white py-1 shadow-lg"
+            >
               <button
                 type="button"
-                className="fixed inset-0 z-10 cursor-default"
-                aria-label={t('close')}
-                onClick={() => setMoreOpen(false)}
-              />
-              <div className="absolute right-0 top-full z-20 mt-1 w-44 rounded-xl border border-stone-200 bg-white py-1 shadow-lg">
+                role="menuitem"
+                className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs font-semibold text-stone-700 hover:bg-stone-50"
+                onClick={() => {
+                  setMoreOpen(false);
+                  onCustomer();
+                }}
+              >
+                <User size={14} className="shrink-0 text-stone-500" />
+                <span className="truncate">{customerLabel || t('webPosAddClient')}</span>
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-40"
+                disabled={!hasItems || busy}
+                onClick={() => {
+                  setMoreOpen(false);
+                  onProvisionalReceipt();
+                }}
+              >
+                <Printer size={14} className="shrink-0 text-stone-500" />
+                {t('webPosProvisionalReceipt')}
+              </button>
+              {showChannelTabs || kitchenEnabled ? (
                 <button
                   type="button"
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-stone-700 hover:bg-stone-50"
+                  role="menuitem"
+                  className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs font-semibold text-stone-700 hover:bg-stone-50"
+                  title={t('webPosConvertChannel')}
+                  onClick={() => {
+                    setMoreOpen(false);
+                    onToggleChannel();
+                  }}
+                >
+                  <ArrowLeftRight size={14} className="shrink-0 text-stone-500" />
+                  <span className="min-w-0 truncate">
+                    {t('webPosConvertChannel')}
+                    <span className="ml-1 font-bold text-stone-500">
+                      ({nextChannelLabel(channel, t)})
+                    </span>
+                  </span>
+                </button>
+              ) : null}
+              {kitchenEnabled ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs font-semibold text-stone-700 hover:bg-stone-50"
                   onClick={() => {
                     setMoreOpen(false);
                     onKitchenMessage();
                   }}
                 >
-                  <MessageSquare size={14} />
+                  <MessageSquare size={14} className="shrink-0 text-stone-500" />
                   {t('webPosKitchenMessage')}
                 </button>
+              ) : null}
+              {onHoldOrder ? (
                 <button
                   type="button"
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-40"
-                  disabled={!canCancelItem || busy}
+                  role="menuitem"
+                  className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-40"
+                  disabled={!hasItems || busy}
                   onClick={() => {
                     setMoreOpen(false);
-                    onCancelItem();
+                    onHoldOrder();
                   }}
                 >
-                  <Ban size={14} />
-                  {t('webPosCancelItem')}
+                  {t('webPosHoldOrder')}
                 </button>
-                <button
-                  type="button"
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-40"
-                  disabled={!hasItems || busy || channel === 'dine_in' || !channel}
-                  onClick={() => {
-                    setMoreOpen(false);
-                    onPayLater();
-                  }}
-                >
-                  {t('webPosPayLater')}
-                </button>
-              </div>
-            </>
-          ) : null}
-        </div>
+              ) : null}
+              <button
+                type="button"
+                role="menuitem"
+                className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-40"
+                disabled={!hasItems || busy || channel === 'dine_in' || !channel}
+                onClick={() => {
+                  setMoreOpen(false);
+                  onPayLater();
+                }}
+              >
+                {t('webPosPayLater')}
+              </button>
+              <div className="my-1 border-t border-stone-100" />
+              <button
+                type="button"
+                role="menuitem"
+                className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-40"
+                disabled={!canCancelItem || busy}
+                onClick={() => {
+                  setMoreOpen(false);
+                  onCancelItem();
+                }}
+              >
+                <Ban size={14} className="shrink-0" />
+                {t('webPosCancelItem')}
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-40"
+                disabled={!canCancelOrder || busy}
+                onClick={() => {
+                  setMoreOpen(false);
+                  onCancelOrder();
+                }}
+              >
+                <Ban size={14} className="shrink-0" />
+                {t('webPosCancelOrder')}
+              </button>
+            </div>
+          </>
+        ) : null}
       </div>
 
       {(tableLabel ||
@@ -298,16 +395,23 @@ export default function WebPosCartPanel({
             </span>
           ) : null}
           {channel === 'takeaway' || channel === 'delivery' ? (
-            <button
-              type="button"
-              onClick={onEditFulfillment}
-              className="rounded bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-900 hover:bg-amber-200"
-              title={t('webPosTapToSetTime')}
-            >
-              {channel === 'delivery' ? t('delivery') : t('takeaway')}
-              {': '}
-              {fulfillmentLabel || t('webPosAsap')}
-            </button>
+            <>
+              <span className="rounded bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-900">
+                {channel === 'delivery' ? t('delivery') : t('takeaway')}
+                {': '}
+                {fulfillmentIsLater && fulfillmentLabel
+                  ? fulfillmentLabel
+                  : t('webPosAsap')}
+              </span>
+              <button
+                type="button"
+                onClick={onEditFulfillment}
+                className="text-[11px] font-semibold text-[var(--webpos-accent)] underline underline-offset-2 hover:opacity-80"
+                title={t('webPosChooseTime')}
+              >
+                {t('webPosChooseTime')}
+              </button>
+            </>
           ) : null}
           {tableLabel ? (
             <span className="rounded bg-rose-100 px-1.5 py-0.5 font-semibold text-rose-800">
@@ -336,13 +440,19 @@ export default function WebPosCartPanel({
                     <button
                       type="button"
                       onClick={() => onSelectCourse(row.course)}
+                      aria-pressed={selected}
                       className={`w-full rounded-md px-2 py-1.5 text-left text-xs font-bold uppercase tracking-wide ${
                         selected
-                          ? 'bg-violet-600 text-white'
+                          ? 'bg-violet-600 text-white ring-2 ring-violet-300 ring-offset-1'
                           : 'bg-violet-50 text-violet-800 hover:bg-violet-100'
                       }`}
                     >
                       {t('webPosCourse')} {row.course}
+                      {selected ? (
+                        <span className="ml-2 text-[10px] font-semibold normal-case tracking-normal opacity-90">
+                          - {t('webPosCourseActive')}
+                        </span>
+                      ) : null}
                     </button>
                   </li>
                 );
@@ -413,13 +523,17 @@ export default function WebPosCartPanel({
       >
         {coursesEnabled ? (
           <div className="mb-1">
+            <p className="mb-0.5 text-center text-[10px] font-semibold uppercase tracking-wide text-violet-700">
+              {t('webPosCourse')} {activeCourse} - {t('webPosCourseActive')}
+            </p>
             <button
               type="button"
-              className="w-full rounded-md bg-violet-100 py-1.5 text-[11px] font-bold uppercase tracking-wide text-violet-900 ring-1 ring-violet-300 hover:bg-violet-200"
+              className="w-full rounded-md bg-violet-600 py-1.5 text-[11px] font-bold uppercase tracking-wide text-white hover:bg-violet-700 disabled:opacity-40"
               onClick={onCourse}
               disabled={!hasItems}
+              title={t('webPosAddNextCourse')}
             >
-              {t('webPosCourse')} - {activeCourse}
+              + {t('webPosAddNextCourse')}
             </button>
           </div>
         ) : null}
@@ -430,8 +544,11 @@ export default function WebPosCartPanel({
             buffer={keypadBuffer}
             onBufferChange={onKeypadBufferChange}
             onApply={onKeypadApply}
+            onAdjust={onKeypadAdjust}
+            onBackspace={onKeypadBackspace}
             disabled={!selectedLineId}
             compact
+            hideApply
           />
         ) : (
           <p className="py-0.5 text-center text-[10px] font-medium uppercase tracking-wide text-stone-400">
@@ -450,7 +567,16 @@ export default function WebPosCartPanel({
           >
             {t('webPosNew')}
           </button>
-        ) : showSend || hideTab || orderSent ? (
+        ) : !kitchenEnabled ? (
+          <button
+            type="button"
+            disabled={!hasItems || busy}
+            onClick={() => (onHoldOrder ? onHoldOrder() : onNewOrder())}
+            className="col-span-2 rounded-lg bg-violet-700 py-3 text-sm font-bold text-white hover:bg-violet-800 disabled:opacity-40"
+          >
+            {onHoldOrder ? t('webPosHoldOrder') : t('webPosNew')}
+          </button>
+        ) : effectiveShowSend || hideTab || orderSent ? (
           <button
             type="button"
             disabled={!hasItems || busy}

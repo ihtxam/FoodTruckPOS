@@ -9,6 +9,7 @@ export type PosCheckoutDiscountPreset = {
 export type CourseSendMode = "fire_per_course" | "send_all_once";
 export type CartSide = "left" | "right";
 export type PostSuccessTarget = "register" | "tables";
+export type PosMode = "restaurant" | "retail";
 
 export type PosCheckoutSettings = {
   tipsEnabled: boolean;
@@ -33,6 +34,12 @@ export type PosCheckoutSettings = {
   cartSide: CartSide;
   /** After a successful payment, navigate to this WebPOS tab. */
   postSuccessTarget: PostSuccessTarget;
+  /** Restaurant (tables/kitchen) vs retail (register / barcode). */
+  posMode: PosMode;
+  /** Retail only: enable Takeaway channel (default off). */
+  retailTakeawayEnabled: boolean;
+  /** Retail only: enable Delivery channel (default off). */
+  retailDeliveryEnabled: boolean;
 };
 
 export const DEFAULT_POS_CHECKOUT: PosCheckoutSettings = {
@@ -54,6 +61,9 @@ export const DEFAULT_POS_CHECKOUT: PosCheckoutSettings = {
   courseSendMode: "fire_per_course",
   cartSide: "right",
   postSuccessTarget: "register",
+  posMode: "restaurant",
+  retailTakeawayEnabled: false,
+  retailDeliveryEnabled: false,
 };
 
 function asNumberArray(v: unknown, fallback: number[]): number[] {
@@ -101,6 +111,7 @@ export function normalizePosCheckoutSettings(raw: unknown): PosCheckoutSettings 
   const cartSide: CartSide = src.cartSide === "left" ? "left" : "right";
   const postSuccessTarget: PostSuccessTarget =
     src.postSuccessTarget === "tables" ? "tables" : "register";
+  const posMode: PosMode = src.posMode === "retail" ? "retail" : "restaurant";
 
   return {
     tipsEnabled: src.tipsEnabled !== false,
@@ -117,5 +128,8 @@ export function normalizePosCheckoutSettings(raw: unknown): PosCheckoutSettings 
     courseSendMode,
     cartSide,
     postSuccessTarget,
+    posMode,
+    retailTakeawayEnabled: src.retailTakeawayEnabled === true,
+    retailDeliveryEnabled: src.retailDeliveryEnabled === true,
   };
 }

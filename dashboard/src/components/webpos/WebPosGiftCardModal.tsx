@@ -1,5 +1,5 @@
 import { Gift, QrCode, CreditCard, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
 import RfidScanInput from '@/components/RfidScanInput';
@@ -39,12 +39,10 @@ type Props = {
   open: boolean;
   mode: 'ops' | 'pay';
   settings: GiftCardSettingsClient | null;
-  /** Remaining amount due (for pay mode) */
   amountDue?: number;
   onClose: () => void;
   onAddToCart: (meta: GiftCardCartMeta, lineName: string) => void;
   onPayConfirm?: (result: GiftCardPayResult) => void;
-  /** Optional: attach membership customer after RFID read */
   onAttachCustomer?: (customer: {
     id: string;
     firstName?: string | null;
@@ -90,6 +88,56 @@ export default function WebPosGiftCardModal({
   const [busy, setBusy] = useState(false);
   const [custom, setCustom] = useState(false);
 
+  const lookup = useCallback(
+    async (raw: string, mediaType: 'physical' | 'e_card') => {
+      const trimmed = raw.trim();
+      if (!trimmed) return;
+      setBusy(true);
+      try {
+        const res = await api.get(`/gift-cards/lookup/${encodeURIComponent(trimmed)}`, {
+          params: { mediaType },
+        });
+        const c = res.data.card;
+        const looked: LookedUpCard = {
+          id: c.id,
+          cardNumber: c.cardNumber,
+          balance: Number(c.balance || 0),
+          status: c.status,
+          membershipEnabled: !!c.membershipEnabled,
+          customerId: c.customerId,
+          holderName: c.holderName,
+          customer: c.customer
+            ? {
+                id: c.customer.id,
+                firstName: c.customer.firstName,
+                lastName: c.customer.lastName,
+                email: c.customer.email,
+                phone: c.customer.phone,
+              }
+            : null,
+        };
+        setCard(looked);
+        setCode(trimmed);
+        if (looked.customer && onAttachCustomer) {
+          onAttachCustomer(looked.customer);
+        }
+        if (mode === 'pay' || step === 'pay') {
+          const due = roundMoney2(amountDue);
+          const apply = roundMoney2(Math.min(looked.balance, due > 0 ? due : looked.balance));
+          setAmount(String(apply));
+        }
+      } catch (error: any) {
+        setCard(null);
+        if (step !== 'sell') {
+          toast.error(error.response?.data?.error || t('giftCardNotFound'));
+        }
+      } finally {
+        setBusy(false);
+      }
+    },
+    [amountDue, mode, onAttachCustomer, step, t]
+  );
+
   useEffect(() => {
     if (!open) return;
     setStep(mode === 'pay' ? 'pay' : 'menu');
@@ -101,7 +149,6 @@ export default function WebPosGiftCardModal({
     setBusy(false);
   }, [open, mode]);
 
-  // Debounced lookup after RFID wedge / typed card number settles
   useEffect(() => {
     if (!open || media === 'choose' || media === 'e_card') return;
     const trimmed = code.trim();
@@ -111,8 +158,7 @@ export default function WebPosGiftCardModal({
       void lookup(trimmed, 'physical');
     }, 280);
     return () => window.clearTimeout(tmr);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [code, open, media]);
+  }, [code, open, media, card, lookup]);
 
   if (!open) return null;
 
@@ -121,56 +167,6 @@ export default function WebPosGiftCardModal({
   const maxA = settings?.maxAmount ?? 500;
   const reloadOk = settings?.reloadEnabled !== false;
   const customOk = settings?.customAmountEnabled !== false;
-
-  const lookup = async (raw: string, mediaType: 'physical' | 'e_card') => {
-    const trimmed = raw.trim();
-    if (!trimmed) return;
-    setBusy(true);
-    try {
-      const res = await api.get(`/gift-cards/lookup/${encodeURIComponent(trimmed)}`, {
-        params: { mediaType },
-      });
-      const c = res.data.card;
-      const looked: LookedUpCard = {
-        id: c.id,
-        cardNumber: c.cardNumber,
-        balance: Number(c.balance || 0),
-        status: c.status,
-        membershipEnabled: !!c.membershipEnabled,
-        customerId: c.customerId,
-        holderName: c.holderName,
-        customer: c.customer
-          ? {
-              id: c.customer.id,
-              firstName: c.customer.firstName,
-              lastName: c.customer.lastName,
-              email: c.customer.email,
-              phone: c.customer.phone,
-            }
-          : null,
-      };
-      setCard(looked);
-      setCode(trimmed);
-      if (looked.customer && onAttachCustomer) {
-        onAttachCustomer(looked.customer);
-      }
-      if (step === 'pay' || mode === 'pay') {
-        const due = roundMoney2(amountDue);
-        const apply = roundMoney2(Math.min(looked.balance, due > 0 ? due : looked.balance));
-        setAmount(String(apply));
-      }
-    } catch (error: any) {
-      setCard(null);
-      if (step === 'sell') {
-        // New card sell: keep code, no existing card
-        setCode(trimmed);
-      } else {
-        toast.error(error.response?.data?.error || t('giftCardNotFound'));
-      }
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const confirmSellOrReload = () => {
     const n = roundMoney2(Number(amount));
@@ -361,12 +357,10 @@ export default function WebPosGiftCardModal({
               {card && (
                 <div className="rounded-xl bg-teal-50 px-4 py-3 text-sm text-teal-900">
                   <div className="font-mono text-xs">{card.cardNumber}</div>
-                  <div className="mt-1 text-lg font-bold">
-                    CHF {card.balance.toFixed(2)}
-                  </div>
+                  <div className="mt-1 text-lg font-bold">CHF {card.balance.toFixed(2)}</div>
                   {card.membershipEnabled && (
                     <div className="mt-1 text-xs">
-                      {t('membership')}: {card.holderName || card.customer?.firstName || 'ù'}
+                      {t('membership')}: {card.holderName || card.customer?.firstName || 'ó'}
                     </div>
                   )}
                 </div>
@@ -400,30 +394,37 @@ export default function WebPosGiftCardModal({
                     ))}
                   </div>
                   {customOk && (
-                    <button
-                      type="button"
-                      className="text-sm font-semibold text-teal-700"
-                      onClick={() => setCustom(true)}
-                    >
-                      {t('giftCardCustomAmount')}
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        className="text-sm font-semibold text-teal-700"
+                        onClick={() => setCustom(true)}
+                      >
+                        {t('giftCardCustomAmount')}
+                      </button>
+                      {custom && (
+                        <input
+                          className="input w-full"
+                          type="number"
+                          min={minA}
+                          max={maxA}
+                          step="0.01"
+                          value={amount}
+                          onChange={(e) => setAmount(e.target.value)}
+                          placeholder={`CHF ${minA} ñ ${maxA}`}
+                        />
+                      )}
+                    </>
                   )}
-                  {(custom || customOk) && (
-                    <input
-                      className="input w-full"
-                      type="number"
-                      min={minA}
-                      max={maxA}
-                      step="0.01"
-                      value={amount}
-                      onChange={(e) => setAmount(e.target.value)}
-                      placeholder={`CHF ${minA} ù ${maxA}`}
-                    />
+                  {!custom && amount && (
+                    <p className="text-sm text-stone-600">
+                      {t('giftCardSelectedAmount')}: CHF {Number(amount).toFixed(2)}
+                    </p>
                   )}
                   <button
                     type="button"
                     className="btn-primary w-full"
-                    disabled={busy}
+                    disabled={busy || !amount}
                     onClick={confirmSellOrReload}
                   >
                     {t('giftCardAddToCart')}
@@ -475,12 +476,13 @@ export default function WebPosGiftCardModal({
               className="text-sm text-stone-500 hover:underline"
               onClick={() => {
                 setStep('menu');
+                setMedia('physical');
                 setCard(null);
                 setCode('');
                 setAmount('');
               }}
             >
-              ? {t('back')}
+              {t('back')}
             </button>
           )}
         </div>

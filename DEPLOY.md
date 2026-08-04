@@ -119,6 +119,12 @@ docker compose --env-file .env.production exec -T db \
   < backend/sql/ensure-shifts.sql
 ```
 
+Then open **Settings → POS → Operations**, turn **Require cash shifts** on, and **Save**. WebPOS should show the Shift button / start banner.
+
+- Opening float is optional (blank = 0).
+- Open shifts that cross the calendar day auto-close at **23:59 Europe/Zurich** (counted = expected). Late-night venues (e.g. until 2:00): keep shifts **off** — WebPOS shows an **End of day** button instead (needs `END_OF_DAY` / `VIEW_REPORTS`).
+- Waiters do not get `VIEW_REPORTS` / `END_OF_DAY` (no company sales totals).
+
 See `backend/sql/ensure-shifts.sql`.
 
 **`.env` secrets:**

@@ -1,12 +1,21 @@
 -- Cash shifts for WebPOS (idempotent).
 -- Deploy normally runs `drizzle-kit push` via the migrate container.
--- If Settings ? POS ? Operations toggle save fails, or WebPOS never shows
--- Start/Close shift, apply this once against Postgres:
 --
+-- When to run this manually:
+--   - Settings ? POS ? Operations (“Require cash shifts”) fails to save
+--   - WebPOS never shows Start/Close shift / shift banner after enabling the toggle
+--   - API errors mention shifts_enabled / pos_shifts / column does not exist
+--
+-- From repo root on the server (see DEPLOY.md):
+--
+--   docker compose --env-file .env.production exec -T db \
+--     psql -U "${POSTGRES_USER:-manupos}" -d "${POSTGRES_DB:-manupos}" \
+--     < backend/sql/ensure-shifts.sql
+--
+-- Or with DATABASE_URL:
 --   psql "$DATABASE_URL" -f backend/sql/ensure-shifts.sql
 --
--- Or from the api/migrate container:
---   docker compose exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" < backend/sql/ensure-shifts.sql
+-- Then re-enable Settings ? POS ? Operations ? Require cash shifts and Save.
 
 ALTER TABLE merchants
   ADD COLUMN IF NOT EXISTS shifts_enabled boolean NOT NULL DEFAULT false;

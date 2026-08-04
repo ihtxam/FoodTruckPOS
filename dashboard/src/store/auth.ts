@@ -99,6 +99,11 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     clearReturnSession();
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    try {
+      sessionStorage.removeItem('webpos_staff_session');
+    } catch {
+      /* ignore */
+    }
     set({ user: null, token: null, impersonating: false });
   },
   hydrate: () => {

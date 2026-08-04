@@ -262,19 +262,21 @@ export class GiftCardService {
 
     if (!card) {
       if (opts.type === "sell" && opts.createIfMissing !== false && opts.cardNumber) {
-        card = await this.createCard(merchantId, {
+        const created = await this.createCard(merchantId, {
           cardNumber: opts.cardNumber,
           cardMediaType: opts.cardMediaType || "physical",
           initialBalance: 0,
         });
+        card = await this.getById(merchantId, created.id);
       } else {
         throw new Error("Card not found");
       }
     }
 
-    assertActive(card);
+    const activeCard = card!;
+    assertActive(activeCard);
 
-    const newBalance = money(card.balance) + amount;
+    const newBalance = money(activeCard.balance) + amount;
     if (newBalance > settings.maxAmount) {
       throw new Error(
         `Balance cannot exceed CHF ${settings.maxAmount.toFixed(2)}`
@@ -289,7 +291,7 @@ export class GiftCardService {
       })
       .where(
         and(
-          eq(schema.giftCards.id, card.id),
+          eq(schema.giftCards.id, activeCard.id),
           eq(schema.giftCards.merchantId, merchantId)
         )
       )
@@ -297,7 +299,7 @@ export class GiftCardService {
 
     await db.insert(schema.giftCardTransactions).values({
       merchantId,
-      cardId: card.id,
+      cardId: activeCard.id,
       transactionType: opts.type,
       amount: amount.toFixed(2),
       balanceAfter: newBalance.toFixed(2),
