@@ -31,6 +31,7 @@
         android:supportsRtl="true"
         android:usesCleartextTraffic="true"
         android:theme="@style/Theme.ChaslayPOS"
+        tools:replace="android:allowBackup,android:usesCleartextTraffic"
         tools:targetApi="31">
 
         <provider
@@ -42,6 +43,9 @@
                 android:name="androidx.work.WorkManagerInitializer"
                 android:value="androidx.startup"
                 tools:node="remove" />
+            <meta-data
+                android:name="com.adyen.ipp.api.InPersonPaymentsInitializer"
+                android:value="androidx.startup" />
         </provider>
 
         <activity
@@ -68,6 +72,11 @@
             android:screenOrientation="unspecified"
             android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.ChaslayPOS" />
+
+        <!-- Adyen Tap to Pay: SDK auto-detects this to obtain SoftPOS auth sessions. -->
+        <service
+            android:name=".payment.taptopay.ChaslayMerchantAuthenticationService"
+            android:exported="false" />
 
         <receiver
             android:name=".sync.BootCompletedReceiver"
