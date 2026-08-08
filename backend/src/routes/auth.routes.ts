@@ -106,6 +106,24 @@ router.post("/superadmin/login", async (req: Request, res: Response) => {
 });
 
 /**
+ * POST /api/auth/reseller/login
+ */
+router.post("/reseller/login", async (req: Request, res: Response) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ error: "Email and password are required" });
+    }
+    const { ResellerService } = await import("@/services/reseller.service");
+    const result = await ResellerService.login(email, password);
+    res.json({ success: true, token: result.token, reseller: result.reseller });
+  } catch (error) {
+    console.error("Error logging in reseller:", error);
+    res.status(401).json({ error: error instanceof Error ? error.message : "Failed to login" });
+  }
+});
+
+/**
  * GET /api/auth/me
  * Get current user info
  */

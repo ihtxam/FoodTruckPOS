@@ -6,6 +6,8 @@ import { playOrderAlertOnce, startOrderAlertLoop, stopOrderAlertLoop } from '@/l
 
 interface OrderItem {
   productName?: string | null;
+  name?: string | null;
+  product?: { name?: string | null } | null;
   quantity: string | number;
   totalPrice: string | number;
   selectedExtras?: Array<{ id: string; name: string; price: number }> | null;
@@ -14,6 +16,14 @@ interface OrderItem {
     productName: string;
     selectedExtras?: Array<{ id: string; name: string; price: number }>;
   }> | null;
+}
+
+function orderItemName(item: OrderItem) {
+  const raw = item.productName || item.name || item.product?.name;
+  if (raw == null || String(raw).trim() === '' || String(raw).toLowerCase() === 'null') {
+    return 'Item';
+  }
+  return String(raw);
 }
 
 interface Order {
@@ -432,14 +442,14 @@ export default function Orders() {
               {(selected.items || []).map((item, i) => (
                 <li key={i} className="flex justify-between gap-3">
                   <span className="min-w-0">
-                    {Number(item.quantity)}× {item.productName || 'Item'}
+                    {Number(item.quantity)}× {orderItemName(item)}
                     {!!item.comboSelections?.length && (
                       <span className="mt-0.5 block text-xs text-[var(--muted)]">
                         {item.comboSelections
                           .map((c) =>
                             c.selectedExtras?.length
-                              ? `${c.productName} (${c.selectedExtras.map((e) => e.name).join(', ')})`
-                              : c.productName
+                              ? `${c.productName || 'Item'} (${c.selectedExtras.map((e) => e.name).join(', ')})`
+                              : c.productName || 'Item'
                           )
                           .join(' · ')}
                       </span>

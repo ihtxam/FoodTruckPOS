@@ -47,6 +47,16 @@ export function requireSuperadmin(req: Request, res: Response, next: NextFunctio
 }
 
 /**
+ * Middleware to check if user is a reseller (agency)
+ */
+export function requireReseller(req: Request, res: Response, next: NextFunction) {
+  if (!req.user || req.user.role !== "reseller" || !req.user.resellerId) {
+    return res.status(403).json({ error: "Reseller access required" });
+  }
+  next();
+}
+
+/**
  * Merchant owner only (not staff)
  */
 export function requireMerchantOwner(req: Request, res: Response, next: NextFunction) {

@@ -1,5 +1,11 @@
 import { getDb, schema } from "@/db";
-import { eq, and, like, desc } from "drizzle-orm";
+import { eq, and, like, desc, or } from "drizzle-orm";
+
+function cleanOptional(value?: string | null) {
+  if (value == null) return null;
+  const trimmed = String(value).trim();
+  return trimmed ? trimmed : null;
+}
 
 export class CustomerService {
   /**
@@ -20,17 +26,25 @@ export class CustomerService {
     const db = getDb();
 
     try {
+      const first = cleanOptional(firstName);
+      const last = cleanOptional(lastName);
+      const mail = cleanOptional(email);
+      const tel = cleanOptional(phone);
+      if (!first && !last && !mail && !tel) {
+        throw new Error("Name, email, or phone is required");
+      }
+
       const customer = await db
         .insert(schema.customers)
         .values({
           merchantId,
-          email: email || null,
-          phone: phone || null,
-          firstName: firstName || null,
-          lastName: lastName || null,
-          defaultAddress: extra?.defaultAddress || null,
-          defaultZip: extra?.defaultZip || null,
-          defaultCity: extra?.defaultCity || null,
+          email: mail,
+          phone: tel,
+          firstName: first,
+          lastName: last,
+          defaultAddress: cleanOptional(extra?.defaultAddress),
+          defaultZip: cleanOptional(extra?.defaultZip),
+          defaultCity: cleanOptional(extra?.defaultCity),
           loyaltyPoints: 0,
           totalSpent: "0",
         })

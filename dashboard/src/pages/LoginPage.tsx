@@ -12,7 +12,7 @@ import { APP_NAME, APP_PANEL_TITLE } from '@/lib/brand';
 const loginSchema = z.object({
   email: z.string().email('Invalid email'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
-  role: z.enum(['superadmin', 'merchant']),
+  role: z.enum(['superadmin', 'merchant', 'reseller']),
 });
 
 type LoginFormData = z.infer<typeof loginSchema>;
@@ -27,6 +27,11 @@ const ACCOUNTS = {
     email: 'demo@chaslay.com',
     password: 'DemoShop123!',
     role: 'merchant' as const,
+  },
+  reseller: {
+    email: 'agency@chaslay.com',
+    password: 'ChaslayAgency123!',
+    role: 'reseller' as const,
   },
 };
 
@@ -62,15 +67,20 @@ export default function LoginPage() {
     setIsLoading(true);
     try {
       const endpoint =
-        data.role === 'superadmin' ? '/auth/superadmin/login' : '/auth/merchant/login';
+        data.role === 'superadmin'
+          ? '/auth/superadmin/login'
+          : data.role === 'reseller'
+            ? '/auth/reseller/login'
+            : '/auth/merchant/login';
 
       const response = await api.post(endpoint, {
         email: data.email,
         password: data.password,
       });
 
-      const { token, merchant, superadmin, isOwner } = response.data;
-      const account = data.role === 'superadmin' ? superadmin : merchant;
+      const { token, merchant, superadmin, reseller, isOwner } = response.data;
+      const account =
+        data.role === 'superadmin' ? superadmin : data.role === 'reseller' ? reseller : merchant;
       if (!token || !account) {
         throw new Error('Invalid login response from server');
       }
@@ -80,11 +90,15 @@ export default function LoginPage() {
         id: isStaff ? account.staffId : account.id,
         email: account.email,
         name: account.name,
-        role: (data.role === 'superadmin' ? 'superadmin' : isStaff ? 'staff' : 'merchant') as
-          | 'superadmin'
-          | 'merchant'
-          | 'staff',
+        role: (data.role === 'superadmin'
+          ? 'superadmin'
+          : data.role === 'reseller'
+            ? 'reseller'
+            : isStaff
+              ? 'staff'
+              : 'merchant') as 'superadmin' | 'merchant' | 'staff' | 'reseller',
         merchantId: data.role === 'merchant' ? (isStaff ? account.id : account.id) : undefined,
+        resellerId: data.role === 'reseller' ? account.id : undefined,
         staffId: isStaff ? account.staffId : undefined,
         roleName: account.roleName,
         permissions: account.permissions,
@@ -97,7 +111,9 @@ export default function LoginPage() {
       setUser(user);
 
       toast.success(`Signed in as ${data.role}`);
-      navigate(data.role === 'superadmin' ? '/superadmin' : '/merchant');
+      navigate(
+        data.role === 'superadmin' ? '/superadmin' : data.role === 'reseller' ? '/reseller' : '/merchant'
+      );
     } catch (error: any) {
       const message =
         error.response?.data?.error ||
@@ -127,6 +143,7 @@ export default function LoginPage() {
               <label className="block text-sm font-medium mb-2">Role</label>
               <select {...register('role')} className="input">
                 <option value="merchant">Merchant</option>
+                <option value="reseller">Reseller / Agency</option>
                 <option value="superadmin">Superadmin</option>
               </select>
               <p className="text-xs text-gray-500 mt-1">
@@ -176,6 +193,15 @@ export default function LoginPage() {
                 <span className="font-medium">Merchant</span>
                 <br />
                 <span className="text-xs break-all">{ACCOUNTS.merchant.email}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => fillAccount('reseller')}
+                className="w-full text-left px-3 py-2 bg-white border rounded-lg hover:border-blue-400"
+              >
+                <span className="font-medium">Reseller / Agency</span>
+                <br />
+                <span className="text-xs break-all">{ACCOUNTS.reseller.email}</span>
               </button>
               <button
                 type="button"

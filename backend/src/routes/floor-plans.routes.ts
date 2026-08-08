@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { verifyToken, requireMerchant, setMerchantContext } from "@/middleware/auth.middleware";
+import { requireEditionFeature } from "@/middleware/edition.middleware";
 import { FloorPlanService } from "@/services/floor-plan.service";
 
 const router = Router();
@@ -8,6 +9,7 @@ const router = Router();
 router.use(verifyToken);
 router.use(requireMerchant);
 router.use(setMerchantContext);
+router.use(requireEditionFeature("pos_tables"));
 
 router.get("/", async (req: Request, res: Response) => {
   try {

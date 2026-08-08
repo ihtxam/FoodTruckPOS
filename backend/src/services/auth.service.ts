@@ -6,14 +6,15 @@ import { eq, sql } from "drizzle-orm";
 export interface JWTPayload {
   id: string;
   email: string;
-  role: "superadmin" | "merchant" | "customer" | "staff";
+  role: "superadmin" | "merchant" | "customer" | "staff" | "reseller";
   merchantId?: string;
   customerId?: string;
   staffId?: string;
+  resellerId?: string;
   name?: string;
   roleName?: string;
   permissions?: string[];
-  /** Set when a superadmin opens a merchant panel */
+  /** Set when a superadmin opens a merchant or reseller panel */
   impersonatedBy?: string;
 }
 

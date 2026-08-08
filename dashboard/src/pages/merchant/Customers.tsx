@@ -38,9 +38,30 @@ export default function Customers() {
 
   const onCreate = async (e: FormEvent) => {
     e.preventDefault();
+    const first = firstName.trim();
+    const last = lastName.trim();
+    const mail = email.trim();
+    const tel = phone.trim();
+    if (!first) {
+      toast.error('First name is required (spaces only are not allowed)');
+      return;
+    }
+    if (!mail && !tel && !last) {
+      toast.error('Provide a last name, email, or phone (not only spaces)');
+      return;
+    }
+    if (mail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) {
+      toast.error('Enter a valid email address');
+      return;
+    }
     setSaving(true);
     try {
-      await api.post('/merchant/customers', { firstName, lastName, email, phone });
+      await api.post('/merchant/customers', {
+        firstName: first,
+        lastName: last || undefined,
+        email: mail || undefined,
+        phone: tel || undefined,
+      });
       toast.success('Customer added');
       setFirstName('');
       setLastName('');

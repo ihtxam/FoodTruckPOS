@@ -37,6 +37,61 @@ export const superadmins = pgTable(
 );
 
 // ============================================================================
+// RESELLERS (AGENCIES) — normal tenants between superadmin and merchants
+// ============================================================================
+
+export const resellers = pgTable(
+  "resellers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: varchar("name", { length: 255 }).notNull(),
+    email: varchar("email", { length: 255 }).notNull().unique(),
+    passwordHash: varchar("password_hash", { length: 255 }).notNull(),
+    phone: varchar("phone", { length: 40 }),
+    status: varchar("status", { length: 50 }).default("active").notNull(), // active | suspended
+    /** Optional branding JSON for future white-label */
+    branding: json("branding").$type<Record<string, unknown> | null>(),
+    createdBySuperadminId: uuid("created_by_superadmin_id").references(() => superadmins.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    emailIdx: uniqueIndex("resellers_email_idx").on(table.email),
+    statusIdx: index("resellers_status_idx").on(table.status),
+  })
+);
+
+// ============================================================================
+// EDITIONS (POS feature packs / versions)
+// ============================================================================
+
+export const editions = pgTable(
+  "editions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** platform = superadmin templates; reseller = agency-owned */
+    ownerType: varchar("owner_type", { length: 20 }).default("platform").notNull(),
+    /** null when ownerType=platform; reseller id when ownerType=reseller */
+    ownerId: uuid("owner_id"),
+    name: varchar("name", { length: 150 }).notNull(),
+    note: text("note"),
+    /** retail | restaurant | both */
+    businessCategory: varchar("business_category", { length: 20 }).default("both").notNull(),
+    /** EditionFeatureKey[] */
+    features: json("features").$type<string[]>().default([]).notNull(),
+    isActive: boolean("is_active").default(true).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    ownerIdx: index("editions_owner_idx").on(table.ownerType, table.ownerId),
+    nameIdx: index("editions_name_idx").on(table.name),
+  })
+);
+
+// ============================================================================
 // MERCHANTS (TENANTS)
 // ============================================================================
 
@@ -198,6 +253,11 @@ export const merchants = pgTable(
      */
     marketingSettings: json("marketing_settings").$type<MarketingSettings | null>(),
     /**
+     * Overview / EOD report email delivery:
+     * { language, sendEveryDay, sendEveryMonth, emails, lastSentDailyDate, lastSentMonthlyKey }
+     */
+    reportEmailSettings: json("report_email_settings").$type<ReportEmailSettings | null>(),
+    /**
      * POS / WebPOS receipt + kitchen + printer profiles:
      * { receiptHeader, receiptFooter, kitchenTicketHeader/Footer, paperWidthMm,
      *   receiptLanguage, receiptShowVatTable/StaffLine/QrCode, receiptLogoUrl,
@@ -213,6 +273,10 @@ export const merchants = pgTable(
     subscriptionPlan: varchar("subscription_plan", { length: 50 }).default("free"), // free, starter, professional, enterprise
     trialEndsAt: timestamp("trial_ends_at"),
     subscriptionEndsAt: timestamp("subscription_ends_at"),
+    /** Owning reseller/agency (null = legacy unassigned) */
+    resellerId: uuid("reseller_id").references(() => resellers.id, { onDelete: "set null" }),
+    /** Assigned POS edition / feature pack (null = legacy full access) */
+    editionId: uuid("edition_id").references(() => editions.id, { onDelete: "set null" }),
     passwordHash: varchar("password_hash", { length: 255 }).notNull(),
     /** Set when merchant chooses a password (invite accepted or admin set one) */
     passwordSetAt: timestamp("password_set_at"),
@@ -231,6 +295,8 @@ export const merchants = pgTable(
     customDomainIdx: uniqueIndex("merchants_custom_domain_idx").on(table.customDomain),
     syncApiKeyIdx: uniqueIndex("merchants_sync_api_key_idx").on(table.syncApiKey),
     inviteTokenIdx: index("merchants_invite_token_hash_idx").on(table.inviteTokenHash),
+    resellerIdx: index("merchants_reseller_idx").on(table.resellerId),
+    editionIdx: index("merchants_edition_idx").on(table.editionId),
   })
 );
 
@@ -1037,6 +1103,21 @@ export type MarketingSettings = {
   reorderReminderBody?: string | null;
 };
 
+export type ReportEmailSettings = {
+  /** Report email language: en | fr | de */
+  language?: "en" | "fr" | "de";
+  /** Auto-send yesterday's overview at end of each day */
+  sendEveryDay?: boolean;
+  /** Auto-send previous calendar month on the 1st */
+  sendEveryMonth?: boolean;
+  /** Recipient list */
+  emails?: string[];
+  /** YYYY-MM-DD of last successful daily send (Zurich) */
+  lastSentDailyDate?: string | null;
+  /** YYYY-MM of last successful monthly send */
+  lastSentMonthlyKey?: string | null;
+};
+
 export const reservations = pgTable(
   "reservations",
   {
@@ -1617,7 +1698,23 @@ export const cmsPagesRelations = relations(cmsPages, ({ one }) => ({
   }),
 }));
 
-export const merchantsRelations = relations(merchants, ({ many }) => ({
+export const resellersRelations = relations(resellers, ({ many }) => ({
+  merchants: many(merchants),
+}));
+
+export const editionsRelations = relations(editions, ({ many }) => ({
+  merchants: many(merchants),
+}));
+
+export const merchantsRelations = relations(merchants, ({ many, one }) => ({
+  reseller: one(resellers, {
+    fields: [merchants.resellerId],
+    references: [resellers.id],
+  }),
+  edition: one(editions, {
+    fields: [merchants.editionId],
+    references: [editions.id],
+  }),
   devices: many(devices),
   licenses: many(licenses),
   licenseTransactions: many(licenseTransactions),

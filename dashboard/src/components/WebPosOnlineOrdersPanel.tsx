@@ -3,7 +3,6 @@ import toast from 'react-hot-toast';
 import { X } from 'lucide-react';
 import api from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
-
 export type OnlineOrder = {
   id: string;
   orderNumber?: string;
@@ -25,27 +24,22 @@ export type OnlineOrder = {
     totalPrice?: string | number;
   }>;
 };
-
 type Props = {
   open: boolean;
   onClose: () => void;
   orders: OnlineOrder[];
   onRefresh: () => void;
 };
-
 function isNew(status: string) {
   return status === 'pending' || status === 'pending_approval';
 }
-
 export default function WebPosOnlineOrdersPanel({ open, onClose, orders, onRefresh }: Props) {
   const { t } = useI18n();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [tab, setTab] = useState<'new' | 'active' | 'all'>('new');
-
   useEffect(() => {
     if (open) setTab('new');
   }, [open]);
-
   const run = useCallback(
     async (id: string, action: string) => {
       setBusyId(id);
@@ -61,9 +55,7 @@ export default function WebPosOnlineOrdersPanel({ open, onClose, orders, onRefre
     },
     [onRefresh, t]
   );
-
   if (!open) return null;
-
   const list =
     tab === 'new'
       ? orders.filter((o) => isNew(o.status))
@@ -75,14 +67,12 @@ export default function WebPosOnlineOrdersPanel({ open, onClose, orders, onRefre
               o.status !== 'cancelled'
           )
         : orders;
-
   const money = (n: string | number) => `CHF ${Number(n || 0).toFixed(2)}`;
   const channelLabel = (ch?: string | null) => {
     if (ch === 'delivery') return t('delivery');
     if (ch === 'dine_in') return t('dineIn');
     return t('takeaway');
   };
-
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/40">
       <div className="flex h-full w-full max-w-md flex-col bg-[var(--bg-elevated)] shadow-xl">
@@ -138,14 +128,14 @@ export default function WebPosOnlineOrdersPanel({ open, onClose, orders, onRefre
                       ) : null}
                     </p>
                     <p className="text-[11px] text-[var(--text-muted)]">
-                      {channelLabel(o.fulfillmentChannel)} ù {money(o.total)} ù{' '}
+                      {channelLabel(o.fulfillmentChannel)} ¬∑ {money(o.total)} ¬∑{' '}
                       {o.scheduledFor
                         ? new Date(o.scheduledFor).toLocaleString()
                         : t('webPosAsap')}
                     </p>
                     {(o.customerName || o.customerPhone) && (
                       <p className="text-[11px] mt-0.5">
-                        {[o.customerName, o.customerPhone].filter(Boolean).join(' ù ')}
+                        {[o.customerName, o.customerPhone].filter(Boolean).join(' ¬∑ ')}
                       </p>
                     )}
                   </div>
@@ -159,7 +149,7 @@ export default function WebPosOnlineOrdersPanel({ open, onClose, orders, onRefre
                 <ul className="text-xs text-[var(--text-muted)]">
                   {(o.items || []).slice(0, 5).map((i, idx) => (
                     <li key={idx}>
-                      {i.quantity}ù {i.productName}
+                      {i.quantity}√ó {i.productName || 'Item'}
                     </li>
                   ))}
                 </ul>

@@ -6,6 +6,9 @@ import { AnalyticsService } from "@/services/analytics.service";
 import { AuthService } from "@/services/auth.service";
 import { SubscriptionPlansService } from "@/services/subscription-plans.service";
 import { PlatformSettingsService } from "@/services/platform-settings.service";
+import { EditionService } from "@/services/edition.service";
+import { ResellerService } from "@/services/reseller.service";
+import { EDITION_FEATURE_GROUPS, ALL_EDITION_FEATURES } from "@/lib/edition-features";
 
 const router = Router();
 
@@ -204,6 +207,9 @@ router.post("/merchants", async (req: Request, res: Response) => {
       deviceSeats,
       licenseType,
       customDays,
+      editionId,
+      resellerId,
+      businessCategory,
     } = req.body;
 
     if (!email || !password || !businessName) {
@@ -227,6 +233,9 @@ router.post("/merchants", async (req: Request, res: Response) => {
         deviceSeats: deviceSeats != null ? Number(deviceSeats) : 0,
         licenseType,
         customDays: customDays != null ? Number(customDays) : undefined,
+        editionId: editionId || undefined,
+        resellerId: resellerId || undefined,
+        businessCategory,
       }
     );
 
@@ -684,6 +693,160 @@ router.get("/analytics/subscription-distribution", async (req: Request, res: Res
   } catch (error) {
     console.error("Error getting subscription distribution:", error);
     res.status(500).json({ error: error instanceof Error ? error.message : "Failed to get distribution" });
+  }
+});
+
+// ============================================================================
+// EDITIONS
+// ============================================================================
+
+router.get("/editions/catalog", (_req: Request, res: Response) => {
+  res.json({ success: true, groups: EDITION_FEATURE_GROUPS, allFeatures: ALL_EDITION_FEATURES });
+});
+
+router.get("/editions", async (req: Request, res: Response) => {
+  try {
+    await EditionService.ensureDefaults();
+    const editions = await EditionService.list({
+      ownerType: "platform",
+      includeInactive: req.query.all === "1",
+    });
+    res.json({ success: true, editions });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : "Failed to list editions" });
+  }
+});
+
+router.post("/editions", async (req: Request, res: Response) => {
+  try {
+    const edition = await EditionService.create({
+      name: req.body?.name,
+      note: req.body?.note,
+      businessCategory: req.body?.businessCategory,
+      features: req.body?.features,
+      ownerType: "platform",
+    });
+    res.status(201).json({ success: true, edition });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Failed to create edition" });
+  }
+});
+
+router.put("/editions/:editionId", async (req: Request, res: Response) => {
+  try {
+    const edition = await EditionService.update(
+      req.params.editionId,
+      {
+        name: req.body?.name,
+        note: req.body?.note,
+        businessCategory: req.body?.businessCategory,
+        features: req.body?.features,
+        isActive: req.body?.isActive,
+      },
+      { requireOwnerType: "platform" }
+    );
+    res.json({ success: true, edition });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Failed to update edition" });
+  }
+});
+
+router.delete("/editions/:editionId", async (req: Request, res: Response) => {
+  try {
+    const edition = await EditionService.softDelete(req.params.editionId, {
+      requireOwnerType: "platform",
+    });
+    res.json({ success: true, edition });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Failed" });
+  }
+});
+
+router.patch("/merchants/:merchantId/edition", async (req: Request, res: Response) => {
+  try {
+    const { editionId, resellerId } = req.body || {};
+    const dbUpdates: Record<string, unknown> = { updatedAt: new Date() };
+    if (resellerId !== undefined) dbUpdates.resellerId = resellerId || null;
+    if (editionId) {
+      await EditionService.applyEditionDefaultsToMerchant(req.params.merchantId, editionId);
+    } else if (editionId === null) {
+      dbUpdates.editionId = null;
+      await MerchantService.updateMerchant(req.params.merchantId, dbUpdates as any);
+    }
+    if (resellerId !== undefined && !editionId) {
+      await MerchantService.updateMerchant(req.params.merchantId, dbUpdates as any);
+    } else if (resellerId !== undefined && editionId) {
+      await MerchantService.updateMerchant(req.params.merchantId, {
+        resellerId: resellerId || null,
+      } as any);
+    }
+    const merchant = await MerchantService.getMerchantById(req.params.merchantId);
+    res.json({ success: true, merchant });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Failed" });
+  }
+});
+
+// ============================================================================
+// RESELLERS
+// ============================================================================
+
+router.get("/resellers", async (req: Request, res: Response) => {
+  try {
+    const resellers = await ResellerService.list({
+      search: typeof req.query.search === "string" ? req.query.search : undefined,
+      status: typeof req.query.status === "string" ? req.query.status : undefined,
+    });
+    res.json({ success: true, resellers });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : "Failed" });
+  }
+});
+
+router.post("/resellers", async (req: Request, res: Response) => {
+  try {
+    const reseller = await ResellerService.create({
+      name: req.body?.name,
+      email: req.body?.email,
+      password: req.body?.password,
+      phone: req.body?.phone,
+      createdBySuperadminId: req.user?.id,
+    });
+    res.status(201).json({ success: true, reseller });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Failed" });
+  }
+});
+
+router.put("/resellers/:resellerId", async (req: Request, res: Response) => {
+  try {
+    const reseller = await ResellerService.update(req.params.resellerId, {
+      name: req.body?.name,
+      phone: req.body?.phone,
+      status: req.body?.status,
+      password: req.body?.password,
+    });
+    res.json({ success: true, reseller });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Failed" });
+  }
+});
+
+router.post("/resellers/:resellerId/impersonate", async (req: Request, res: Response) => {
+  try {
+    const result = await ResellerService.impersonateToken(req.params.resellerId, req.user!.id);
+    res.json({ success: true, token: result.token, reseller: result.reseller });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Failed" });
+  }
+});
+
+router.post("/resellers/ensure-agency", async (req: Request, res: Response) => {
+  try {
+    const reseller = await ResellerService.ensureChaslayAgency(req.user?.id);
+    res.json({ success: true, reseller });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : "Failed" });
   }
 });
 

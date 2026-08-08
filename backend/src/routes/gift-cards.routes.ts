@@ -4,6 +4,7 @@ import {
   requireMerchant,
   setMerchantContext,
 } from "@/middleware/auth.middleware";
+import { requireEditionFeature } from "@/middleware/edition.middleware";
 import { GiftCardService } from "@/services/gift-card.service";
 
 const router = Router();
@@ -11,6 +12,7 @@ const router = Router();
 router.use(verifyToken);
 router.use(requireMerchant);
 router.use(setMerchantContext);
+router.use(requireEditionFeature("gift_cards", "pos_gift_cards"));
 
 /**
  * GET /api/gift-cards/settings

@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import { verifyToken, requireMerchant, setMerchantContext } from "@/middleware/auth.middleware";
+import { requireEditionFeature } from "@/middleware/edition.middleware";
 import { LoyaltyService } from "@/services/loyalty.service";
 import { ShopLoyaltyService } from "@/services/shop-loyalty.service";
 
@@ -9,6 +10,7 @@ const router = Router();
 router.use(verifyToken);
 router.use(requireMerchant);
 router.use(setMerchantContext);
+router.use(requireEditionFeature("loyalty", "gift_cards"));
 
 /**
  * GET /api/loyalty/program

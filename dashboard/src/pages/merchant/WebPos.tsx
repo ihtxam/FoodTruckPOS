@@ -215,6 +215,8 @@ type WebPosPaymentConfig = {
   shiftsEnabled?: boolean;
   posColorTheme?: string;
   coursesEnabled?: boolean;
+  /** null/undefined = legacy full access */
+  editionFeatures?: string[] | null;
 };
 
 type CheckoutExtras = CheckoutResult;
@@ -451,21 +453,33 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
     () => normalizePosCheckoutSettings(paymentConfig?.posCheckoutSettings),
     [paymentConfig?.posCheckoutSettings]
   );
+  const editionFeatures = paymentConfig?.editionFeatures;
+  const editionAllows = (key: string) =>
+    editionFeatures == null || editionFeatures.includes(key);
   const posMode = checkoutSettings.posMode === 'retail' ? 'retail' : 'restaurant';
   const isRetail = posMode === 'retail';
-  const retailTakeawayEnabled = checkoutSettings.retailTakeawayEnabled;
-  const retailDeliveryEnabled = checkoutSettings.retailDeliveryEnabled;
+  const retailTakeawayEnabled =
+    !!checkoutSettings.retailTakeawayEnabled && editionAllows('channel_takeaway');
+  const retailDeliveryEnabled =
+    !!checkoutSettings.retailDeliveryEnabled && editionAllows('channel_delivery');
   const showChannelTabs = isRetail
     ? retailTakeawayEnabled || retailDeliveryEnabled
-    : true;
+    : editionAllows('channel_takeaway') || editionAllows('channel_delivery');
   const channelTabOptions: Array<'takeaway' | 'delivery'> = isRetail
     ? [
         ...(retailTakeawayEnabled ? (['takeaway'] as const) : []),
         ...(retailDeliveryEnabled ? (['delivery'] as const) : []),
       ]
-    : ['takeaway', 'delivery'];
-  const kitchenEnabled = !isRetail;
-  const coursesEnabled = !!merchant?.coursesEnabled && kitchenEnabled;
+    : [
+        ...(editionAllows('channel_takeaway') ? (['takeaway'] as const) : []),
+        ...(editionAllows('channel_delivery') ? (['delivery'] as const) : []),
+      ];
+  const kitchenEnabled = !isRetail && editionAllows('pos_kitchen');
+  const coursesEnabled =
+    !!merchant?.coursesEnabled && kitchenEnabled && editionAllows('pos_courses');
+  const tablesEditionOk = editionAllows('pos_tables');
+  const giftCardsEditionOk =
+    editionAllows('pos_gift_cards') || editionAllows('gift_cards');
   const showSend =
     kitchenEnabled &&
     (channel === 'takeaway' || channel === 'delivery' || !!tableLabel);
@@ -657,7 +671,15 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
         shiftsSchemaMissing?: boolean;
       }) | null;
       // Either source can enable; avoids hiding shifts when one payload omits the flag.
-      const shiftsOn = !!(cfg?.shiftsEnabled || merch?.shiftsEnabled);
+      const editionFeats = Array.isArray(cfg?.editionFeatures)
+        ? cfg!.editionFeatures
+        : Array.isArray(merch?.editionFeatures)
+          ? (merch.editionFeatures as string[])
+          : null;
+      const shiftsAllowed =
+        editionFeats == null || editionFeats.includes('pos_shifts');
+      const shiftsOn =
+        shiftsAllowed && !!(cfg?.shiftsEnabled || merch?.shiftsEnabled);
       const theme =
         (cfg?.posColorTheme || merch?.posColorTheme || 'teal').toLowerCase();
       setShiftsEnabled(shiftsOn);
@@ -672,7 +694,10 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
         ['teal', 'green', 'blue', 'violet'].includes(theme) ? theme : 'teal'
       );
       if (cfg) {
-        setPaymentConfig(cfg);
+        setPaymentConfig({
+          ...cfg,
+          editionFeatures: cfg.editionFeatures ?? merch?.editionFeatures ?? null,
+        });
         if (cfg.posPrintSettings) setPrintSettings(cfg.posPrintSettings);
         if (cfg.defaultTerminalId) setSelectedTerminalId(cfg.defaultTerminalId);
         const first: PosPaymentMethod[] = ['cash', 'card', 'terminal'];
@@ -2272,7 +2297,12 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
       shippingAddress: ship || null,
       tableId: tableId || null,
       tableLabel: tableLabel || null,
-      guestCount: tabNumber || null,
+      // Tab labels are not PAX; only send a numeric guest count when tabNumber is numeric.
+      guestCount: (() => {
+        if (tabNumber == null || tabNumber === '') return null;
+        const n = Number(tabNumber);
+        return Number.isFinite(n) && n > 0 ? Math.floor(n) : null;
+      })(),
       masterOrderId: splitMeta?.masterOrderId || null,
       splitCheckNumber: splitMeta?.splitCheckNumber ?? null,
       notes: [
@@ -2883,10 +2913,11 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
     cash: (paymentConfig?.methods.cash ?? true) && canPay,
     card: (paymentConfig?.methods.card ?? true) && canPay,
     terminal: (paymentConfig?.methods.terminal ?? false) && canPay,
-    giftCard: (paymentConfig?.methods.giftCard === true) && canPay,
+    giftCard: (paymentConfig?.methods.giftCard === true) && canPay && giftCardsEditionOk,
   };
   const giftCardsFeatureOn =
-    paymentConfig?.giftCardSettings?.enabled === true || enabledMethods.giftCard;
+    giftCardsEditionOk &&
+    (paymentConfig?.giftCardSettings?.enabled === true || enabledMethods.giftCard);
 
   const activeTerminals = useMemo(
     () => (paymentConfig?.terminals || []).filter((t) => t.status === 'active'),
@@ -2987,8 +3018,8 @@ export default function WebPos({ appMode = true }: { appMode?: boolean }) {
           setSettingsOpen(false);
           void printTodayEod();
         }}
-        hideTablesTab={isRetail}
-        hideBookingsTab={isRetail}
+        hideTablesTab={isRetail || !tablesEditionOk}
+        hideBookingsTab={isRetail || !tablesEditionOk}
         settingsPanel={
           <WebPosSettingsDropdown
             printerName={printerName}

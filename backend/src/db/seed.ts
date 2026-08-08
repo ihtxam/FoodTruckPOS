@@ -225,9 +225,18 @@ async function seedDemoShop() {
   console.log("Seeded demo categories + products");
 }
 
+async function seedEditionsAndReseller() {
+  const { EditionService } = await import("../services/edition.service");
+  const { ResellerService } = await import("../services/reseller.service");
+  await EditionService.ensureDefaults();
+  const agency = await ResellerService.ensureChaslayAgency();
+  console.log("Seeded editions + agency reseller:", agency.email);
+}
+
 async function seed() {
   await seedSuperadmin();
   await SubscriptionPlansService.ensureDefaults();
+  await seedEditionsAndReseller();
   await seedDemoShop();
 }
 

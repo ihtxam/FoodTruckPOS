@@ -3,6 +3,12 @@ import axios from "axios";
 import sgMail from "@sendgrid/mail";
 import type { MerchantSmtpSettings } from "@/db/schema";
 
+export type EmailAttachment = {
+  filename: string;
+  content: Buffer | string;
+  contentType?: string;
+};
+
 export type SendEmailInput = {
   to: string;
   subject: string;
@@ -10,6 +16,7 @@ export type SendEmailInput = {
   text?: string;
   /** Optional merchant override for SMTP / from */
   merchantId?: string;
+  attachments?: EmailAttachment[];
 };
 
 type EmailProvider = "smtp" | "brevo" | "sendgrid" | null;
@@ -187,6 +194,15 @@ export class EmailService {
       subject: input.subject,
       html: input.html,
       text: input.text || input.html.replace(/<[^>]+>/g, " "),
+      attachments: (input.attachments || []).map((a) => ({
+        filename: a.filename,
+        content: (Buffer.isBuffer(a.content)
+          ? a.content
+          : Buffer.from(String(a.content))
+        ).toString("base64"),
+        type: a.contentType,
+        disposition: "attachment",
+      })),
     });
   }
 
@@ -212,11 +228,22 @@ export class EmailService {
       subject: input.subject,
       html: input.html,
       text: input.text || input.html.replace(/<[^>]+>/g, " "),
+      attachments: (input.attachments || []).map((a) => ({
+        filename: a.filename,
+        content: a.content,
+        contentType: a.contentType,
+      })),
     });
   }
 
   private static async sendViaBrevo(cfg: ResolvedEmailConfig, input: SendEmailInput) {
     try {
+      const attachment = (input.attachments || []).map((a) => ({
+        name: a.filename,
+        content: Buffer.isBuffer(a.content)
+          ? a.content.toString("base64")
+          : Buffer.from(String(a.content)).toString("base64"),
+      }));
       await axios.post(
         "https://api.brevo.com/v3/smtp/email",
         {
@@ -228,6 +255,7 @@ export class EmailService {
           subject: input.subject,
           htmlContent: input.html,
           textContent: input.text || input.html.replace(/<[^>]+>/g, " "),
+          ...(attachment.length ? { attachment } : {}),
         },
         {
           headers: {

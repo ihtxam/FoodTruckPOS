@@ -110,6 +110,29 @@ docker compose exec api npm run migrate
 docker compose exec api npm run seed
 ```
 
+**Editions + Resellers:** After deploy, ensure schema then seed agency:
+
+```bash
+docker compose --env-file .env.production exec -T db \
+  psql -U "${POSTGRES_USER:-manupos}" -d "${POSTGRES_DB:-manupos}" \
+  < backend/sql/ensure-editions-resellers.sql
+# or: docker compose exec api npm run migrate
+# Then seed editions + Chaslay agency reseller:
+docker compose exec api npm run seed
+# Default agency login: SEED_RESELLER_EMAIL / SEED_RESELLER_PASSWORD
+# (defaults: agency@chaslay.com / ChaslayAgency123!)
+```
+
+**Overview report email settings:** Merchants can schedule daily/monthly Excel report emails from Overview → Settings. Persist column:
+
+```bash
+docker compose --env-file .env.production exec -T db \
+  psql -U "${POSTGRES_USER:-manupos}" -d "${POSTGRES_DB:-manupos}" \
+  < backend/sql/ensure-report-email-settings.sql
+```
+
+The API hourly job sends daily reports after midnight (Europe/Zurich) and monthly reports on the 1st (from 06:00), using merchant SMTP or platform Brevo.
+
 **Cash shifts (WebPOS):** Schema is applied by `drizzle-kit push` in the `migrate` service. If Settings → POS → Operations (“Require cash shifts”) fails to save, or WebPOS never shows Start/Close shift, run the idempotent SQL once:
 
 ```bash

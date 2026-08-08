@@ -26,6 +26,7 @@ import { I18nProvider, useI18n, type Locale } from '@/lib/i18n';
 import { APP_PANEL_TITLE } from '@/lib/brand';
 import { useAuthStore } from '@/store/auth';
 import { canAccessRoute } from '@/lib/permissions';
+import type { EditionFeatureKey } from '@/lib/edition-features';
 
 const WebsiteCms = lazy(() => import('./WebsiteCms'));
 
@@ -44,7 +45,18 @@ function MerchantShell() {
   );
   /** When true on /merchant/pos, hide sidebar + header so WebPOS feels like its own app. */
   const [posAppMode, setPosAppMode] = useState(true);
+  const [editionFeatures, setEditionFeatures] = useState<EditionFeatureKey[] | null>(null);
   const hideChrome = (isPosRoute && posAppMode) || isPosEmbed;
+
+  useEffect(() => {
+    api
+      .get('/merchant/settings')
+      .then((r) => {
+        const feats = r.data?.settings?.editionFeatures;
+        setEditionFeatures(Array.isArray(feats) ? feats : null);
+      })
+      .catch(() => setEditionFeatures(null));
+  }, []);
 
   useEffect(() => {
     if (isPosRoute) setPosAppMode(true);
@@ -77,31 +89,85 @@ function MerchantShell() {
     [setLocale]
   );
 
+  const perms = user?.permissions;
+  const allow = (path: string) => canAccessRoute(path, perms, isOwner, editionFeatures);
+
   const menuItems = [
     { label: t('overview'), path: '/merchant', icon: '📊' },
-    { label: t('orders'), path: '/merchant/orders', icon: '📦' },
-    { label: t('webPos'), path: '/merchant/pos', icon: '🖥️' },
-    { label: t('reports'), path: '/merchant/reports', icon: '📈' },
-    { label: t('products'), path: '/merchant/products', icon: '🛍️' },
-    { label: t('modifiers'), path: '/merchant/modifiers', icon: '🧩' },
-    { label: t('categories'), path: '/merchant/categories', icon: '🏷️' },
-    { label: t('customers'), path: '/merchant/customers', icon: '👥' },
-    { label: t('loyalty'), path: '/merchant/loyalty', icon: '🎁' },
-    { label: t('offers'), path: '/merchant/offers', icon: '🏷️' },
-    { label: t('newsletter'), path: '/merchant/newsletter', icon: '✉️' },
-    { label: t('shop'), path: '/merchant/online-shop', icon: '🌐' },
-    { label: t('cmsWebsite'), path: '/merchant/website', icon: '✏️' },
-    { label: t('floorPlan'), path: '/merchant/floor-plan', icon: '🪑' },
-    { label: t('reservations'), path: '/merchant/reservations', icon: '📅' },
-    { label: t('billing'), path: '/merchant/billing', icon: '💼' },
-    { label: 'Users & roles', path: '/merchant/users', icon: '👤' },
-    { label: t('settings'), path: '/merchant/settings', icon: '⚙️' },
-  ].filter((item) => canAccessRoute(item.path, user?.permissions, isOwner));
+    {
+      id: 'sales',
+      label: t('navSales'),
+      icon: '📦',
+      children: [
+        { label: t('orders'), path: '/merchant/orders', icon: '📦' },
+        { label: t('webPos'), path: '/merchant/pos', icon: '🖥️' },
+        { label: t('reports'), path: '/merchant/reports', icon: '📈' },
+      ].filter((item) => allow(item.path)),
+    },
+    {
+      id: 'catalog',
+      label: t('navCatalog'),
+      icon: '🛍️',
+      children: [
+        { label: t('products'), path: '/merchant/products', icon: '🛍️' },
+        { label: t('categories'), path: '/merchant/categories', icon: '🏷️' },
+        { label: t('modifiers'), path: '/merchant/modifiers', icon: '🧩' },
+      ].filter((item) => allow(item.path)),
+    },
+    {
+      id: 'customers',
+      label: t('navCustomers'),
+      icon: '👥',
+      children: [
+        { label: t('customers'), path: '/merchant/customers', icon: '👥' },
+        { label: t('loyalty'), path: '/merchant/loyalty', icon: '🎁' },
+        { label: t('offers'), path: '/merchant/offers', icon: '🏷️' },
+        { label: t('newsletter'), path: '/merchant/newsletter', icon: '✉️' },
+      ].filter((item) => allow(item.path)),
+    },
+    {
+      id: 'online',
+      label: t('navOnline'),
+      icon: '🌐',
+      children: [
+        { label: t('shop'), path: '/merchant/online-shop', icon: '🌐' },
+        { label: t('cmsWebsite'), path: '/merchant/website', icon: '✏️' },
+        { label: t('reservations'), path: '/merchant/reservations', icon: '📅' },
+      ].filter((item) => allow(item.path)),
+    },
+    ...(allow('/merchant/floor-plan')
+      ? [{ label: t('floorPlan'), path: '/merchant/floor-plan', icon: '🪑' }]
+      : []),
+    ...(allow('/merchant/users')
+      ? [{ label: t('staffPageTitle'), path: '/merchant/users', icon: '👤' }]
+      : []),
+    {
+      id: 'account',
+      label: t('navAccount'),
+      icon: '⚙️',
+      children: [
+        { label: t('billing'), path: '/merchant/billing', icon: '💼' },
+        { label: t('settings'), path: '/merchant/settings', icon: '⚙️' },
+      ].filter((item) => allow(item.path)),
+    },
+  ]
+    .filter((entry) => {
+      if ('children' in entry && Array.isArray(entry.children)) {
+        return entry.children.length > 0;
+      }
+      if (entry.path) return allow(entry.path);
+      return false;
+    });
 
   return (
     <div className={`flex h-full max-h-full panel-shell${hideChrome ? ' webpos-app-mode' : ''}`}>
       {!hideChrome && (
-        <Sidebar isOpen={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} menuItems={menuItems} />
+        <Sidebar
+          isOpen={sidebarOpen}
+          onToggle={() => setSidebarOpen(!sidebarOpen)}
+          menuItems={menuItems}
+          panelKey="merchant"
+        />
       )}
 
       <div className="flex-1 flex flex-col overflow-hidden min-w-0 min-h-0">

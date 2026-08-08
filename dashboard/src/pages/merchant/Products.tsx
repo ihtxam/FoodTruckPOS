@@ -186,11 +186,27 @@ const CATEGORY_COLORS = [
 const money = (value: string | number) =>
   new Intl.NumberFormat(undefined, { style: 'currency', currency: 'CHF' }).format(Number(value) || 0);
 
+const SKU_MAX_LEN = 100; // matches DB varchar(100)
+const MAX_MONEY_DIGITS = 10;
+const MAX_POINTS = 2_147_483_647; // PG integer max
+
+/** Digits only (ignore decimal point/sign) for length checks. */
+const digitCount = (raw: string) => raw.replace(/[^\d]/g, '').length;
+
+const clampNonNegativeInt = (raw: string) => {
+  if (raw.trim() === '' || raw === '-') return raw;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return '0';
+  return String(Math.max(0, Math.floor(n)));
+};
+
+type ProductTypeUi = 'standard' | 'combo' | 'open_price' | 'weighed';
+
 const productTypeLabel = (product: Product) => {
   if (product.productType === 'combo' || (product.comboItems && product.comboItems.length)) return 'Combo';
   if (product.soldByWeight) return 'Weighed';
   if (product.isOpenPrice) return 'Open price';
-  return product.productType || 'Standard';
+  return product.productType === 'standard' || !product.productType ? 'Standard' : product.productType;
 };
 
 export default function Products() {
@@ -438,7 +454,7 @@ export default function Products() {
       name: form.name.trim(),
       description: form.description.trim() || undefined,
       price,
-      stock: Number(form.stock) || 0,
+      stock: Math.max(0, Math.floor(Number(form.stock) || 0)),
       sku: form.sku.trim() || undefined,
       categoryId: form.categoryId || undefined,
       buttonColor: form.buttonColor || undefined,
@@ -468,16 +484,78 @@ export default function Products() {
     };
   };
 
+  const formProductType: ProductTypeUi = form.isCombo
+    ? 'combo'
+    : form.soldByWeight
+      ? 'weighed'
+      : form.isOpenPrice
+        ? 'open_price'
+        : 'standard';
+
+  const setProductType = (next: ProductTypeUi) => {
+    setForm({
+      ...form,
+      isCombo: next === 'combo',
+      isOpenPrice: next === 'open_price',
+      soldByWeight: next === 'weighed',
+      comboSlots:
+        next === 'combo' && form.comboSlots.length === 0
+          ? [emptySlot('Main'), emptySlot('Side'), emptySlot('Drink')]
+          : form.comboSlots,
+    });
+  };
+
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!form.name.trim()) {
       toast.error('Product name is required');
       return;
     }
+    if (!form.categoryId) {
+      toast.error(t('selectCategory'));
+      return;
+    }
+    if (form.sku.trim().length > SKU_MAX_LEN) {
+      toast.error(`Product code / SKU must be at most ${SKU_MAX_LEN} characters`);
+      return;
+    }
+    const pointsRaw = form.loyaltyRewardPoints.trim();
+    if (pointsRaw) {
+      if (digitCount(pointsRaw) > MAX_MONEY_DIGITS) {
+        toast.error('Free points must be at most 10 digits');
+        return;
+      }
+      const points = Math.floor(Number(pointsRaw));
+      if (!Number.isFinite(points) || points < 1 || points > MAX_POINTS) {
+        toast.error('Free points must be a whole number between 1 and 2147483647');
+        return;
+      }
+    }
+    const stockNum = Number(form.stock);
+    if (!Number.isFinite(stockNum) || stockNum < 0) {
+      toast.error('Stock cannot be negative');
+      return;
+    }
+    for (const spec of form.specifications) {
+      if (digitCount(String(spec.price)) > MAX_MONEY_DIGITS) {
+        toast.error('Price must be at most 10 digits');
+        return;
+      }
+    }
+    if (form.price && digitCount(form.price) > MAX_MONEY_DIGITS) {
+      toast.error('Price must be at most 10 digits');
+      return;
+    }
     if (form.isCombo) {
       const validSlots = form.comboSlots.filter((s) => s.name.trim() && s.options.length > 0);
       if (!validSlots.length) {
         toast.error('Add at least one combo step with products');
+        return;
+      }
+    } else if (!form.isOpenPrice) {
+      const namedSizes = form.specifications.filter((s) => s.name.trim());
+      if (!namedSizes.length) {
+        toast.error('Add at least one size with a name');
         return;
       }
     }
@@ -842,6 +920,7 @@ export default function Products() {
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-1.5 text-sm">
                     <InfoCard label={t('category')} value={categoryName(product.categoryId)} />
                     <InfoCard label={t('type')} value={productTypeLabel(product)} />
+                    <InfoCard label={t('productCode')} value={product.sku || '-'} />
                     <InfoCard label={t('stock')} value={`${product.stock} units`} />
                     <InfoCard label={t('barcode')} value={product.barcode || '-'} />
                   </div>
@@ -898,6 +977,7 @@ export default function Products() {
                   <select
                     className="field-input"
                     value={form.categoryId}
+                    required
                     onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
                   >
                     <option value="">{t('selectCategory')}</option>
@@ -908,20 +988,40 @@ export default function Products() {
                     ))}
                   </select>
                 </Field>
+                <Field label={t('type')}>
+                  <select
+                    className="field-input"
+                    value={formProductType}
+                    onChange={(e) => setProductType(e.target.value as ProductTypeUi)}
+                  >
+                    <option value="standard">Standard</option>
+                    <option value="combo">{t('comboMeal')}</option>
+                    <option value="open_price">{t('openPriceItem')}</option>
+                    <option value="weighed">{t('weighingProduct')}</option>
+                  </select>
+                </Field>
                 <Field label={t('productCode')}>
                   <input
                     className="field-input"
                     placeholder="For quick search when ordering"
                     value={form.sku}
-                    onChange={(e) => setForm({ ...form, sku: e.target.value })}
+                    maxLength={SKU_MAX_LEN}
+                    onChange={(e) =>
+                      setForm({ ...form, sku: e.target.value.slice(0, SKU_MAX_LEN) })
+                    }
                   />
+                  <p className="mt-1 text-xs muted">Max {SKU_MAX_LEN} characters</p>
                 </Field>
                 <Field label="Stock">
                   <input
                     className="field-input"
                     type="number"
+                    min={0}
+                    step={1}
                     value={form.stock}
-                    onChange={(e) => setForm({ ...form, stock: e.target.value })}
+                    onChange={(e) =>
+                      setForm({ ...form, stock: clampNonNegativeInt(e.target.value) })
+                    }
                   />
                 </Field>
               </div>
@@ -983,13 +1083,18 @@ export default function Products() {
                   className="field-input"
                   type="number"
                   min="1"
+                  max={MAX_POINTS}
                   step="1"
                   placeholder="e.g. 200 - leave empty for none"
                   value={form.loyaltyRewardPoints}
-                  onChange={(e) => setForm({ ...form, loyaltyRewardPoints: e.target.value })}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v && digitCount(v) > MAX_MONEY_DIGITS) return;
+                    setForm({ ...form, loyaltyRewardPoints: v });
+                  }}
                 />
                 <p className="mt-1 text-xs text-slate-500">
-                  Customers with at least this many points can add the product free (pays with points).
+                  Customers with at least this many points can add the product free (pays with points). Max 10 digits.
                 </p>
               </Field>
 
@@ -1018,60 +1123,19 @@ export default function Products() {
                 </div>
               </div>
 
-              <div className="flex flex-wrap gap-4 text-sm">
-                <label className="inline-flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={form.isCombo}
-                    onChange={(e) =>
-                      setForm({
-                        ...form,
-                        isCombo: e.target.checked,
-                        isOpenPrice: e.target.checked ? false : form.isOpenPrice,
-                        soldByWeight: e.target.checked ? false : form.soldByWeight,
-                        comboSlots:
-                          e.target.checked && form.comboSlots.length === 0
-                            ? [emptySlot('Main'), emptySlot('Side'), emptySlot('Drink')]
-                            : form.comboSlots,
-                      })
-                    }
-                  />
-                  {t('comboMeal')}
-                </label>
-                {!form.isCombo && (
-                  <>
-                    <label className="inline-flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={form.isOpenPrice}
-                        onChange={(e) => setForm({ ...form, isOpenPrice: e.target.checked })}
-                      />
-                      {t('openPriceItem')}
-                    </label>
-                    <label className="inline-flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={form.soldByWeight}
-                        onChange={(e) => setForm({ ...form, soldByWeight: e.target.checked })}
-                      />
-                      {t('weighingProduct')}
-                    </label>
-                  </>
-                )}
-              </div>
-
               {form.isCombo && (
                 <div className="rounded-md border border-[var(--border)] p-3 space-y-3">
                   <Field label={`${t('salePrice')} (combo)`}>
                     <div className="relative max-w-xs">
                       <input
-                        className="field-input pr-12"
+                        className="field-input money-input pr-14"
                         type="number"
                         step="0.05"
                         min="0"
                         value={form.price}
                         onChange={(e) => {
                           const price = e.target.value;
+                          if (digitCount(price) > MAX_MONEY_DIGITS) return;
                           setForm({
                             ...form,
                             price,
@@ -1081,7 +1145,7 @@ export default function Products() {
                           });
                         }}
                       />
-                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] muted">
+                      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-semibold muted">
                         CHF
                       </span>
                     </div>
@@ -1149,24 +1213,26 @@ export default function Products() {
                                 </div>
                                 <div className="relative">
                                   <input
-                                    className="field-input pr-9"
+                                    className="field-input money-input pr-8"
                                     type="number"
                                     step="0.05"
                                     min="0"
                                     title={t('extraPrice')}
                                     value={opt.extraPrice}
                                     onChange={(e) => {
+                                      const raw = e.target.value;
+                                      if (digitCount(raw) > MAX_MONEY_DIGITS) return;
                                       const next = [...form.comboSlots];
                                       const options = [...next[slotIdx].options];
                                       options[optIdx] = {
                                         ...options[optIdx],
-                                        extraPrice: Number(e.target.value) || 0,
+                                        extraPrice: Number(raw) || 0,
                                       };
                                       next[slotIdx] = { ...next[slotIdx], options };
                                       setForm({ ...form, comboSlots: next });
                                     }}
                                   />
-                                  <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] muted">
+                                  <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[10px] muted">
                                     +
                                   </span>
                                 </div>
@@ -1271,17 +1337,20 @@ export default function Products() {
                       />
                       <div className="relative">
                         <input
-                          className="field-input pr-10"
+                          className="field-input money-input pr-14"
                           type="number"
                           step="0.01"
+                          min="0"
                           value={spec.price}
                           onChange={(e) => {
+                            const raw = e.target.value;
+                            if (digitCount(raw) > MAX_MONEY_DIGITS) return;
                             const next = [...form.specifications];
-                            next[idx] = { ...next[idx], price: Number(e.target.value) || 0 };
-                            setForm({ ...form, specifications: next, price: e.target.value });
+                            next[idx] = { ...next[idx], price: Number(raw) || 0 };
+                            setForm({ ...form, specifications: next, price: raw });
                           }}
                         />
-                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] muted">
+                        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-semibold muted">
                           CHF
                         </span>
                       </div>
@@ -1321,15 +1390,31 @@ export default function Products() {
                       <button
                         type="button"
                         className="rounded-md p-1.5 text-[var(--danger)] hover:bg-[var(--bg-muted)] justify-self-start sm:justify-self-auto"
-                        onClick={() =>
-                          setForm({
-                            ...form,
-                            specifications:
-                              form.specifications.length > 1
-                                ? form.specifications.filter((_, i) => i !== idx)
-                                : form.specifications,
-                          })
-                        }
+                        onClick={() => {
+                          const remaining = form.specifications.filter((_, i) => i !== idx);
+                          if (!remaining.length) {
+                            // Allow removing the last size row (esp. open-price); keep a blank default for standard.
+                            setForm({
+                              ...form,
+                              specifications: form.isOpenPrice
+                                ? []
+                                : [
+                                    {
+                                      id: `size-${Date.now()}`,
+                                      name: '',
+                                      price: Number(form.price) || 0,
+                                      saleStatus: 'in_stock',
+                                      isDefault: true,
+                                    },
+                                  ],
+                            });
+                            return;
+                          }
+                          if (!remaining.some((s) => s.isDefault)) {
+                            remaining[0] = { ...remaining[0], isDefault: true };
+                          }
+                          setForm({ ...form, specifications: remaining });
+                        }}
                       >
                         <Trash2 size={14} />
                       </button>
@@ -1479,6 +1564,14 @@ export default function Products() {
           outline: none;
           box-shadow: 0 0 0 2px color-mix(in srgb, var(--ring) 40%, transparent);
           border-color: var(--ring);
+        }
+        .money-input {
+          -moz-appearance: textfield;
+        }
+        .money-input::-webkit-outer-spin-button,
+        .money-input::-webkit-inner-spin-button {
+          -webkit-appearance: none;
+          margin: 0;
         }
       `}</style>
     </div>

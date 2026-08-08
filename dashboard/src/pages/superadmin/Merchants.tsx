@@ -44,6 +44,9 @@ const emptyForm = {
   deviceSeats: 1,
   licenseType: 'yearly' as 'trial' | 'yearly' | 'custom',
   customDays: 365,
+  editionId: '',
+  resellerId: '',
+  businessCategory: 'restaurant' as 'retail' | 'restaurant',
 };
 
 export default function Merchants() {
@@ -65,10 +68,30 @@ export default function Merchants() {
   const [purgeConfirm, setPurgeConfirm] = useState('');
   const [deleteCustomersToo, setDeleteCustomersToo] = useState(false);
   const [purgingSales, setPurgingSales] = useState(false);
+  const [editions, setEditions] = useState<Array<{ id: string; name: string; businessCategory: string }>>(
+    []
+  );
+  const [resellers, setResellers] = useState<Array<{ id: string; name: string }>>([]);
 
   useEffect(() => {
     fetchMerchants();
   }, [page, search]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        await api.post('/superadmin/resellers/ensure-agency').catch(() => null);
+        const [ed, rs] = await Promise.all([
+          api.get('/superadmin/editions'),
+          api.get('/superadmin/resellers'),
+        ]);
+        setEditions(ed.data.editions || []);
+        setResellers(rs.data.resellers || []);
+      } catch {
+        /* ignore */
+      }
+    })();
+  }, []);
 
   const fetchMerchants = async () => {
     try {
@@ -158,6 +181,11 @@ export default function Merchants() {
     }
     setSaving(true);
     try {
+      if (!form.editionId) {
+        toast.error('Select a POS edition / version');
+        setSaving(false);
+        return;
+      }
       const res = await api.post('/superadmin/merchants', {
         businessName: form.businessName,
         email: form.email,
@@ -172,6 +200,9 @@ export default function Merchants() {
         deviceSeats: Number(form.deviceSeats) || 0,
         licenseType: form.licenseType,
         customDays: form.licenseType === 'custom' ? Number(form.customDays) : undefined,
+        editionId: form.editionId,
+        resellerId: form.resellerId || undefined,
+        businessCategory: form.businessCategory,
       });
       const issued = res.data.merchant?.issuedLicenses || [];
       setIssuedKeys(issued);
@@ -532,6 +563,53 @@ export default function Merchants() {
                     <option value="starter">Starter</option>
                     <option value="professional">Professional</option>
                     <option value="enterprise">Enterprise</option>
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="text-sm font-medium">Business category</span>
+                  <select
+                    className="input mt-1"
+                    value={form.businessCategory}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        businessCategory: e.target.value as 'retail' | 'restaurant',
+                      })
+                    }
+                  >
+                    <option value="restaurant">Restaurant / Catering</option>
+                    <option value="retail">Retail</option>
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="text-sm font-medium">POS version (edition) *</span>
+                  <select
+                    className="input mt-1"
+                    value={form.editionId}
+                    onChange={(e) => setForm({ ...form, editionId: e.target.value })}
+                    required
+                  >
+                    <option value="">Select edition…</option>
+                    {editions.map((ed) => (
+                      <option key={ed.id} value={ed.id}>
+                        {ed.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="text-sm font-medium">Reseller / dealer</span>
+                  <select
+                    className="input mt-1"
+                    value={form.resellerId}
+                    onChange={(e) => setForm({ ...form, resellerId: e.target.value })}
+                  >
+                    <option value="">None (assign later)</option>
+                    {resellers.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.name}
+                      </option>
+                    ))}
                   </select>
                 </label>
               </div>

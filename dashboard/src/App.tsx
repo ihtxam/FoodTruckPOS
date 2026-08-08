@@ -10,6 +10,7 @@ import LoginPage from '@/pages/LoginPage';
 import SetPasswordPage from '@/pages/SetPasswordPage';
 import SuperadminDashboard from '@/pages/superadmin/Dashboard';
 import MerchantDashboard from '@/pages/merchant/Dashboard';
+import ResellerDashboard from '@/pages/reseller/Dashboard';
 import OrderingPage from '@/pages/shop/OrderingPage';
 import CheckoutPage from '@/pages/shop/CheckoutPage';
 import OrderConfirmationPage from '@/pages/shop/OrderConfirmationPage';
@@ -325,6 +326,14 @@ function App() {
                 element={
                   <ProtectedRoute requiredRole="superadmin">
                     <SuperadminDashboard />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/reseller/*"
+                element={
+                  <ProtectedRoute requiredRole="reseller">
+                    <ResellerDashboard />
                   </ProtectedRoute>
                 }
               />

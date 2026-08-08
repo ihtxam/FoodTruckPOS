@@ -4,7 +4,7 @@ import { useAuthStore } from '@/store/auth';
 
 interface ProtectedRouteProps {
   children: ReactNode;
-  requiredRole?: 'superadmin' | 'merchant';
+  requiredRole?: 'superadmin' | 'merchant' | 'reseller';
 }
 
 export default function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) {
@@ -15,6 +15,10 @@ export default function ProtectedRoute({ children, requiredRole }: ProtectedRout
   }
 
   if (requiredRole === 'superadmin' && user.role !== 'superadmin') {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (requiredRole === 'reseller' && user.role !== 'reseller') {
     return <Navigate to="/login" replace />;
   }
 

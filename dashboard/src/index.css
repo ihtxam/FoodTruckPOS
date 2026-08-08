@@ -38,6 +38,8 @@ html.dark {
 html,
 body,
 #root {
+  height: 100%;
+  max-height: 100%;
   min-height: 100%;
 }
 
@@ -131,6 +133,9 @@ button {
      * scroll container (CSS overflow pairing), which blocks wheel/touchpad scroll.
      */
     overflow-x: clip;
+    overflow-y: auto;
+    min-height: 0;
+    touch-action: pan-y;
   }
 
   .panel-header {

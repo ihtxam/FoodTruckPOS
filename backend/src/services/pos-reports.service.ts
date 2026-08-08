@@ -349,4 +349,191 @@ export class PosReportsService {
       businessName: merchant?.name || "",
     };
   }
+
+  /**
+   * Merchant Overview dashboard: EOD metrics + sales-over-time + period comparison.
+   */
+  static async getOverviewDashboard(
+    merchantId: string,
+    opts: { preset?: ReportPreset; from?: string; to?: string }
+  ) {
+    const current = await this.getEndOfDayReport(merchantId, opts);
+    const range = resolveReportRange(opts.preset || "today", opts.from, opts.to);
+
+    const msPerDay = 24 * 3600_000;
+    const spanDays = Math.max(
+      1,
+      Math.round(
+        (zurichDayBounds(range.to).start.getTime() -
+          zurichDayBounds(range.from).start.getTime()) /
+          msPerDay
+      ) + 1
+    );
+    // Previous period of equal length ending the day before `from`.
+    const prevTo = addDaysYmd(range.from, -1);
+    const prevFrom = addDaysYmd(prevTo, -(spanDays - 1));
+    const previous = await this.getEndOfDayReport(merchantId, {
+      preset: "custom",
+      from: prevFrom,
+      to: prevTo,
+    });
+
+    const pctChange = (cur: number, prev: number) => {
+      if (!prev && !cur) return 0;
+      if (!prev) return 100;
+      return round2(((cur - prev) / Math.abs(prev)) * 100);
+    };
+
+    const totalSales = current.revenue;
+    const netSales = current.netTotal;
+    const fundingAmount = round2(current.revenue + current.tipsTotal);
+    const orders = current.salesCount;
+    const customers = current.coversServed ?? current.salesCount;
+
+    const db = getDb();
+    const conditions = [
+      eq(schema.orders.merchantId, merchantId),
+      gte(schema.orders.createdAt, range.start),
+      lte(schema.orders.createdAt, range.end),
+    ];
+    const rows = await db.query.orders.findMany({
+      where: and(...conditions),
+      columns: {
+        createdAt: true,
+        total: true,
+        tipAmount: true,
+        status: true,
+      },
+    });
+    const completed = rows.filter((o) =>
+      ["completed", "partially_refunded"].includes(String(o.status))
+    );
+
+    const singleDay = range.from === range.to;
+    const salesOverTime: Array<{ label: string; amount: number }> = [];
+    if (singleDay) {
+      const buckets = Array.from({ length: 24 }, () => 0);
+      for (const o of completed) {
+        const hour = Number(
+          new Intl.DateTimeFormat("en-GB", {
+            timeZone: "Europe/Zurich",
+            hour: "2-digit",
+            hour12: false,
+          }).format(o.createdAt)
+        );
+        const brut = Math.max(0, Number(o.total || 0) - Number(o.tipAmount || 0));
+        if (hour >= 0 && hour < 24) buckets[hour]! += brut;
+      }
+      for (let h = 0; h < 24; h++) {
+        salesOverTime.push({
+          label: String(h).padStart(2, "0"),
+          amount: round2(buckets[h] || 0),
+        });
+      }
+    } else {
+      const byDay = new Map<string, number>();
+      let cursor = range.from;
+      while (cursor <= range.to) {
+        byDay.set(cursor, 0);
+        cursor = addDaysYmd(cursor, 1);
+      }
+      for (const o of completed) {
+        const day = new Intl.DateTimeFormat("en-CA", {
+          timeZone: "Europe/Zurich",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        }).format(o.createdAt);
+        const brut = Math.max(0, Number(o.total || 0) - Number(o.tipAmount || 0));
+        if (byDay.has(day)) byDay.set(day, (byDay.get(day) || 0) + brut);
+      }
+      for (const [label, amount] of byDay) {
+        salesOverTime.push({ label, amount: round2(amount) });
+      }
+    }
+
+    const paymentMethods = (current.paymentRows || []).map((p) => ({
+      method: p.method,
+      label: paymentLabel(p.method),
+      total: p.total,
+      count: p.count,
+      percent: p.percent ?? 0,
+    }));
+
+    const orderTypes = (current.orderTypeRows || []).map((r) => {
+      const salesTotal = totalSales || 1;
+      return {
+        channel: r.channel,
+        label: r.label,
+        total: r.total,
+        count: r.count,
+        percent: round2((r.total / salesTotal) * 100),
+      };
+    });
+
+    return {
+      range: current.range,
+      kpis: {
+        totalSales,
+        netSales,
+        fundingAmount,
+        orders,
+        customers,
+        tipsTotal: current.tipsTotal,
+        taxTotal: current.taxTotal,
+        changes: {
+          totalSales: pctChange(totalSales, previous.revenue),
+          netSales: pctChange(netSales, previous.netTotal),
+          fundingAmount: pctChange(
+            fundingAmount,
+            round2(previous.revenue + previous.tipsTotal)
+          ),
+          orders: pctChange(orders, previous.salesCount),
+          customers: pctChange(
+            customers,
+            previous.coversServed ?? previous.salesCount
+          ),
+        },
+        previousLabel: previous.range.label,
+      },
+      salesBreakdown: {
+        productAmount: netSales,
+        tax: current.taxTotal,
+        totalSales,
+      },
+      salesOverTime,
+      paymentMethods,
+      orderTypes,
+      products: (current.productsSold || []).slice(0, 12),
+      staff: current.userPerformance || [],
+      shiftCash: current.shiftCash || [],
+      businessName: current.businessName,
+      /** Full EOD payload for export / email */
+      eod: current,
+      previous: {
+        range: previous.range,
+        totalSales: previous.revenue,
+        netSales: previous.netTotal,
+        orders: previous.salesCount,
+      },
+    };
+  }
+}
+
+function paymentLabel(method: string): string {
+  switch (String(method || "").toLowerCase()) {
+    case "cash":
+      return "Cash";
+    case "card":
+      return "Card";
+    case "terminal":
+      return "Terminal";
+    case "adyen":
+      return "Adyen";
+    case "gift_card":
+    case "giftcard":
+      return "Gift card";
+    default:
+      return method || "Other";
+  }
 }

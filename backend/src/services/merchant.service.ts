@@ -59,6 +59,8 @@ export class MerchantService {
         subscriptionPlan: m.subscriptionPlan,
         trialEndsAt: m.trialEndsAt,
         subscriptionEndsAt: m.subscriptionEndsAt,
+        editionId: m.editionId ?? null,
+        resellerId: m.resellerId ?? null,
         createdAt: m.createdAt,
         devices: m.devices?.length ?? 0,
         licenses: m.licenses?.length ?? 0,
@@ -122,6 +124,9 @@ export class MerchantService {
       customDays?: number;
       /** Send password-setup invite email after create (default true when no password) */
       sendInvite?: boolean;
+      editionId?: string;
+      resellerId?: string;
+      businessCategory?: "retail" | "restaurant";
     }
   ) {
     const db = getDb();
@@ -173,10 +178,33 @@ export class MerchantService {
           subscriptionPlan: options?.subscriptionPlan || "starter",
           trialEndsAt,
           syncApiKey: generateSyncApiKey(),
+          editionId: options?.editionId || null,
+          resellerId: options?.resellerId || null,
         })
         .returning();
 
       const created = merchant[0];
+
+      if (options?.editionId) {
+        const { EditionService } = await import("./edition.service");
+        await EditionService.applyEditionDefaultsToMerchant(created.id, options.editionId);
+      } else if (options?.businessCategory === "retail") {
+        const checkout =
+          created.posCheckoutSettings && typeof created.posCheckoutSettings === "object"
+            ? { ...(created.posCheckoutSettings as Record<string, unknown>) }
+            : {};
+        checkout.posMode = "retail";
+        await db
+          .update(schema.merchants)
+          .set({
+            floorPlanEnabled: false,
+            coursesEnabled: false,
+            posCheckoutSettings: checkout,
+            updatedAt: new Date(),
+          })
+          .where(eq(schema.merchants.id, created.id));
+      }
+
       let issuedLicenses: Array<{ deviceId: string; deviceName: string; licenseKey: string; expiresAt: Date }> = [];
 
       const seats = Math.max(0, Math.min(20, options?.deviceSeats ?? 0));
@@ -202,8 +230,13 @@ export class MerchantService {
         invite = await MerchantInviteService.sendInviteEmail(created.id);
       }
 
+      const refreshed = await db.query.merchants.findFirst({
+        where: eq(schema.merchants.id, created.id),
+      });
+      const row = refreshed || created;
+
       // Don't leak password hash to API clients
-      const { passwordHash: _ph, inviteTokenHash: _ith, ...safe } = created as typeof created & {
+      const { passwordHash: _ph, inviteTokenHash: _ith, ...safe } = row as typeof row & {
         passwordHash: string;
         inviteTokenHash?: string | null;
       };

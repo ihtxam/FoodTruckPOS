@@ -276,14 +276,31 @@ router.post("/products", async (req: Request, res: Response) => {
     if (!name || price === undefined) {
       return res.status(400).json({ error: "Name and price are required" });
     }
+    if (!categoryId) {
+      return res.status(400).json({ error: "Category is required" });
+    }
+    if (sku != null && String(sku).length > 100) {
+      return res.status(400).json({ error: "SKU must be at most 100 characters" });
+    }
+    const stockNum = stock == null || stock === "" ? 0 : Number(stock);
+    if (!Number.isFinite(stockNum) || stockNum < 0) {
+      return res.status(400).json({ error: "Stock cannot be negative" });
+    }
+    const priceDigits = String(price).replace(/[^\d]/g, "");
+    if (priceDigits.length > 10) {
+      return res.status(400).json({ error: "Price must be at most 10 digits" });
+    }
 
     let normalizedLoyaltyReward: number | null | undefined = undefined;
     if (loyaltyRewardPoints === null || loyaltyRewardPoints === "" || loyaltyRewardPoints === undefined) {
       normalizedLoyaltyReward = loyaltyRewardPoints === undefined ? undefined : null;
     } else {
       const n = Math.floor(Number(loyaltyRewardPoints));
-      if (!Number.isFinite(n) || n < 1) {
-        return res.status(400).json({ error: "loyaltyRewardPoints must be null or an integer ≥ 1" });
+      if (!Number.isFinite(n) || n < 1 || n > 2147483647) {
+        return res.status(400).json({ error: "loyaltyRewardPoints must be null or an integer from 1 to 2147483647" });
+      }
+      if (String(Math.abs(n)).length > 10) {
+        return res.status(400).json({ error: "loyaltyRewardPoints must be at most 10 digits" });
       }
       normalizedLoyaltyReward = n;
     }
@@ -302,7 +319,7 @@ router.post("/products", async (req: Request, res: Response) => {
       sku,
       barcode,
       cost,
-      stock,
+      Math.floor(stockNum),
       isTaxable !== false,
       description,
       imageUrl,
@@ -357,16 +374,35 @@ router.put("/products/:productId", async (req: Request, res: Response) => {
     }
 
     // Coerce numeric fields commonly sent as numbers from the dashboard
-    if (updates.price !== undefined) updates.price = String(updates.price);
+    if (updates.price !== undefined) {
+      const priceDigits = String(updates.price).replace(/[^\d]/g, "");
+      if (priceDigits.length > 10) {
+        return res.status(400).json({ error: "Price must be at most 10 digits" });
+      }
+      updates.price = String(updates.price);
+    }
     if (updates.cost !== undefined && updates.cost !== null) updates.cost = String(updates.cost);
+    if (updates.categoryId !== undefined && !updates.categoryId) {
+      return res.status(400).json({ error: "Category is required" });
+    }
+    if (updates.sku != null && String(updates.sku).length > 100) {
+      return res.status(400).json({ error: "SKU must be at most 100 characters" });
+    }
+    if (updates.stock !== undefined) {
+      const stockNum = Number(updates.stock);
+      if (!Number.isFinite(stockNum) || stockNum < 0) {
+        return res.status(400).json({ error: "Stock cannot be negative" });
+      }
+      updates.stock = Math.floor(stockNum);
+    }
 
     if (updates.loyaltyRewardPoints !== undefined) {
       if (updates.loyaltyRewardPoints === null || updates.loyaltyRewardPoints === "") {
         updates.loyaltyRewardPoints = null;
       } else {
         const n = Math.floor(Number(updates.loyaltyRewardPoints));
-        if (!Number.isFinite(n) || n < 1) {
-          return res.status(400).json({ error: "loyaltyRewardPoints must be null or an integer ≥ 1" });
+        if (!Number.isFinite(n) || n < 1 || n > 2147483647) {
+          return res.status(400).json({ error: "loyaltyRewardPoints must be null or an integer from 1 to 2147483647" });
         }
         updates.loyaltyRewardPoints = n;
       }
@@ -960,18 +996,20 @@ router.post("/customers", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Merchant ID is required" });
     }
 
-    let first = firstName;
-    let last = lastName;
+    let first = typeof firstName === "string" ? firstName.trim() : firstName;
+    let last = typeof lastName === "string" ? lastName.trim() : lastName;
+    const mail = typeof email === "string" ? email.trim() : email;
+    const tel = typeof phone === "string" ? phone.trim() : phone;
     if (!first && !last && name) {
-      const parts = String(name).trim().split(/\s+/);
+      const parts = String(name).trim().split(/\s+/).filter(Boolean);
       first = parts[0] || "";
       last = parts.slice(1).join(" ") || "";
     }
-    if (!phone && !email && !first) {
-      return res.status(400).json({ error: "Name or phone is required" });
+    if (!tel && !mail && !first && !last) {
+      return res.status(400).json({ error: "Name, email, or phone is required (spaces only are not allowed)" });
     }
 
-    const customer = await CustomerService.createCustomer(merchantId, email, phone, first, last, {
+    const customer = await CustomerService.createCustomer(merchantId, mail, tel, first, last, {
       defaultAddress,
       defaultZip,
       defaultCity,
@@ -1116,6 +1154,17 @@ router.get("/webpos-config", async (req: Request, res: Response) => {
         shiftsEnabled: !!(merchant as { shiftsEnabled?: boolean | null }).shiftsEnabled,
         posColorTheme: merchant.posColorTheme || "teal",
         coursesEnabled: merchant.coursesEnabled === true,
+        editionId: (merchant as { editionId?: string | null }).editionId || null,
+        editionFeatures: await (async () => {
+          try {
+            const { EditionEntitlementsService } = await import(
+              "@/services/edition-entitlements.service"
+            );
+            return await EditionEntitlementsService.getFeatures(merchantId);
+          } catch {
+            return null;
+          }
+        })(),
       },
     });
   } catch (error) {
@@ -1272,6 +1321,164 @@ router.get(
     } catch (error) {
       console.error("EOD report failed:", error);
       res.status(500).json({ error: error instanceof Error ? error.message : "Failed to load report" });
+    }
+  }
+);
+
+/**
+ * GET /api/merchant/reports/overview
+ * OrderPin-style merchant overview dashboard (KPIs, charts, breakdowns).
+ */
+router.get(
+  "/reports/overview",
+  requirePermission("VIEW_REPORTS", "END_OF_DAY"),
+  async (req: Request, res: Response) => {
+    try {
+      const merchantId = req.merchantId;
+      if (!merchantId) return res.status(400).json({ error: "Merchant ID is required" });
+      const { PosReportsService } = await import("@/services/pos-reports.service");
+      const preset = String(req.query.preset || "today") as
+        | "today"
+        | "yesterday"
+        | "last_week"
+        | "last_month"
+        | "last_3_months"
+        | "custom";
+      const overview = await PosReportsService.getOverviewDashboard(merchantId, {
+        preset,
+        from: req.query.from ? String(req.query.from) : undefined,
+        to: req.query.to ? String(req.query.to) : undefined,
+      });
+      res.json({ success: true, overview });
+    } catch (error) {
+      console.error("Overview report failed:", error);
+      res.status(500).json({
+        error: error instanceof Error ? error.message : "Failed to load overview",
+      });
+    }
+  }
+);
+
+/**
+ * GET /api/merchant/reports/export?format=xlsx|csv&preset=...
+ * Download overview/EOD workbook (OrderPin-inspired columns).
+ */
+router.get(
+  "/reports/export",
+  requirePermission("VIEW_REPORTS", "END_OF_DAY"),
+  async (req: Request, res: Response) => {
+    try {
+      const merchantId = req.merchantId;
+      if (!merchantId) return res.status(400).json({ error: "Merchant ID is required" });
+      const { ReportExportService } = await import("@/services/report-export.service");
+      const preset = String(req.query.preset || "today") as
+        | "today"
+        | "yesterday"
+        | "last_week"
+        | "last_month"
+        | "last_3_months"
+        | "custom";
+      const format = String(req.query.format || "xlsx").toLowerCase();
+      const opts = {
+        preset,
+        from: req.query.from ? String(req.query.from) : undefined,
+        to: req.query.to ? String(req.query.to) : undefined,
+      };
+      const file =
+        format === "csv"
+          ? await ReportExportService.buildOverviewCsv(merchantId, opts)
+          : await ReportExportService.buildOverviewWorkbook(merchantId, opts);
+      res.setHeader("Content-Type", file.mime);
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${file.filename.replace(/"/g, "")}"`
+      );
+      res.send(file.buffer);
+    } catch (error) {
+      console.error("Report export failed:", error);
+      res.status(500).json({
+        error: error instanceof Error ? error.message : "Failed to export report",
+      });
+    }
+  }
+);
+
+/** GET/PUT report email settings + POST send */
+router.get(
+  "/reports/email-settings",
+  requirePermission("VIEW_REPORTS", "END_OF_DAY"),
+  async (req: Request, res: Response) => {
+    try {
+      const merchantId = req.merchantId;
+      if (!merchantId) return res.status(400).json({ error: "Merchant ID is required" });
+      const { ReportEmailService } = await import("@/services/report-email.service");
+      const settings = await ReportEmailService.getSettings(merchantId);
+      res.json({ success: true, settings });
+    } catch (error) {
+      const raw = error instanceof Error ? error.message : "Failed to load settings";
+      const needsMigrate =
+        /report_email_settings/i.test(raw) && /does not exist|column/i.test(raw);
+      res.status(needsMigrate ? 400 : 500).json({
+        error: needsMigrate
+          ? "Database is missing report_email_settings. Run backend/sql/ensure-report-email-settings.sql"
+          : raw,
+      });
+    }
+  }
+);
+
+router.put(
+  "/reports/email-settings",
+  requirePermission("VIEW_REPORTS", "END_OF_DAY"),
+  async (req: Request, res: Response) => {
+    try {
+      const merchantId = req.merchantId;
+      if (!merchantId) return res.status(400).json({ error: "Merchant ID is required" });
+      const { ReportEmailService } = await import("@/services/report-email.service");
+      const body = req.body || {};
+      const settings = await ReportEmailService.saveSettings(merchantId, {
+        language: body.language,
+        sendEveryDay: body.sendEveryDay,
+        sendEveryMonth: body.sendEveryMonth,
+        emails: body.emails,
+      });
+      res.json({ success: true, settings });
+    } catch (error) {
+      const raw = error instanceof Error ? error.message : "Failed to save settings";
+      const needsMigrate =
+        /report_email_settings/i.test(raw) && /does not exist|column/i.test(raw);
+      res.status(400).json({
+        error: needsMigrate
+          ? "Database is missing report_email_settings. Run backend/sql/ensure-report-email-settings.sql"
+          : raw,
+      });
+    }
+  }
+);
+
+router.post(
+  "/reports/email-send",
+  requirePermission("VIEW_REPORTS", "END_OF_DAY"),
+  async (req: Request, res: Response) => {
+    try {
+      const merchantId = req.merchantId;
+      if (!merchantId) return res.status(400).json({ error: "Merchant ID is required" });
+      const { ReportEmailService } = await import("@/services/report-email.service");
+      const body = req.body || {};
+      const result = await ReportEmailService.sendReportEmail(merchantId, {
+        preset: body.preset || "today",
+        from: body.from,
+        to: body.to,
+        emails: body.emails,
+        language: body.language,
+        kind: "manual",
+      });
+      res.json({ success: true, ...result });
+    } catch (error) {
+      console.error("Report email send failed:", error);
+      res.status(400).json({
+        error: error instanceof Error ? error.message : "Failed to send report email",
+      });
     }
   }
 );

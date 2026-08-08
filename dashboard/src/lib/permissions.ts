@@ -1,3 +1,8 @@
+import {
+  canAccessEditionRoute,
+  type EditionFeatureKey,
+} from './edition-features';
+
 export type Permission =
   | 'USE_POS'
   | 'USE_WEBPOS'
@@ -73,8 +78,10 @@ export const PANEL_ROUTE_PERMISSIONS: Record<string, Permission[]> = {
 export function canAccessRoute(
   path: string,
   permissions: Permission[] | undefined,
-  isOwner: boolean
+  isOwner: boolean,
+  editionFeatures?: EditionFeatureKey[] | null
 ): boolean {
+  if (!canAccessEditionRoute(path, editionFeatures ?? null)) return false;
   if (isOwner) return true;
   const required = PANEL_ROUTE_PERMISSIONS[path];
   if (!required?.length) return true;

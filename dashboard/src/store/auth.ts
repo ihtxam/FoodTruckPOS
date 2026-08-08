@@ -4,10 +4,11 @@ import type { Permission } from '@/lib/permissions';
 export interface User {
   id: string;
   email: string;
-  role: 'superadmin' | 'merchant' | 'staff';
+  role: 'superadmin' | 'merchant' | 'staff' | 'reseller';
   name: string;
   merchantId?: string;
   staffId?: string;
+  resellerId?: string;
   roleName?: string;
   permissions?: Permission[];
   isOwner?: boolean;
@@ -69,7 +70,10 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   setLoading: (loading) => set({ isLoading: loading }),
   startImpersonation: (token, merchantUser) => {
     const { token: currentToken, user: currentUser } = get();
-    if (currentToken && currentUser?.role === 'superadmin') {
+    if (
+      currentToken &&
+      (currentUser?.role === 'superadmin' || currentUser?.role === 'reseller')
+    ) {
       sessionStorage.setItem(RETURN_TOKEN_KEY, currentToken);
       sessionStorage.setItem(RETURN_USER_KEY, JSON.stringify(currentUser));
     }

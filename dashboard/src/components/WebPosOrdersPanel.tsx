@@ -13,9 +13,7 @@ import {
 import api from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
 import type { PosOrderForReceipt } from '@/lib/webpos-receipt';
-
 type CancelReason = { id: string; en: string; fr: string; de: string };
-
 export type PosOrder = PosOrderForReceipt & {
   status: string;
   paymentStatus?: string | null;
@@ -24,7 +22,6 @@ export type PosOrder = PosOrderForReceipt & {
   notes?: string | null;
   masterOrderId?: string | null;
 };
-
 export type HeldRow = {
   id: string;
   label?: string | null;
@@ -34,10 +31,8 @@ export type HeldRow = {
   notes?: string | null;
   updatedAt: string;
 };
-
 type StatusFilter = 'active' | 'completed' | 'all';
 type ChannelFilter = 'all' | 'dine_in' | 'takeaway' | 'delivery' | 'platform';
-
 type Props = {
   open: boolean;
   /** Full-width in-tab layout instead of slide-over overlay */
@@ -50,17 +45,14 @@ type Props = {
   canRefund?: boolean;
   highlightOrderId?: string | null;
 };
-
 function todayIso(): string {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Zurich' });
 }
-
 function canCancelOrder(o: PosOrder): boolean {
   if (o.status === 'cancelled' || o.paymentStatus === 'cancelled') return false;
   if (o.status === 'refunded' || o.paymentStatus === 'refunded') return false;
   return o.status === 'completed' || o.paymentStatus === 'completed';
 }
-
 function canRefundOrder(o: PosOrder): boolean {
   if (o.status === 'cancelled' || o.paymentStatus === 'cancelled') return false;
   const remaining = Number(o.total || 0) - Number(o.refundAmount || 0);
@@ -72,7 +64,6 @@ function canRefundOrder(o: PosOrder): boolean {
     o.paymentStatus === 'partially_refunded'
   );
 }
-
 function channelBadgeClass(ch?: string | null) {
   switch (ch) {
     case 'dine_in':
@@ -85,7 +76,6 @@ function channelBadgeClass(ch?: string | null) {
       return 'bg-violet-100 text-violet-800';
   }
 }
-
 function isPlatformChannel(ch?: string | null) {
   if (!ch) return false;
   const c = ch.toLowerCase();
@@ -98,13 +88,10 @@ function isPlatformChannel(ch?: string | null) {
     c === 'online'
   );
 }
-
 type ListItem =
   | { kind: 'held'; held: HeldRow }
   | { kind: 'order'; order: PosOrder };
-
 const PAGE_SIZE = 10;
-
 export default function WebPosOrdersPanel({
   open,
   embedded = false,
@@ -133,10 +120,8 @@ export default function WebPosOrdersPanel({
   const [refundPartial, setRefundPartial] = useState(false);
   const [refundAmountText, setRefundAmountText] = useState('');
   const [page, setPage] = useState(0);
-
   const reasonLabel = (r: CancelReason) =>
     locale === 'fr' ? r.fr : locale === 'de' ? r.de : r.en;
-
   const statusLabel = (status: string) => {
     const key = status?.toLowerCase().replace(/-/g, '_');
     const map: Record<string, string> = {
@@ -151,16 +136,14 @@ export default function WebPosOrdersPanel({
     };
     return map[key] || status;
   };
-
   const channelLabel = (ch?: string | null) => {
-    if (!ch) return 'ù';
+    if (!ch) return '¬∑';
     if (ch === 'dine_in') return t('dineIn');
     if (ch === 'takeaway') return t('takeaway');
     if (ch === 'delivery') return t('delivery');
     if (isPlatformChannel(ch)) return t('webPosFoodPlatform');
     return ch;
   };
-
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -178,11 +161,9 @@ export default function WebPosOrdersPanel({
       setLoading(false);
     }
   }, [t]);
-
   useEffect(() => {
     if (open) void load();
   }, [open, load, refreshToken]);
-
   useEffect(() => {
     if (!open || !highlightOrderId || orders.length === 0) return;
     const match = orders.find((o) => o.id === highlightOrderId || o.clientId === highlightOrderId);
@@ -192,11 +173,9 @@ export default function WebPosOrdersPanel({
       setSelectedHeld(null);
     }
   }, [open, highlightOrderId, orders]);
-
   useEffect(() => {
     setPage(0);
   }, [statusFilter, channelFilter, search]);
-
   const splitCounts = useMemo(() => {
     const map = new Map<string, number>();
     for (const o of orders) {
@@ -206,11 +185,9 @@ export default function WebPosOrdersPanel({
     }
     return map;
   }, [orders]);
-
   const listItems = useMemo(() => {
     const items: ListItem[] = [];
     const q = search.trim().toLowerCase();
-
     if (statusFilter === 'active' || statusFilter === 'all') {
       for (const h of held) {
         if (channelFilter !== 'all') {
@@ -227,7 +204,6 @@ export default function WebPosOrdersPanel({
         items.push({ kind: 'held', held: h });
       }
     }
-
     if (statusFilter === 'completed' || statusFilter === 'all') {
       for (const o of orders) {
         if (channelFilter !== 'all') {
@@ -244,26 +220,20 @@ export default function WebPosOrdersPanel({
         items.push({ kind: 'order', order: o });
       }
     }
-
     return items;
   }, [held, orders, statusFilter, channelFilter, search]);
-
   const pageCount = Math.max(1, Math.ceil(listItems.length / PAGE_SIZE));
   const pageItems = listItems.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
   const rangeStart = listItems.length === 0 ? 0 : page * PAGE_SIZE + 1;
   const rangeEnd = Math.min(listItems.length, (page + 1) * PAGE_SIZE);
-
   const money = (n: number) => `CHF ${Number(n || 0).toFixed(2)}`;
-
   const heldCartLines = (h: HeldRow) => {
     const data = h.cartJson as { cart?: Array<{ name: string; quantity: number; lineTotal: number }> } | Array<{ name: string; quantity: number; lineTotal: number }>;
     if (Array.isArray(data)) return data;
     return data?.cart || [];
   };
-
   const heldTotal = (h: HeldRow) =>
     heldCartLines(h).reduce((s, l) => s + Number(l.lineTotal || 0), 0);
-
   const doCancel = async () => {
     if (!cancelFor || !cancelReason) return;
     try {
@@ -277,7 +247,6 @@ export default function WebPosOrdersPanel({
       toast.error(e.response?.data?.error || t('webPosCancelFailed'));
     }
   };
-
   const doRefund = async () => {
     if (!refundFor) return;
     const remaining = round2(refundFor.total - refundFor.refundAmount);
@@ -301,7 +270,6 @@ export default function WebPosOrdersPanel({
       toast.error(e.response?.data?.error || t('webPosRefundFailed'));
     }
   };
-
   const printOne = async (order: PosOrder, splitLabel?: string | null) => {
     if (!onPrintOrder) return;
     setPrinting(true);
@@ -311,26 +279,21 @@ export default function WebPosOrdersPanel({
       setPrinting(false);
     }
   };
-
   const selectHeld = (h: HeldRow) => {
     setSelectedHeld(h);
     setSelectedOrder(null);
   };
-
   const selectOrder = (o: PosOrder) => {
     setSelectedOrder(o);
     setSelectedHeld(null);
   };
-
   if (!open) return null;
-
   const channelFilters: Array<{ id: ChannelFilter; label: string }> = [
     { id: 'dine_in', label: t('dineIn') },
     { id: 'takeaway', label: t('takeaway') },
     { id: 'delivery', label: t('delivery') },
     { id: 'platform', label: t('webPosFoodPlatform') },
   ];
-
   return (
     <div
       className={
@@ -419,7 +382,6 @@ export default function WebPosOrdersPanel({
             ) : null}
           </div>
         </div>
-
         <div className="flex min-h-0 flex-1">
           {/* List */}
           <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
@@ -486,7 +448,6 @@ export default function WebPosOrdersPanel({
                       </li>
                     );
                   }
-
                   const o = item.order;
                   const selected = selectedOrder?.id === o.id;
                   const isSplitRow = o.masterOrderId && (splitCounts.get(o.masterOrderId) || 0) > 1;
@@ -506,7 +467,7 @@ export default function WebPosOrdersPanel({
                             </span>
                             <span className="truncate text-sm font-semibold">
                               {o.tableLabel ? `T ${o.tableLabel}` : o.orderNumber}
-                              {o.customerName ? ` ù ${o.customerName}` : ''}
+                              {o.customerName ? ` ¬∑ ${o.customerName}` : ''}
                             </span>
                             <span
                               className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${channelBadgeClass(o.channel)}`}
@@ -546,7 +507,6 @@ export default function WebPosOrdersPanel({
               </ul>
             )}
           </div>
-
           {/* Detail panel */}
           <aside className="flex w-full max-w-sm shrink-0 flex-col border-l border-stone-200 bg-stone-50">
             {selectedHeld ? (
@@ -554,13 +514,13 @@ export default function WebPosOrdersPanel({
                 <div className="min-h-0 flex-1 overflow-y-auto p-4">
                   <p className="text-sm font-semibold">{selectedHeld.label || t('webPosHeldOrder')}</p>
                   <p className="mt-1 text-xs text-stone-500">
-                    {channelLabel(selectedHeld.channel)} ù {statusLabel(selectedHeld.status)}
+                    {channelLabel(selectedHeld.channel)} ¬∑ {statusLabel(selectedHeld.status)}
                   </p>
                   <ul className="mt-4 space-y-2 text-sm">
                     {heldCartLines(selectedHeld).map((l, idx) => (
                       <li key={idx} className="flex justify-between gap-2">
                         <span>
-                          {l.quantity}ù {l.name}
+                          {l.quantity}√ó {l.name || 'Item'}
                         </span>
                         <span className="tabular-nums">{money(l.lineTotal)}</span>
                       </li>
@@ -607,7 +567,7 @@ export default function WebPosOrdersPanel({
                     {selectedOrder.items.map((i, idx) => (
                       <li key={idx} className="flex justify-between gap-2">
                         <span>
-                          {i.quantity}ù {i.name}
+                          {i.quantity}√ó {i.name || 'Item'}
                         </span>
                         <span className="tabular-nums">{money(i.totalPrice)}</span>
                       </li>
@@ -654,11 +614,10 @@ export default function WebPosOrdersPanel({
             )}
           </aside>
         </div>
-
         {cancelFor ? (
           <div className="border-t border-stone-200 bg-white p-4 space-y-3">
             <p className="text-sm font-medium">
-              {t('webPosCancelReason')} ù {cancelFor.orderNumber}
+              {t('webPosCancelReason')} ¬∑ {cancelFor.orderNumber}
             </p>
             <select
               className="input"
@@ -681,11 +640,10 @@ export default function WebPosOrdersPanel({
             </div>
           </div>
         ) : null}
-
         {refundFor ? (
           <div className="border-t border-stone-200 bg-white p-4 space-y-3">
             <p className="text-sm font-medium">
-              {t('webPosRefund')} ù {refundFor.orderNumber}
+              {t('webPosRefund')} ¬∑ {refundFor.orderNumber}
             </p>
             <label className="flex items-center gap-2 text-sm">
               <input
@@ -730,7 +688,6 @@ export default function WebPosOrdersPanel({
     </div>
   );
 }
-
 function round2(n: number) {
   return Math.round(n * 100) / 100;
 }

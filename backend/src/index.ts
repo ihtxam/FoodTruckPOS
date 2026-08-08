@@ -24,6 +24,7 @@ import webhooksRoutes from "@/routes/webhooks.routes";
 import offersRoutes from "@/routes/offers.routes";
 import marketingRoutes from "@/routes/marketing.routes";
 import staffRoutes from "@/routes/staff.routes";
+import resellerRoutes from "@/routes/reseller.routes";
 import { ensureUploadsRoot } from "@/services/media-upload.service";
 import { MarketingService } from "@/services/marketing.service";
 import { ReservationService } from "@/services/reservation.service";
@@ -131,6 +132,7 @@ app.get("/health", (_req: Request, res: Response) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/licensing", licensingRoutes);
 app.use("/api/superadmin", superadminRoutes);
+app.use("/api/reseller", resellerRoutes);
 app.use("/api/merchant", merchantRoutes);
 app.use("/api/merchant", staffRoutes);
 app.use("/api/payment", paymentRoutes);
@@ -208,6 +210,15 @@ app.listen(PORT, () => {
       }
     } catch (error) {
       console.error("[pos-shifts] auto-close job failed", error);
+    }
+    try {
+      const { ReportEmailService } = await import("@/services/report-email.service");
+      const result = await ReportEmailService.processScheduledReports();
+      if (result.sent > 0) {
+        console.log(`[report-email] scheduled reports sent: ${result.sent}`);
+      }
+    } catch (error) {
+      console.error("[report-email] scheduled job failed", error);
     }
   };
   setTimeout(() => void tick(), 45_000);

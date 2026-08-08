@@ -5,6 +5,8 @@ import Header from '@/components/Header';
 import Overview from './Overview';
 import Merchants from './Merchants';
 import Licenses from './Licenses';
+import Editions from './Editions';
+import Resellers from './Resellers';
 import Analytics from './Analytics';
 import Settings from './Settings';
 import { I18nProvider, useI18n, type Locale } from '@/lib/i18n';
@@ -29,8 +31,17 @@ function SuperadminShell() {
 
   const menuItems = [
     { label: t('overview'), path: '/superadmin', icon: '📊' },
-    { label: t('merchants'), path: '/superadmin/merchants', icon: '🏪' },
-    { label: t('licenses'), path: '/superadmin/licenses', icon: '🔑' },
+    {
+      id: 'merchants',
+      label: t('navMerchants'),
+      icon: '🏪',
+      children: [
+        { label: t('merchants'), path: '/superadmin/merchants', icon: '🏪' },
+        { label: t('licenses'), path: '/superadmin/licenses', icon: '🔑' },
+        { label: 'Editions', path: '/superadmin/editions', icon: '📦' },
+        { label: 'Resellers', path: '/superadmin/resellers', icon: '🤝' },
+      ],
+    },
     { label: t('analytics'), path: '/superadmin/analytics', icon: '📈' },
     { label: t('settings'), path: '/superadmin/settings', icon: '⚙️' },
   ];
@@ -41,6 +52,7 @@ function SuperadminShell() {
         isOpen={sidebarOpen}
         onToggle={() => setSidebarOpen(!sidebarOpen)}
         menuItems={menuItems}
+        panelKey="superadmin"
       />
 
       <div className="flex-1 flex flex-col overflow-hidden min-w-0 min-h-0">
@@ -56,6 +68,8 @@ function SuperadminShell() {
             <Route index element={<Overview />} />
             <Route path="merchants" element={<Merchants />} />
             <Route path="licenses" element={<Licenses />} />
+            <Route path="editions" element={<Editions />} />
+            <Route path="resellers" element={<Resellers />} />
             <Route path="analytics" element={<Analytics />} />
             <Route path="settings" element={<Settings />} />
           </Routes>

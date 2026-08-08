@@ -139,6 +139,17 @@ export class MerchantSettingsService {
       posCheckoutSettings: normalizePosCheckoutSettings(merchant.posCheckoutSettings),
       status: merchant.status,
       subscriptionPlan: merchant.subscriptionPlan,
+      editionId: (merchant as { editionId?: string | null }).editionId || null,
+      resellerId: (merchant as { resellerId?: string | null }).resellerId || null,
+      /** null = legacy full access */
+      editionFeatures: await (async () => {
+        try {
+          const { EditionEntitlementsService } = await import("./edition-entitlements.service");
+          return await EditionEntitlementsService.getFeatures(merchantId);
+        } catch {
+          return null;
+        }
+      })(),
     };
   }
 

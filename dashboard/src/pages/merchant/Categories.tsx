@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
@@ -24,6 +24,7 @@ export default function Categories() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [imageUrl, setImageUrl] = useState('');
   const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const load = async () => {
     try {
@@ -45,6 +46,7 @@ export default function Categories() {
     setDescription('');
     setImageUrl('');
     setEditingId(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const startEdit = (category: Category) => {
@@ -161,6 +163,7 @@ export default function Categories() {
             <label className="text-sm">
               <span className="font-medium mr-2">Category photo</span>
               <input
+                ref={fileInputRef}
                 type="file"
                 accept="image/*"
                 disabled={uploading}
@@ -171,7 +174,14 @@ export default function Categories() {
               <img src={imageUrl} alt="" className="h-12 w-20 object-cover rounded border" />
             ) : null}
             {imageUrl ? (
-              <button type="button" className="text-sm text-red-600" onClick={() => setImageUrl('')}>
+              <button
+                type="button"
+                className="text-sm text-red-600"
+                onClick={() => {
+                  setImageUrl('');
+                  if (fileInputRef.current) fileInputRef.current.value = '';
+                }}
+              >
                 Remove photo
               </button>
             ) : null}

@@ -25,6 +25,8 @@ function CashKeypad({ value, onChange }: KeypadProps) {
     const next = value + ch;
     const [, dec] = next.split('.');
     if (dec && dec.length > 2) return;
+    const digits = next.replace(/\D/g, '');
+    if (digits.length > 10) return;
     onChange(next);
   };
   const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', '⌫'];
@@ -178,9 +180,18 @@ export function WebPosCloseShiftModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/45 p-4">
-      <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl">
-        <h2 className="text-lg font-bold text-stone-900">{t('webPosShiftCloseTitle')}</h2>
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/45 p-3 sm:p-4 overflow-y-auto">
+      <div className="relative my-auto w-full max-w-lg max-h-[min(92dvh,900px)] overflow-y-auto rounded-2xl bg-white p-5 pt-12 shadow-2xl">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={busy}
+          className="absolute right-3 top-3 z-10 inline-flex h-10 w-10 items-center justify-center rounded-full text-stone-500 hover:bg-stone-100 hover:text-stone-800 disabled:opacity-50"
+          aria-label={t('close')}
+        >
+          <span className="text-2xl leading-none">&times;</span>
+        </button>
+        <h2 className="text-lg font-bold text-stone-900 pr-10">{t('webPosShiftCloseTitle')}</h2>
         <p className="mt-1 text-sm text-stone-600">{t('webPosShiftCloseHint')}</p>
 
         <div className="mt-4 rounded-xl border border-[var(--webpos-accent)]/30 bg-[var(--webpos-accent)]/5 p-3">

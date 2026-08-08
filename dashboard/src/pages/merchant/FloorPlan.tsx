@@ -302,14 +302,14 @@ export default function FloorPlan({ embedded = false }: { embedded?: boolean }) 
         </div>
 
         {/* Canvas */}
-        <div className="card">
-          <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
-            <h2 className="font-semibold text-slate-900">{activePlan?.name || 'Canvas'}</h2>
-            <div className="flex gap-2">
+        <div className="card min-w-0">
+          <div className="sticky top-0 z-10 -mx-3 sm:-mx-4 mb-3 flex items-center justify-between gap-2 flex-wrap border-b border-slate-100 bg-[var(--bg-elevated)] px-3 sm:px-4 py-2">
+            <h2 className="font-semibold text-slate-900 truncate min-w-0">{activePlan?.name || 'Canvas'}</h2>
+            <div className="flex shrink-0 gap-2">
               <button type="button" className="btn-secondary" onClick={addTable} disabled={!activePlan}>
                 + Table
               </button>
-              <button type="button" className="btn-primary" onClick={saveTables} disabled={!activePlan || saving}>
+              <button type="button" className="btn-primary whitespace-nowrap" onClick={saveTables} disabled={!activePlan || saving}>
                 {saving ? 'Saving...' : t('save')}
               </button>
             </div>

@@ -76,10 +76,14 @@ export class OrderService {
       for (const item of items) {
         const itemTotal = item.unitPrice * item.quantity;
 
+        const product = await db.query.products.findFirst({
+          where: eq(schema.products.id, item.productId),
+        });
+
         await db.insert(schema.orderItems).values({
           orderId: order[0].id,
           productId: item.productId,
-          productName: undefined,
+          productName: product?.name || (item as { productName?: string }).productName || "Item",
           quantity: item.quantity.toString(),
           unitPrice: item.unitPrice.toString(),
           totalPrice: itemTotal.toString(),
@@ -87,10 +91,6 @@ export class OrderService {
         });
 
         // Update product stock
-        const product = await db.query.products.findFirst({
-          where: eq(schema.products.id, item.productId),
-        });
-
         if (product) {
           await db
             .update(schema.products)

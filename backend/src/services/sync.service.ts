@@ -444,6 +444,7 @@ export class SyncService {
 
       for (const item of sale.items) {
         let productId = asUuidOrNull(item.productId);
+        let catalogName: string | null = null;
         if (!productId && item.productClientId) {
           const linked = await db.query.products.findFirst({
             where: and(
@@ -452,12 +453,24 @@ export class SyncService {
             ),
           });
           productId = linked?.id ?? null;
+          catalogName = linked?.name ?? null;
+        } else if (productId && !(item.productName && String(item.productName).trim())) {
+          const linked = await db.query.products.findFirst({
+            where: eq(schema.products.id, productId),
+          });
+          catalogName = linked?.name ?? null;
         }
+
+        const resolvedName = (
+          (item.productName && String(item.productName).trim()) ||
+          catalogName ||
+          "Item"
+        ).slice(0, 255);
 
         await db.insert(schema.orderItems).values({
           orderId: order.id,
           productId,
-          productName: item.productName,
+          productName: resolvedName,
           quantity: item.quantity.toString(),
           unitPrice: item.unitPrice.toString(),
           totalPrice: item.totalPrice.toString(),
