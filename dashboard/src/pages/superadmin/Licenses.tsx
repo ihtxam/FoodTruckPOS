@@ -302,7 +302,7 @@ export default function Licenses() {
         </select>
       </div>
 
-      <div className="card overflow-x-auto">
+      <div className="card !p-0 table-scroll">
         {loading ? (
           <div className="text-center py-12">Loading...</div>
         ) : licenses.length === 0 ? (

@@ -182,7 +182,7 @@ export default function Merchants() {
     setSaving(true);
     try {
       if (!form.editionId) {
-        toast.error('Select a POS edition / version');
+        toast.error('Select a POS version');
         setSaving(false);
         return;
       }
@@ -306,15 +306,15 @@ export default function Merchants() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Merchants</h1>
-          <p className="text-sm text-gray-500 mt-1">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="page-title text-2xl sm:text-3xl font-bold">Merchants</h1>
+          <p className="page-sub">
             Create merchants, enable online shop, and issue device licenses
           </p>
         </div>
         <button
-          className="btn-primary flex items-center gap-2"
+          className="btn-primary flex items-center gap-2 shrink-0"
           onClick={() => setShowCreate(true)}
         >
           <Plus className="w-4 h-4" />
@@ -365,37 +365,47 @@ export default function Merchants() {
         />
       </div>
 
-      <div className="card overflow-hidden">
+      <div className="card !p-0 table-scroll">
         {loading ? (
           <div className="text-center py-12">Loading...</div>
         ) : merchants.length === 0 ? (
           <div className="text-center py-12 text-gray-500">No merchants found</div>
         ) : (
-          <table className="w-full">
+          <table className="w-full min-w-[720px]">
             <thead className="bg-gray-50 border-b">
               <tr>
-                <th className="px-6 py-3 text-left text-sm font-semibold">Name</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold">Email</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold">Shop</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold">Status</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold">Devices</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold">Licenses</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold">Actions</th>
+                <th className="px-3 sm:px-4 py-3 text-left text-sm font-semibold">Name</th>
+                <th className="px-3 sm:px-4 py-3 text-left text-sm font-semibold">Email</th>
+                <th className="px-3 sm:px-4 py-3 text-left text-sm font-semibold">Shop</th>
+                <th className="px-3 sm:px-4 py-3 text-left text-sm font-semibold">Status</th>
+                <th className="px-3 sm:px-4 py-3 text-left text-sm font-semibold">Devices</th>
+                <th className="px-3 sm:px-4 py-3 text-left text-sm font-semibold">Licenses</th>
+                <th className="px-3 sm:px-4 py-3 text-left text-sm font-semibold">Actions</th>
               </tr>
             </thead>
             <tbody>
               {merchants.map((merchant) => (
                 <tr key={merchant.id} className="border-b hover:bg-gray-50">
-                  <td className="px-6 py-4 font-medium">{merchant.name}</td>
-                  <td className="px-6 py-4 text-gray-600">{merchant.email}</td>
-                  <td className="px-6 py-4 text-sm text-gray-600">
+                  <td className="px-3 sm:px-4 py-3 font-medium">
+                    <span className="cell-truncate block" title={merchant.name}>
+                      {merchant.name}
+                    </span>
+                  </td>
+                  <td className="px-3 sm:px-4 py-3 text-gray-600">
+                    <span className="cell-truncate block" title={merchant.email}>
+                      {merchant.email}
+                    </span>
+                  </td>
+                  <td className="px-3 sm:px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
                     {merchant.shopEnabled ? (
-                      <span className="text-emerald-700">/{merchant.slug || '-'}</span>
+                      <span className="text-emerald-700" title={`/${merchant.slug || '-'}`}>
+                        /{merchant.slug || '-'}
+                      </span>
                     ) : (
                       <span className="text-gray-400">off</span>
                     )}
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="px-3 sm:px-4 py-3">
                     <span
                       className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(
                         merchant.status
@@ -404,13 +414,13 @@ export default function Merchants() {
                       {merchant.status}
                     </span>
                   </td>
-                  <td className="px-6 py-4">{merchant.devices}</td>
-                  <td className="px-6 py-4">
+                  <td className="px-3 sm:px-4 py-3">{merchant.devices}</td>
+                  <td className="px-3 sm:px-4 py-3 whitespace-nowrap">
                     {merchant.activeLicenses ?? merchant.licenses}
                     <span className="text-gray-400 text-xs"> / {merchant.licenses}</span>
                   </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-1">
+                  <td className="px-3 sm:px-4 py-3">
+                    <div className="flex items-center gap-1 whitespace-nowrap">
                       <button
                         className="p-2 hover:bg-gray-100 rounded"
                         title="View"
@@ -553,7 +563,7 @@ export default function Merchants() {
                   />
                 </label>
                 <label className="block">
-                  <span className="text-sm font-medium">Plan</span>
+                  <span className="text-sm font-medium">Subscription / License</span>
                   <select
                     className="input mt-1"
                     value={form.subscriptionPlan}
@@ -582,14 +592,14 @@ export default function Merchants() {
                   </select>
                 </label>
                 <label className="block">
-                  <span className="text-sm font-medium">POS version (edition) *</span>
+                  <span className="text-sm font-medium">POS version *</span>
                   <select
                     className="input mt-1"
                     value={form.editionId}
                     onChange={(e) => setForm({ ...form, editionId: e.target.value })}
                     required
                   >
-                    <option value="">Select edition…</option>
+                    <option value="">Select POS version…</option>
                     {editions.map((ed) => (
                       <option key={ed.id} value={ed.id}>
                         {ed.name}

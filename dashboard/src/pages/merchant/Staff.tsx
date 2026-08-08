@@ -207,8 +207,8 @@ export default function StaffPage() {
             </button>
           </form>
 
-          <div className="card overflow-hidden">
-            <table className="w-full text-sm">
+          <div className="card !p-0 table-scroll">
+            <table className="w-full text-sm min-w-[560px]">
               <thead className="bg-[var(--bg-muted)] text-left">
                 <tr>
                   <th className="px-3 py-2">{t('name')}</th>
@@ -221,11 +221,21 @@ export default function StaffPage() {
               <tbody>
                 {staff.map((s) => (
                   <tr key={s.id} className="border-t border-[var(--border)]">
-                    <td className="px-3 py-2 font-medium">{s.name}</td>
+                    <td className="px-3 py-2 font-medium">
+                      <span className="cell-truncate block" title={s.name}>
+                        {s.name}
+                      </span>
+                    </td>
                     <td className="px-3 py-2">{s.roleName}</td>
                     <td className="px-3 py-2">{s.pinSet ? t('staffPinSet') : '-'}</td>
                     <td className="px-3 py-2">
-                      {s.canAccessPanel ? s.email || t('yes') : t('no')}
+                      {s.canAccessPanel ? (
+                        <span className="cell-truncate block" title={s.email || t('yes')}>
+                          {s.email || t('yes')}
+                        </span>
+                      ) : (
+                        t('no')
+                      )}
                     </td>
                     <td className="px-3 py-2 text-right">
                       <button type="button" className="text-red-600 text-xs" onClick={() => void removeStaff(s.id)}>

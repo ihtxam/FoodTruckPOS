@@ -132,7 +132,7 @@ export default function Settings() {
   const savePlan = async (e: FormEvent) => {
     e.preventDefault();
     if (!planForm.name.trim()) {
-      toast.error('Plan name is required');
+      toast.error('License package name is required');
       return;
     }
     setSavingPlan(true);
@@ -157,28 +157,28 @@ export default function Settings() {
       };
       if (editingId) {
         await api.put(`/superadmin/plans/${editingId}`, payload);
-        toast.success('Plan updated');
+        toast.success('License package updated');
       } else {
         await api.post('/superadmin/plans', payload);
-        toast.success('Plan created');
+        toast.success('License package created');
       }
       setShowPlanForm(false);
       await load();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to save plan');
+      toast.error(err.response?.data?.error || 'Failed to save license package');
     } finally {
       setSavingPlan(false);
     }
   };
 
   const deactivatePlan = async (plan: Plan) => {
-    if (!confirm(`Deactivate plan "${plan.name}"? Merchants will no longer see it.`)) return;
+    if (!confirm(`Deactivate license package "${plan.name}"? Merchants will no longer see it.`)) return;
     try {
       await api.delete(`/superadmin/plans/${plan.id}`);
-      toast.success('Plan deactivated');
+      toast.success('License package deactivated');
       await load();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to deactivate plan');
+      toast.error(err.response?.data?.error || 'Failed to deactivate license package');
     }
   };
 
@@ -212,21 +212,22 @@ export default function Settings() {
       <div className="card">
         <div className="flex items-start justify-between gap-4 mb-4">
           <div>
-            <h1 className="text-2xl font-bold">Subscription Plans</h1>
+            <h1 className="text-2xl font-bold">Subscription plans</h1>
             <p className="text-gray-600 mt-1">
-              Create plans shown when creating merchants and available for merchants to buy in their panel.
+              License packages for payment only (devices, price, trial). Feature access is controlled by POS
+              versions, not by these packages.
             </p>
           </div>
           <button type="button" className="btn btn-primary flex items-center gap-2" onClick={openCreate}>
-            <Plus size={16} /> New plan
+            <Plus size={16} /> New license package
           </button>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        <div className="table-scroll">
+          <table className="w-full text-sm min-w-[480px]">
             <thead>
               <tr className="text-left border-b">
-                <th className="py-2 pr-3">Plan</th>
+                <th className="py-2 pr-3">License package</th>
                 <th className="py-2 pr-3">Monthly</th>
                 <th className="py-2 pr-3">Yearly</th>
                 <th className="py-2 pr-3">Devices</th>
@@ -286,7 +287,7 @@ export default function Settings() {
               {!plans.length && (
                 <tr>
                   <td colSpan={7} className="py-6 text-center text-gray-500">
-                    No plans yet. Create one or re-run seed to load defaults.
+                    No license packages yet. Create one or re-run seed to load defaults.
                   </td>
                 </tr>
               )}
@@ -298,8 +299,8 @@ export default function Settings() {
       <div className="card">
         <h2 className="text-xl font-bold">Platform Adyen (subscription payments)</h2>
         <p className="text-gray-600 mt-1 mb-4">
-          When merchants buy a plan, payments settle to <strong>your</strong> Adyen account - not the
-          merchant&apos;s shop Adyen credentials.
+          When merchants buy a subscription, payments settle to <strong>your</strong> Adyen account - not
+          the merchant&apos;s shop Adyen credentials.
         </p>
 
         {adyen && (
@@ -383,7 +384,9 @@ export default function Settings() {
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold">{editingId ? 'Edit plan' : 'New plan'}</h3>
+              <h3 className="text-lg font-bold">
+                {editingId ? 'Edit license package' : 'New license package'}
+              </h3>
               <button type="button" onClick={() => setShowPlanForm(false)} className="p-1 hover:bg-gray-100 rounded">
                 <X size={18} />
               </button>
@@ -512,7 +515,7 @@ export default function Settings() {
                   Cancel
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={savingPlan}>
-                  {savingPlan ? 'Saving…' : 'Save plan'}
+                  {savingPlan ? 'Saving…' : 'Save license package'}
                 </button>
               </div>
             </form>

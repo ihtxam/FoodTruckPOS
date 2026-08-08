@@ -142,6 +142,18 @@ export default function Sidebar({
     if (window.innerWidth < 1024) onToggle();
   };
 
+  // Closed off-canvas drawer must not trap touch/scroll on mobile.
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 1023px)');
+    const lock = isOpen && mq.matches;
+    if (!lock) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [isOpen]);
+
   const linkClass = (active: boolean, nested = false) =>
     `flex items-center gap-2.5 rounded-md text-sm transition-colors ${
       nested ? 'px-2.5 py-1.5 pl-9' : 'px-2.5 py-2'
@@ -155,8 +167,8 @@ export default function Sidebar({
     <>
       <aside
         className={`${
-          isOpen ? 'translate-x-0' : '-translate-x-full'
-        } fixed lg:relative lg:translate-x-0 w-56 h-dvh max-h-dvh lg:h-full lg:max-h-full bg-slate-900 text-slate-100 transition-transform duration-200 z-40 flex flex-col shrink-0`}
+          isOpen ? 'translate-x-0' : '-translate-x-full pointer-events-none'
+        } fixed lg:relative lg:translate-x-0 lg:pointer-events-auto w-56 h-dvh max-h-dvh lg:h-full lg:max-h-full bg-slate-900 text-slate-100 transition-transform duration-200 z-40 flex flex-col shrink-0`}
       >
         <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between shrink-0">
           <div>

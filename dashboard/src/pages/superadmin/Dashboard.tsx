@@ -38,7 +38,7 @@ function SuperadminShell() {
       children: [
         { label: t('merchants'), path: '/superadmin/merchants', icon: '🏪' },
         { label: t('licenses'), path: '/superadmin/licenses', icon: '🔑' },
-        { label: 'Editions', path: '/superadmin/editions', icon: '📦' },
+        { label: t('posVersions'), path: '/superadmin/editions', icon: '📦' },
         { label: 'Resellers', path: '/superadmin/resellers', icon: '🤝' },
       ],
     },
@@ -63,7 +63,7 @@ function SuperadminShell() {
           onLanguageChange={changeLanguage}
         />
 
-        <main className="panel-main flex-1 overflow-y-auto overflow-x-clip p-3 sm:p-4 min-h-0">
+        <main className="panel-main flex-1 p-3 sm:p-4">
           <Routes>
             <Route index element={<Overview />} />
             <Route path="merchants" element={<Merchants />} />

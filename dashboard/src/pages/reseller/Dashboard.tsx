@@ -40,6 +40,7 @@ function Overview() {
 }
 
 function MerchantsPage() {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const startImpersonation = useAuthStore((s) => s.startImpersonation);
   const [merchants, setMerchants] = useState<any[]>([]);
@@ -81,7 +82,7 @@ function MerchantsPage() {
   const create = async (ev: React.FormEvent) => {
     ev.preventDefault();
     if (!form.editionId) {
-      toast.error('Select POS version');
+      toast.error(t('posVersionSelect'));
       return;
     }
     setSaving(true);
@@ -131,7 +132,7 @@ function MerchantsPage() {
       </div>
       <input
         className="input max-w-sm"
-        placeholder="Search…"
+        placeholder="Searchï¿½"
         value={search}
         onChange={(e) => setSearch(e.target.value)}
       />
@@ -158,7 +159,7 @@ function MerchantsPage() {
             />
           </label>
           <label className="text-sm">
-            Password (optional — invite if empty)
+            Password (optional ï¿½ invite if empty)
             <input
               className="input mt-1"
               type="password"
@@ -183,14 +184,14 @@ function MerchantsPage() {
             </select>
           </label>
           <label className="text-sm sm:col-span-2">
-            Sign version (edition) *
+            {t('posVersion')} *
             <select
               className="input mt-1"
               required
               value={form.editionId}
               onChange={(e) => setForm((f) => ({ ...f, editionId: e.target.value }))}
             >
-              <option value="">Select…</option>
+              <option value="">{t('posVersionSelect')}</option>
               {editions.map((ed) => (
                 <option key={ed.id} value={ed.id}>
                   {ed.name} ({ed.ownerType})
@@ -209,7 +210,7 @@ function MerchantsPage() {
         </form>
       )}
 
-      <div className="card overflow-x-auto">
+      <div className="card !p-0 table-scroll">
         <table className="w-full text-sm min-w-[560px]">
           <thead className="bg-stone-50 text-left">
             <tr>
@@ -222,8 +223,16 @@ function MerchantsPage() {
           <tbody>
             {merchants.map((m) => (
               <tr key={m.id} className="border-t">
-                <td className="px-3 py-2 font-medium">{m.name}</td>
-                <td className="px-3 py-2">{m.email}</td>
+                <td className="px-3 py-2 font-medium">
+                  <span className="cell-truncate block" title={m.name}>
+                    {m.name}
+                  </span>
+                </td>
+                <td className="px-3 py-2">
+                  <span className="cell-truncate block" title={m.email}>
+                    {m.email}
+                  </span>
+                </td>
                 <td className="px-3 py-2">{m.status}</td>
                 <td className="px-3 py-2 text-right">
                   <button
@@ -244,6 +253,7 @@ function MerchantsPage() {
 }
 
 function EditionsPage() {
+  const { t } = useI18n();
   const [editions, setEditions] = useState<any[]>([]);
   const [form, setForm] = useState({
     name: '',
@@ -260,8 +270,8 @@ function EditionsPage() {
   };
 
   useEffect(() => {
-    load().catch(() => toast.error('Failed to load editions'));
-  }, []);
+    load().catch(() => toast.error(t('posVersionLoadFailed')));
+  }, [t]);
 
   const save = async () => {
     try {
@@ -297,7 +307,7 @@ function EditionsPage() {
   return (
     <div className="max-w-6xl space-y-4">
       <div className="flex justify-between items-center">
-        <h1 className="text-xl font-bold">Edition Management</h1>
+        <h1 className="text-xl font-bold">{t('posVersionManagement')}</h1>
         <button
           type="button"
           className="btn-primary text-sm"
@@ -312,14 +322,14 @@ function EditionsPage() {
             setShowForm(true);
           }}
         >
-          New edition
+          {t('posVersionNew')}
         </button>
       </div>
       {showForm && (
         <div className="card p-4 space-y-3">
           <input
             className="input"
-            placeholder="Version name"
+            placeholder={t('posVersionName')}
             value={form.name}
             onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
           />
@@ -337,8 +347,8 @@ function EditionsPage() {
           </div>
         </div>
       )}
-      <div className="card overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="card !p-0 table-scroll">
+        <table className="w-full text-sm min-w-[480px]">
           <thead className="bg-stone-50 text-left">
             <tr>
               <th className="px-3 py-2">Name</th>
@@ -407,9 +417,9 @@ function ResellerShell() {
     },
     {
       id: 'editions',
-      label: 'Editions',
+      label: t('posVersions'),
       icon: '??',
-      children: [{ label: 'Edition Management', path: '/reseller/editions', icon: '??' }],
+      children: [{ label: t('posVersionManagement'), path: '/reseller/editions', icon: '??' }],
     },
   ];
 
@@ -423,12 +433,12 @@ function ResellerShell() {
       />
       <div className="flex-1 flex flex-col overflow-hidden min-w-0 min-h-0">
         <Header
-          title={`${user?.name || 'Reseller'} — Agency`}
+          title={`${user?.name || 'Reseller'} â€” Agency`}
           onMenuClick={() => setSidebarOpen(!sidebarOpen)}
           language={locale}
           onLanguageChange={(lang: Locale) => setLocale(lang)}
         />
-        <main className="panel-main flex-1 overflow-y-auto overflow-x-clip p-3 sm:p-4 min-h-0">
+        <main className="panel-main flex-1 p-3 sm:p-4">
           <Routes>
             <Route index element={<Overview />} />
             <Route path="merchants" element={<MerchantsPage />} />

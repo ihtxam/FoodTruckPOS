@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
+import { useI18n } from '@/lib/i18n';
 
 type Plan = {
   id: string;
@@ -40,6 +41,7 @@ function money(amount: string | number, currency = 'CHF') {
 }
 
 export default function Billing() {
+  const { t } = useI18n();
   const [loading, setLoading] = useState(true);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [currentSlug, setCurrentSlug] = useState<string>('free');
@@ -91,13 +93,13 @@ export default function Billing() {
           clientKey: session.clientKey,
           session: { id: session.id, sessionData: session.sessionData },
           onPaymentCompleted: async (result: { resultCode?: string }) => {
-            setPayMsg('Payment completed - activating plan…');
+            setPayMsg(t('billingActivating'));
             try {
               await api.post('/merchant/billing/confirm', {
                 paymentId,
                 resultCode: result?.resultCode || 'Authorised',
               });
-              toast.success('Subscription activated');
+              toast.success(t('billingActivated'));
               setCheckoutPlan(null);
               setSession(null);
               setPaymentId(null);
@@ -122,7 +124,7 @@ export default function Billing() {
     return () => {
       cancelled = true;
     };
-  }, [session, paymentId, load]);
+  }, [session, paymentId, load, t]);
 
   const startCheckout = async (plan: Plan) => {
     setBusy(true);
@@ -139,7 +141,7 @@ export default function Billing() {
       });
 
       if (res.data.free) {
-        toast.success(`${plan.name} plan activated`);
+        toast.success(t('billingFreeActivated').replace('{name}', plan.name));
         setCheckoutPlan(null);
         await load();
         return;
@@ -162,24 +164,24 @@ export default function Billing() {
   return (
     <div className="space-y-6">
       <div className="card">
-        <h1 className="text-2xl font-bold">Billing & plans</h1>
+        <h1 className="text-2xl font-bold">{t('billingAndSubscription')}</h1>
         <p className="text-gray-600 mt-1">
-          Current plan: <strong className="capitalize">{currentSlug}</strong>
+          {t('billingCurrentSubscription')}:{' '}
+          <strong className="capitalize">{currentSlug}</strong>
           {subscriptionEndsAt
             ? ` · renews / ends ${new Date(subscriptionEndsAt).toLocaleDateString()}`
             : null}
         </p>
         {!adyenReady && (
           <p className="mt-3 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2">
-            Platform Adyen is not configured yet. Free plans can still be activated; paid plans require
-            the platform owner to add Adyen credentials in Superadmin → Settings.
+            {t('billingAdyenNotConfigured')}
           </p>
         )}
       </div>
 
       <div className="card">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-          <h2 className="text-lg font-semibold">Choose a plan</h2>
+          <h2 className="text-lg font-semibold">{t('billingChooseSubscription')}</h2>
           <div className="inline-flex rounded border overflow-hidden text-sm">
             <button
               type="button"
@@ -234,14 +236,18 @@ export default function Billing() {
                   className="btn btn-primary mt-4 w-full disabled:opacity-50"
                   onClick={() => void startCheckout(plan)}
                 >
-                  {isCurrent ? 'Current plan' : price <= 0 ? 'Activate free' : 'Buy with Adyen'}
+                  {isCurrent
+                    ? t('billingCurrentSubscriptionBtn')
+                    : price <= 0
+                      ? t('billingActivateFree')
+                      : t('billingBuyWithAdyen')}
                 </button>
               </div>
             );
           })}
         </div>
         {!plans.length && (
-          <p className="text-gray-500 text-sm">No public plans available. Ask the platform admin to create plans.</p>
+          <p className="text-gray-500 text-sm">{t('billingNoSubscriptions')}</p>
         )}
       </div>
 
@@ -249,7 +255,9 @@ export default function Billing() {
         <div className="card">
           <div className="flex items-start justify-between gap-3 mb-3">
             <div>
-              <h2 className="text-lg font-semibold">Pay for {checkoutPlan.name}</h2>
+              <h2 className="text-lg font-semibold">
+                {t('billingPayFor').replace('{name}', checkoutPlan.name)}
+              </h2>
               <p className="text-sm text-gray-600">
                 Secure checkout via Adyen - payment goes to the platform account.
               </p>
@@ -273,13 +281,13 @@ export default function Billing() {
       )}
 
       <div className="card">
-        <h2 className="text-lg font-semibold mb-3">Payment history</h2>
-        <div className="overflow-x-auto">
+        <h2 className="text-lg font-semibold mb-3">{t('billingPaymentHistory')}</h2>
+        <div className="table-scroll">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left border-b">
                 <th className="py-2 pr-3">Date</th>
-                <th className="py-2 pr-3">Plan</th>
+                <th className="py-2 pr-3">{t('billingSubscriptionCol')}</th>
                 <th className="py-2 pr-3">Cycle</th>
                 <th className="py-2 pr-3">Amount</th>
                 <th className="py-2">Status</th>
@@ -298,7 +306,7 @@ export default function Billing() {
               {!payments.length && (
                 <tr>
                   <td colSpan={5} className="py-4 text-gray-500 text-center">
-                    No subscription payments yet.
+                    {t('billingNoPayments')}
                   </td>
                 </tr>
               )}

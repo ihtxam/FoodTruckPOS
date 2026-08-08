@@ -126,16 +126,42 @@ button {
   }
 
   .panel-main {
+    flex: 1 1 0%;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-y: contain;
     /*
      * Prefer overflow-x: clip over hidden so we do not create a nested vertical
      * scroll container (CSS overflow pairing), which blocks wheel/touchpad scroll.
+     * Do NOT set touch-action: pan-y here — it intersects with descendants and
+     * blocks horizontal swipe on nested .table-scroll wrappers (iOS Safari).
      */
     overflow-x: clip;
     overflow-y: auto;
     min-height: 0;
-    touch-action: pan-y;
+    min-width: 0;
+  }
+
+  /* Wide data tables: horizontal scroll without breaking page vertical scroll */
+  .table-scroll {
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: visible;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    touch-action: pan-x pan-y;
+  }
+
+  .cell-truncate {
+    max-width: 11rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  @media (min-width: 640px) {
+    .cell-truncate {
+      max-width: 16rem;
+    }
   }
 
   .panel-header {

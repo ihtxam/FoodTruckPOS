@@ -339,7 +339,7 @@ export default function ReportsPage() {
                   <h2 className="px-3 py-2 text-sm font-semibold bg-[var(--bg-muted)]">
                     {t('reportsVat')}
                   </h2>
-                  <div className="overflow-x-auto">
+                  <div className="table-scroll">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="text-left text-[var(--text-muted)] border-b border-[var(--border)]">
@@ -412,7 +412,7 @@ export default function ReportsPage() {
               <h2 className="px-3 py-2 text-sm font-semibold bg-[var(--bg-muted)]">
                 {t('reportsProductsSold')}
               </h2>
-              <div className="overflow-x-auto">
+              <div className="table-scroll">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-left text-[var(--text-muted)] border-b border-[var(--border)]">
@@ -448,7 +448,7 @@ export default function ReportsPage() {
               <h2 className="px-3 py-2 text-sm font-semibold bg-[var(--bg-muted)]">
                 {t('reportsTabUsers')}
               </h2>
-              <div className="overflow-x-auto">
+              <div className="table-scroll">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-left text-[var(--text-muted)] border-b border-[var(--border)]">

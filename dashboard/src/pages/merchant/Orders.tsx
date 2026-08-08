@@ -286,7 +286,7 @@ export default function Orders() {
         </button>
       </div>
 
-      <div className="flex gap-1.5 overflow-x-auto pb-0.5 -mx-0.5 px-0.5">
+      <div className="flex gap-1.5 table-scroll pb-0.5 -mx-0.5 px-0.5">
         {(
           [
             ['new', `To approve (${board.new.length})`],

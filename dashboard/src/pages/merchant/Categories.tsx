@@ -199,8 +199,8 @@ export default function Categories() {
         </form>
       </div>
 
-      <div className="card overflow-x-auto !p-0">
-        <table className="w-full text-sm">
+      <div className="card table-scroll !p-0">
+        <table className="w-full text-sm min-w-[480px]">
           <thead>
             <tr className="text-left border-b border-[var(--border)]">
               <th className="py-2 px-2 w-10" />

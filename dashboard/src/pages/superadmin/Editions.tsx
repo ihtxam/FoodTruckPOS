@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
+import { useI18n } from '@/lib/i18n';
 import { ALL_EDITION_FEATURES, type EditionFeatureKey } from '@/lib/edition-features';
 import EditionFeatureChecklist from '@/components/EditionFeatureChecklist';
 
@@ -21,6 +22,7 @@ const empty = {
 };
 
 export default function Editions() {
+  const { t } = useI18n();
   const [editions, setEditions] = useState<Edition[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Edition | null>(null);
@@ -34,11 +36,11 @@ export default function Editions() {
       const res = await api.get('/superadmin/editions', { params: { all: '1' } });
       setEditions(res.data.editions || []);
     } catch (e: any) {
-      toast.error(e.response?.data?.error || 'Failed to load editions');
+      toast.error(e.response?.data?.error || t('posVersionLoadFailed'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     load();
@@ -70,10 +72,10 @@ export default function Editions() {
     try {
       if (editing) {
         await api.put(`/superadmin/editions/${editing.id}`, form);
-        toast.success('Edition updated');
+        toast.success(t('posVersionUpdated'));
       } else {
         await api.post('/superadmin/editions', form);
-        toast.success('Edition created');
+        toast.success(t('posVersionCreated'));
       }
       setCreating(false);
       setEditing(null);
@@ -89,7 +91,7 @@ export default function Editions() {
     if (!window.confirm(`Deactivate "${ed.name}"?`)) return;
     try {
       await api.delete(`/superadmin/editions/${ed.id}`);
-      toast.success('Edition deactivated');
+      toast.success(t('posVersionDeactivated'));
       load();
     } catch (e: any) {
       toast.error(e.response?.data?.error || 'Failed');
@@ -102,24 +104,25 @@ export default function Editions() {
     <div className="max-w-6xl mx-auto space-y-4">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-stone-900">Edition Management</h1>
+          <h1 className="text-xl font-bold text-stone-900">{t('posVersionManagement')}</h1>
           <p className="text-sm text-stone-600 mt-1">
-            Feature packs assigned to merchants (POS versions).
+            Feature packs assigned to merchants as POS versions. Payment is separate (subscription /
+            license).
           </p>
         </div>
         {!showForm && (
           <button type="button" onClick={openCreate} className="btn-primary text-sm">
-            Add edition
+            {t('posVersionAdd')}
           </button>
         )}
       </div>
 
       {showForm && (
         <div className="card p-4 space-y-3">
-          <h2 className="font-semibold">{editing ? 'Edit edition' : 'New edition'}</h2>
+          <h2 className="font-semibold">{editing ? t('posVersionEdit') : t('posVersionNew')}</h2>
           <div className="grid sm:grid-cols-2 gap-3">
             <label className="block text-sm">
-              <span className="font-medium">Version name *</span>
+              <span className="font-medium">{t('posVersionName')} *</span>
               <input
                 className="input mt-1"
                 value={form.name}
@@ -169,11 +172,11 @@ export default function Editions() {
         </div>
       )}
 
-      <div className="card overflow-hidden">
+      <div className="card !p-0 table-scroll">
         {loading ? (
           <p className="p-4 text-sm text-stone-500">Loading…</p>
         ) : (
-          <table className="w-full text-sm">
+          <table className="w-full text-sm min-w-[560px]">
             <thead className="bg-stone-50 text-left">
               <tr>
                 <th className="px-3 py-2">Name</th>

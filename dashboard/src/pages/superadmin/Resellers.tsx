@@ -161,7 +161,7 @@ export default function Resellers() {
         </form>
       )}
 
-      <div className="card overflow-x-auto">
+      <div className="card !p-0 table-scroll">
         {loading ? (
           <p className="p-4 text-sm text-stone-500">Loading…</p>
         ) : (
@@ -178,8 +178,16 @@ export default function Resellers() {
             <tbody>
               {rows.map((r) => (
                 <tr key={r.id} className="border-t border-stone-100">
-                  <td className="px-3 py-2 font-medium">{r.name}</td>
-                  <td className="px-3 py-2">{r.email}</td>
+                  <td className="px-3 py-2 font-medium">
+                    <span className="cell-truncate block" title={r.name}>
+                      {r.name}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2">
+                    <span className="cell-truncate block" title={r.email}>
+                      {r.email}
+                    </span>
+                  </td>
                   <td className="px-3 py-2">{r.merchantCount}</td>
                   <td className="px-3 py-2">
                     <span

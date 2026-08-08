@@ -185,7 +185,7 @@ function MerchantShell() {
           className={
             isPosRoute && posAppMode
               ? 'flex-1 overflow-hidden p-0 min-h-0'
-              : 'panel-main flex-1 overflow-y-auto overflow-x-clip p-3 sm:p-4 min-h-0'
+              : 'panel-main flex-1 p-3 sm:p-4'
           }
         >
           <Routes>

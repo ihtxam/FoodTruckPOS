@@ -92,34 +92,46 @@ export default function Customers() {
         </form>
       </div>
 
-      <div className="card overflow-x-auto">
-        <table className="w-full text-sm">
+      <div className="card !p-0 table-scroll">
+        <table className="w-full text-sm min-w-[560px]">
           <thead>
             <tr className="text-left border-b">
-              <th className="py-2">Name</th>
-              <th className="py-2">Email</th>
-              <th className="py-2">Phone</th>
-              <th className="py-2">Points</th>
-              <th className="py-2">Spent</th>
+              <th className="px-3 py-2">Name</th>
+              <th className="px-3 py-2">Email</th>
+              <th className="px-3 py-2">Phone</th>
+              <th className="px-3 py-2">Points</th>
+              <th className="px-3 py-2">Spent</th>
             </tr>
           </thead>
           <tbody>
             {customers.length === 0 && (
               <tr>
-                <td colSpan={5} className="py-6 text-gray-500">No customers yet.</td>
+                <td colSpan={5} className="px-3 py-6 text-gray-500">No customers yet.</td>
               </tr>
             )}
-            {customers.map((customer) => (
-              <tr key={customer.id} className="border-b last:border-0">
-                <td className="py-3 font-medium">
-                  {[customer.firstName, customer.lastName].filter(Boolean).join(' ') || '-'}
-                </td>
-                <td className="py-3">{customer.email || '-'}</td>
-                <td className="py-3">{customer.phone || '-'}</td>
-                <td className="py-3">{customer.loyaltyPoints ?? 0}</td>
-                <td className="py-3">CHF {Number(customer.totalSpent || 0).toFixed(2)}</td>
-              </tr>
-            ))}
+            {customers.map((customer) => {
+              const fullName =
+                [customer.firstName, customer.lastName].filter(Boolean).join(' ') || '-';
+              return (
+                <tr key={customer.id} className="border-b last:border-0">
+                  <td className="px-3 py-3 font-medium">
+                    <span className="cell-truncate block" title={fullName}>
+                      {fullName}
+                    </span>
+                  </td>
+                  <td className="px-3 py-3">
+                    <span className="cell-truncate block" title={customer.email || '-'}>
+                      {customer.email || '-'}
+                    </span>
+                  </td>
+                  <td className="px-3 py-3 whitespace-nowrap">{customer.phone || '-'}</td>
+                  <td className="px-3 py-3">{customer.loyaltyPoints ?? 0}</td>
+                  <td className="px-3 py-3 whitespace-nowrap">
+                    CHF {Number(customer.totalSpent || 0).toFixed(2)}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
